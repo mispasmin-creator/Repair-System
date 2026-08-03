@@ -10,6 +10,7 @@ import RepairAdvance from "./components/RepairAdvance/RepairAdvance";
 import MakePayment from "./components/MakePayment/MakePayment";
 import Login from "./components/Login/Login";
 import Users from "./components/Users/Users";
+import Accounts from "./components/Accounts/Accounts";
 import { MenuOutlined, CloseOutlined } from "@ant-design/icons";
 
 // function AppContent() {
@@ -118,6 +119,8 @@ function AppContent() {
         return <MakePayment />;
       case "users":
         return <Users />;
+      case "accounts":
+        return <Accounts />;
       default:
         return <Dashboard />;
     }

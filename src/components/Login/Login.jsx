@@ -127,9 +127,7 @@ const handleSubmit = async (e) => {
         <div className="flex flex-col items-center mb-8">
           <div className="relative mb-4">
             <div className="absolute -inset-2 bg-blue-400 rounded-full blur-md opacity-20"></div>
-            <div className="relative bg-blue-500 rounded-full p-5 text-white shadow-lg">
-              <User className="w-8 h-8" />
-            </div>
+            <img src="/logo.png" alt="Logo" className="relative w-20 h-20 rounded-full object-cover shadow-lg" />
           </div>
           <h2 className="text-3xl font-bold text-gray-800 mb-1">Repair Management</h2>
           <p className="text-blue-500 text-sm">Sign in to your account</p>

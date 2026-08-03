@@ -368,40 +368,14 @@ function doPost(e) {
         throw new Error("Task not found with Task No: " + taskNo);
       }
 
-      const fieldsToUpdate = [
-        "Actual 1",
-        "Vendor Name",
-        "(Transporter Name)",
-        "Transportation Charges",
-        "Lead Time To Deliver ( In No. Of Days)",
-        "Weighment Slip",
-        "Transporting Image With Machine",
-        "Payment Type",
-        "How Much",
-        "Actual1",
-        "Transporter Name",
-        "Transportation Amount",
-        "Bill Image",
-        "Bill No.",
-        "Type of Bill",
-        "Total Bill Amount",
-
-        "To Be Paid Amount",
-        "Actual 2",
-        "Actual 3",
-        "Received Quantity",
-        "Bill Match",
-        "Product Image"
-      ];
-
-      fieldsToUpdate.forEach(function (field) {
-        if (params[field] !== undefined) {
-          var colIndex = headers.indexOf(field);
-          if (colIndex !== -1) {
-            sheet.getRange(rowIndex, colIndex + 1).setValue(params[field]);
-          }
+      // Update any provided field that matches a header in row 6
+      for (var key in params) {
+        if (key === 'action' || key === 'sheetName' || key === 'taskNo') continue;
+        var colIndex = headers.indexOf(key);
+        if (colIndex !== -1) {
+          sheet.getRange(rowIndex, colIndex + 1).setValue(params[key]);
         }
-      });
+      }
 
       return ContentService.createTextOutput(JSON.stringify({
         success: true,
@@ -477,7 +451,7 @@ function handleLogin(username, password) {
       return { success: false, error: "Username and password are required" };
     }
 
-    const ss = SpreadsheetApp.openById("1NdI3kxXlyPdflmWr3Da53Dt9YHGRVRylm3naJLNWNHE");
+    const ss = SpreadsheetApp.openById("1Gi6EVJ6ATYOmVPJDm-flLM3tuZazsqt11f9dhwUqrVQ");
     const sheet = ss.getSheetByName("Login Sheet");
     const data = sheet.getDataRange().getValues();
 

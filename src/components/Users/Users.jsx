@@ -11,8 +11,10 @@ import {
   TableCell,
 } from "../ui/Table";
 import toast from "react-hot-toast";
+import { useAuth } from "../../context/AuthContext";
 
 const Users = () => {
+  const { user: loggedInUser } = useAuth();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -73,7 +75,15 @@ const Users = () => {
           };
         }).filter(u => u.username !== ""); // Filter out empty rows
 
-        setUsers(mappedUsers);
+        const viewerFirm = loggedInUser?.firmName || "";
+        const isAllFirm = !viewerFirm || viewerFirm.toLowerCase() === "all";
+        const scopedUsers = isAllFirm
+          ? mappedUsers
+          : mappedUsers.filter(
+              (u) => (u.firmName || "").toLowerCase() === viewerFirm.toLowerCase()
+            );
+
+        setUsers(scopedUsers);
       } else {
         console.error("Failed to load users:", result.message);
         toast.error("❌ Failed to fetch users");
