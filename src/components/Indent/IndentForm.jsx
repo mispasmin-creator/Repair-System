@@ -138,6 +138,7 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
   const FOLDER_ID = import.meta.env.VITE_FOLDER_ID;
 
   const fetchSheetData = async () => {
+    if (!DATA_FETCH_SCRIPT_URL || !DATA_SHEET_ID) return;
     const SHEET_NAME = "FormResponses";
     try {
       setLoaderSheetData(true);
@@ -171,6 +172,7 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
   };
 
   const fetchMasterSheetData = async () => {
+    if (!DATA_FETCH_SCRIPT_URL || !DATA_SHEET_ID) return;
     const SHEET_NAME = "Master";
     try {
       setLoaderMasterSheetData(true);
@@ -485,10 +487,7 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
             >
               <option value="">Select Machine</option>
               {loaderSheetData ? (
-                <option className="flex gap-5 items-center justify-center">
-                  <Loader2Icon className="animate-spin text-red-500" />
-                  <h1>Wait Please...</h1>
-                </option>
+                <option disabled>Wait Please...</option>
               ) : (
                 <>
                   {[...new Set(sheetData.map((item) => item["Machine Name"]))]

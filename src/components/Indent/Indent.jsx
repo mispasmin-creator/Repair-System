@@ -83,9 +83,11 @@ const Indent = () => {
       const formattedTasks = taskRows.map((row, index) => {
         const cells = row.c || [];
 
-        // Safe cell access with fallbacks
+        // Safe cell access with fallbacks (always returns a string, since sheet
+        // cells that look numeric come back as numbers and break .toLowerCase() calls downstream)
         const getCellValue = (index) => {
-          return cells[index]?.v || "";
+          const v = cells[index]?.v;
+          return v === null || v === undefined ? "" : String(v);
         };
 
         // Get status from column AV (index 47)
