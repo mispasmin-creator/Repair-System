@@ -4,6 +4,71 @@ import Button from "../ui/Button";
 import toast from "react-hot-toast";
 import { useAuth } from "../../context/AuthContext";
 
+// Dropdown that lets the user pick an existing value or type a brand new one
+// (the typed value is only used for this submission, it is not saved back to the Master sheet)
+const AddNewSelect = ({ id, label, required, value, onChange, options, loading, isAdding, setIsAdding }) => {
+  const plainLabel = label.replace(/\*/g, "").trim();
+
+  return (
+    <div>
+      <label htmlFor={id} className="block text-sm font-medium text-gray-700 mb-1">
+        {label}
+      </label>
+      {isAdding ? (
+        <div className="flex gap-2">
+          <input
+            type="text"
+            id={id}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder={`Enter new ${plainLabel}`}
+            required={required}
+            autoFocus
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+          <button
+            type="button"
+            onClick={() => {
+              setIsAdding(false);
+              onChange("");
+            }}
+            className="text-sm text-blue-600 hover:text-blue-700 whitespace-nowrap"
+          >
+            Choose from list
+          </button>
+        </div>
+      ) : (
+        <select
+          id={id}
+          value={value}
+          onChange={(e) => {
+            if (e.target.value === "__add_new__") {
+              setIsAdding(true);
+              onChange("");
+            } else {
+              onChange(e.target.value);
+            }
+          }}
+          className="py-2 w-full rounded-md border border-gray-300 shadow-sm px-4 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          required={required}
+        >
+          <option value="">Select {plainLabel}</option>
+          {loading ? (
+            <option disabled>Wait Please...</option>
+          ) : (
+            [...new Set(options)].filter(Boolean).map((item, index) => (
+              <option key={index} value={item}>
+                {item}
+              </option>
+            ))
+          )}
+          <option value="__add_new__">+ Add New</option>
+        </select>
+      )}
+    </div>
+  );
+};
+
 const IndentForm = ({ onSubmit, onCancel, taskList }) => {
   const { user } = useAuth();
   const [sheetData, setSheetData] = useState([]);
@@ -46,6 +111,14 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
   const [description, setPromblemInMachine] = useState("");
   const [machineArea, setMachineArea] = useState("");
   const [partName, setPartName] = useState("");
+
+  // "Add New" toggles for dropdowns that should also accept a custom typed value
+  const [isAddingMachine, setIsAddingMachine] = useState(false);
+  const [isAddingSerial, setIsAddingSerial] = useState(false);
+  const [isAddingDoer, setIsAddingDoer] = useState(false);
+  const [isAddingGivenBy, setIsAddingGivenBy] = useState(false);
+  const [isAddingDepartment, setIsAddingDepartment] = useState(false);
+  const [isAddingPriority, setIsAddingPriority] = useState(false);
 
   const [loaderSheetData, setLoaderSheetData] = useState(false);
   const [loaderSubmit, setLoaderSubmit] = useState(false);
@@ -258,6 +331,12 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
     setUserManualFile(null);
     setFilteredSerials([]);
     setSelectedDepartment("");
+    setIsAddingMachine(false);
+    setIsAddingSerial(false);
+    setIsAddingDoer(false);
+    setIsAddingGivenBy(false);
+    setIsAddingDepartment(false);
+    setIsAddingPriority(false);
   };
 
   const handleSubmitForm = async (e) => {
@@ -355,38 +434,75 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
           >
             Machine Name *
           </label>
-          <select
-            id="machineName"
-            value={selectedMachine}
-            onChange={(e) => {
-              const selected = e.target.value;
-              setSelectedMachine(selected);
-              const serials = sheetData
-                .filter((item) => item["Machine Name"] === selected)
-                .map((item) => item["Serial No"]);
-              setFilteredSerials(serials);
-            }}
-            className="w-full py-2 rounded-md border border-gray-300 shadow-sm px-4 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            required
-          >
-            <option value="">Select Machine</option>
-            {loaderSheetData ? (
-              <option className="flex gap-5 items-center justify-center">
-                <Loader2Icon className="animate-spin text-red-500" />
-                <h1>Wait Please...</h1>
-              </option>
-            ) : (
-              <>
-                {[...new Set(sheetData.map((item) => item["Machine Name"]))]
-                  .filter(Boolean)
-                  .map((machineName, index) => (
-                    <option key={index} value={machineName}>
-                      {machineName}
-                    </option>
-                  ))}
-              </>
-            )}
-          </select>
+          {isAddingMachine ? (
+            <div className="flex gap-2">
+              <input
+                type="text"
+                id="machineName"
+                value={selectedMachine}
+                onChange={(e) => setSelectedMachine(e.target.value)}
+                placeholder="Enter new machine name"
+                required
+                autoFocus
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  setIsAddingMachine(false);
+                  setSelectedMachine("");
+                  setFilteredSerials([]);
+                  setIsAddingSerial(false);
+                  setSelectedSerialNo("");
+                }}
+                className="text-sm text-blue-600 hover:text-blue-700 whitespace-nowrap"
+              >
+                Choose from list
+              </button>
+            </div>
+          ) : (
+            <select
+              id="machineName"
+              value={selectedMachine}
+              onChange={(e) => {
+                const selected = e.target.value;
+                if (selected === "__add_new__") {
+                  setIsAddingMachine(true);
+                  setSelectedMachine("");
+                  setFilteredSerials([]);
+                  setIsAddingSerial(false);
+                  setSelectedSerialNo("");
+                  return;
+                }
+                setSelectedMachine(selected);
+                const serials = sheetData
+                  .filter((item) => item["Machine Name"] === selected)
+                  .map((item) => item["Serial No"]);
+                setFilteredSerials(serials);
+              }}
+              className="w-full py-2 rounded-md border border-gray-300 shadow-sm px-4 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              required
+            >
+              <option value="">Select Machine</option>
+              {loaderSheetData ? (
+                <option className="flex gap-5 items-center justify-center">
+                  <Loader2Icon className="animate-spin text-red-500" />
+                  <h1>Wait Please...</h1>
+                </option>
+              ) : (
+                <>
+                  {[...new Set(sheetData.map((item) => item["Machine Name"]))]
+                    .filter(Boolean)
+                    .map((machineName, index) => (
+                      <option key={index} value={machineName}>
+                        {machineName}
+                      </option>
+                    ))}
+                </>
+              )}
+              <option value="__add_new__">+ Add New</option>
+            </select>
+          )}
         </div>
 
         {/* Firm Name */}
@@ -425,136 +541,104 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
             >
               Serial Number *
             </label>
-            <select
-              id="serialNo"
-              value={selectedSerialNo}
-              onChange={(e) => {
-                setSelectedSerialNo(e.target.value);
+            {isAddingMachine || isAddingSerial ? (
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  id="serialNo"
+                  value={selectedSerialNo}
+                  onChange={(e) => setSelectedSerialNo(e.target.value)}
+                  placeholder="Enter serial number"
+                  required
+                  autoFocus={!isAddingMachine}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                {!isAddingMachine && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsAddingSerial(false);
+                      setSelectedSerialNo("");
+                    }}
+                    className="text-sm text-blue-600 hover:text-blue-700 whitespace-nowrap"
+                  >
+                    Choose from list
+                  </button>
+                )}
+              </div>
+            ) : (
+              <select
+                id="serialNo"
+                value={selectedSerialNo}
+                onChange={(e) => {
+                  if (e.target.value === "__add_new__") {
+                    setIsAddingSerial(true);
+                    setSelectedSerialNo("");
+                    return;
+                  }
+                  setSelectedSerialNo(e.target.value);
 
-                const department = sheetData
-                  .filter((item) => item["Serial No"] === e.target.value)
-                  .map((item) => item["Department"]);
-                setFilteredDepartment(department);
+                  const department = sheetData
+                    .filter((item) => item["Serial No"] === e.target.value)
+                    .map((item) => item["Department"]);
+                  setFilteredDepartment(department);
 
-                const location = sheetData
-                  .filter((item) => item["Serial No"] === e.target.value)
-                  .map((item) => item["Location"]);
-              }}
-              className="py-2 w-full rounded-md border border-gray-300 shadow-sm px-4 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              required
-            >
-              <option value="">Select Serial No</option>
-              {filteredSerials.map((serial, idx) => (
-                <option key={idx} value={serial}>
-                  {serial}
-                </option>
-              ))}
-            </select>
+                  const location = sheetData
+                    .filter((item) => item["Serial No"] === e.target.value)
+                    .map((item) => item["Location"]);
+                }}
+                className="py-2 w-full rounded-md border border-gray-300 shadow-sm px-4 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                required
+              >
+                <option value="">Select Serial No</option>
+                {filteredSerials.map((serial, idx) => (
+                  <option key={idx} value={serial}>
+                    {serial}
+                  </option>
+                ))}
+                <option value="__add_new__">+ Add New</option>
+              </select>
+            )}
           </div>
         )}
 
         {/* Doer's Name */}
-        <div>
-          <label
-            htmlFor="doerName"
-            className="block text-sm font-medium text-gray-700 mb-1"
-          >
-            Doer's Name *
-          </label>
-          <select
-            id="doerName"
-            value={selectedDoerName}
-            onChange={(e) => setSelectedDoerName(e.target.value)}
-            className="py-2 rounded-md w-full border border-gray-300 shadow-sm px-4 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            required
-          >
-            <option value="">Select Doer Name</option>
-            {loaderMasterSheetData ? (
-              <option className="flex gap-5 items-center justify-center">
-                <Loader2Icon className="animate-spin text-red-500" />
-                <h1>Wait Please...</h1>
-              </option>
-            ) : (
-              doerName.map(
-                (item, index) =>
-                  item && (
-                    <option key={index} value={item}>
-                      {item}
-                    </option>
-                  )
-              )
-            )}
-          </select>
-        </div>
+        <AddNewSelect
+          id="doerName"
+          label="Doer's Name *"
+          required
+          value={selectedDoerName}
+          onChange={setSelectedDoerName}
+          options={doerName}
+          loading={loaderMasterSheetData}
+          isAdding={isAddingDoer}
+          setIsAdding={setIsAddingDoer}
+        />
 
         {/* Given By */}
-        <div>
-          <label
-            htmlFor="givenBy"
-            className="block text-sm font-medium text-gray-700 mb-1"
-          >
-            Given By *
-          </label>
-          <select
-            id="givenBy"
-            value={selectedGivenBy}
-            onChange={(e) => setSelectedGivenBy(e.target.value)}
-            className="w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            required
-          >
-            <option value="">Select Given By</option>
-            {loaderMasterSheetData ? (
-              <>
-                <option className="flex gap-5 items-center justify-center">
-                  <Loader2Icon className="animate-spin text-red-500" />
-                  <h1>Wait Please...</h1>
-                </option>
-              </>
-            ) : (
-              giveByData.map(
-                (item, index) =>
-                  item && (
-                    <option key={index} value={item}>
-                      {item}
-                    </option>
-                  )
-              )
-            )}
-          </select>
-        </div>
+        <AddNewSelect
+          id="givenBy"
+          label="Given By *"
+          required
+          value={selectedGivenBy}
+          onChange={setSelectedGivenBy}
+          options={giveByData}
+          loading={loaderMasterSheetData}
+          isAdding={isAddingGivenBy}
+          setIsAdding={setIsAddingGivenBy}
+        />
 
         {/* Department */}
-        <div>
-          <label
-            htmlFor="department"
-            className="block text-sm font-medium text-gray-700 mb-1"
-          >
-            Department
-          </label>
-          <select
-            id="department"
-            value={selectedDepartment}
-            onChange={(e) => setSelectedDepartment(e.target.value)}
-            className="py-2 w-full rounded-md border border-gray-300 shadow-sm px-4 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          >
-            <option value="">Select Department</option>
-            {loaderMasterSheetData ? (
-              <option className="flex gap-5 items-center justify-center">
-                <Loader2Icon className="animate-spin text-red-500" />
-                <h1>Wait Please...</h1>
-              </option>
-            ) : (
-              departmentData.map(
-                (item, index) =>
-                  item && (
-                    <option key={index} value={item}>
-                      {item}
-                    </option>
-                  )
-              )
-            )}
-          </select>
-        </div>
+        <AddNewSelect
+          id="department"
+          label="Department"
+          value={selectedDepartment}
+          onChange={setSelectedDepartment}
+          options={departmentData}
+          loading={loaderMasterSheetData}
+          isAdding={isAddingDepartment}
+          setIsAdding={setIsAddingDepartment}
+        />
 
         {/* Machine Part Name */}
         <div>
@@ -571,37 +655,16 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
         </div>
 
         {/* Priority */}
-        <div>
-          <label
-            htmlFor="priority"
-            className="block text-sm font-medium text-gray-700 mb-1"
-          >
-            Priority
-          </label>
-          <select
-            id="priority"
-            value={selectedPriority}
-            onChange={(e) => setSelectedPriority(e.target.value)}
-            className="w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          >
-            <option value="">Select Priority</option>
-            {loaderMasterSheetData ? (
-              <option className="flex gap-5 items-center justify-center">
-                <Loader2Icon className="animate-spin text-red-500" />
-                <h1>Wait Please...</h1>
-              </option>
-            ) : (
-              priorityData.map(
-                (item, index) =>
-                  item && (
-                    <option key={index} value={item}>
-                      {item}
-                    </option>
-                  )
-              )
-            )}
-          </select>
-        </div>
+        <AddNewSelect
+          id="priority"
+          label="Priority"
+          value={selectedPriority}
+          onChange={setSelectedPriority}
+          options={priorityData}
+          loading={loaderMasterSheetData}
+          isAdding={isAddingPriority}
+          setIsAdding={setIsAddingPriority}
+        />
 
         {/* Start Date */}
         <div>
