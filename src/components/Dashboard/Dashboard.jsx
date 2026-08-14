@@ -319,7 +319,7 @@ const Dashboard = ({ setActiveTab }) => {
         )}
       </div>
 
-      {/* Quick Operations Panel */}
+      {/* Quick Operation's Panel */}
       <div className="bg-white p-6 rounded-2xl border border-gray-200/80 shadow-sm">
         <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">Quick Operations</h3>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
