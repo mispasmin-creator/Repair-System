@@ -51,7 +51,6 @@ const StoreIn = () => {
   // Safe filtering with search and dropdown filters
   const filterList = (list) => {
     return list
-      .filter((task) => user?.role === "admin" || task.nameOfIndenter === user?.name)
       .filter((task) => selectedFirm === "All" || task.firmName === selectedFirm)
       .filter((task) => selectedDepartment === "All" || task.department === selectedDepartment)
       .filter((task) => selectedPriority === "All" || (task.priority || "").toLowerCase() === selectedPriority.toLowerCase())
