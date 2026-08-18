@@ -58,7 +58,9 @@ const Indent = () => {
         (task.serialNo || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
         (task.doerName || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
         (task.department || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (task.machinePartName || "").toLowerCase().includes(searchTerm.toLowerCase())
+        (task.machinePartName || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (task.uom || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (task.quantity || "").toLowerCase().includes(searchTerm.toLowerCase())
     );
 
   const SCRIPT_URL = import.meta.env.VITE_SCRIPT_URL;
@@ -77,6 +79,16 @@ const Indent = () => {
 
       const allRows = result?.table?.rows || [];
 
+      // Real headers live on row 6 (index 4 in allRows)
+      const headerCells = allRows[4]?.c || [];
+      const headerMap = {};
+      headerCells.forEach((cell, idx) => {
+        const headerName = cell?.v ? String(cell.v).trim().toLowerCase() : "";
+        if (headerName) {
+          headerMap[headerName] = idx;
+        }
+      });
+
       // Skip first 5 rows (index 0 to 4)
       const taskRows = allRows.slice(5);
 
@@ -90,8 +102,16 @@ const Indent = () => {
           return v === null || v === undefined ? "" : String(v);
         };
 
+        const getByHeader = (key, fallbackIdx) => {
+          const lowerKey = key.toLowerCase();
+          if (headerMap[lowerKey] !== undefined) {
+            return getCellValue(headerMap[lowerKey]);
+          }
+          return fallbackIdx !== undefined ? getCellValue(fallbackIdx) : "";
+        };
+
         // Get status from column AV (index 47)
-        const statusValue = getCellValue(47);
+        const statusValue = getByHeader("status", 47);
         let status;
         if (statusValue.toLowerCase() === "complete") {
           status = "Complete";
@@ -110,7 +130,9 @@ const Indent = () => {
           machineName: getCellValue(4),
           machinePartName: getCellValue(5),
           givenBy: getCellValue(6),
-          doerName: getCellValue(7),
+          doerName: getByHeader("doer name", 7) || getByHeader("indentor name", 7),
+          uom: getByHeader("uom"),
+          quantity: getByHeader("quantity"),
           problem: getCellValue(8),
           enableReminder: getCellValue(9),
           requireAttachment: getCellValue(10),
@@ -119,7 +141,7 @@ const Indent = () => {
           priority: getCellValue(13),
           department: getCellValue(14),
           location: getCellValue(15),
-          imageLink: getCellValue(16),
+          imageLink: getByHeader("image link", 16) || getCellValue(16),
           status: status,
         };
       });
@@ -298,9 +320,12 @@ const Indent = () => {
               <TableHead className="min-w-[130px]">Firm Name</TableHead>
               <TableHead className="min-w-[150px]">Machine Name</TableHead>
               <TableHead className="min-w-[120px]">Serial No</TableHead>
-              <TableHead className="min-w-[120px]">Doer</TableHead>
+              <TableHead className="min-w-[140px]">Indentor Name</TableHead>
               <TableHead className="min-w-[120px]">Department</TableHead>
               <TableHead className="min-w-[160px]">Machine Part Name</TableHead>
+              <TableHead className="min-w-[100px]">UOM</TableHead>
+              <TableHead className="min-w-[100px]">Quantity</TableHead>
+              <TableHead className="min-w-[130px]">Machine Image</TableHead>
               <TableHead className="min-w-[100px]">Priority</TableHead>
               <TableHead className="min-w-[110px]">Start Date</TableHead>
               <TableHead className="min-w-[110px]">End Date</TableHead>
@@ -309,7 +334,7 @@ const Indent = () => {
             <TableBody>
               {loadingTasks ? (
                 <TableRow>
-                  <TableCell colSpan={11} className="text-center py-8">
+                  <TableCell colSpan={14} className="text-center py-8">
                     <div className="flex flex-col items-center justify-center">
                       <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                       <p className="mt-4 text-gray-600">Loading tasks...</p>
@@ -318,7 +343,7 @@ const Indent = () => {
                 </TableRow>
               ) : filteredTasks.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={11} className="text-center py-8">
+                  <TableCell colSpan={14} className="text-center py-8">
                     <p className="text-gray-500">No tasks found</p>
                   </TableCell>
                 </TableRow>
@@ -343,7 +368,7 @@ const Indent = () => {
                         {truncateText(task.serialNo, 15)}
                       </div>
                     </TableCell>
-                    <TableCell className="min-w-[120px]">
+                    <TableCell className="min-w-[140px]">
                       <div className="break-words" title={task.doerName || ""}>
                         {truncateText(task.doerName, 15)}
                       </div>
@@ -357,6 +382,35 @@ const Indent = () => {
                       <div className="break-words" title={task.machinePartName || ""}>
                         {truncateText(task.machinePartName, 20)}
                       </div>
+                    </TableCell>
+                    <TableCell className="min-w-[100px]">
+                      <div className="break-words" title={task.uom || ""}>
+                        {task.uom || "-"}
+                      </div>
+                    </TableCell>
+                    <TableCell className="min-w-[100px]">
+                      <div className="break-words" title={task.quantity || ""}>
+                        {task.quantity || "-"}
+                      </div>
+                    </TableCell>
+                    <TableCell className="min-w-[130px]">
+                      {task.imageLink && task.imageLink !== "link not available" && (task.imageLink.startsWith("http://") || task.imageLink.startsWith("https://")) ? (
+                        <button
+                          type="button"
+                          className="text-blue-600 underline text-sm hover:text-blue-800 font-medium"
+                          onClick={() =>
+                            window.open(
+                              task.imageLink,
+                              "_blank",
+                              "noopener,noreferrer"
+                            )
+                          }
+                        >
+                          View Image
+                        </button>
+                      ) : (
+                        <span className="text-gray-400 text-sm">No Image</span>
+                      )}
                     </TableCell>
                     <TableCell className="min-w-[100px]">
                       <span

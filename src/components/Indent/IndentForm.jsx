@@ -111,6 +111,8 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
   const [description, setPromblemInMachine] = useState("");
   const [machineArea, setMachineArea] = useState("");
   const [partName, setPartName] = useState("");
+  const [uom, setUom] = useState("");
+  const [quantity, setQuantity] = useState("");
 
   // "Add New" toggles for dropdowns that should also accept a custom typed value
   const [isAddingMachine, setIsAddingMachine] = useState(false);
@@ -278,20 +280,21 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
               action: "uploadFile",
               base64Data: base64Data,
               fileName: file.name,
-              mimeType: file.type,
+              mimeType: file.type || "image/jpeg",
               folderId: FOLDER_ID,
             }).toString(),
           });
 
           const data = await res.json();
 
-          console.log("FileUploadData", data);
+          console.log("FileUploadData:", data);
 
           if (data.success && data.fileUrl) {
             resolve(data.fileUrl);
           } else {
-            toast.error("❌ File upload failed");
-            resolve("");
+            console.error("File upload response error:", data);
+            toast.error("❌ Image upload issue: " + (data.error || "Google Drive file permission"));
+            resolve(data.fileUrl || "");
           }
         } catch (err) {
           console.error("Upload error:", err);
@@ -326,6 +329,8 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
     setLocation("");
     setMachineArea("");
     setPartName("");
+    setUom("");
+    setQuantity("");
     setNeedSoundTask("");
     setTemperature("");
     setEnableReminder(false);
@@ -374,7 +379,12 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
         "Machine Name": selectedMachine,
         "Firm Name": selectedFirmName,
         "Given By": selectedGivenBy,
+        "Authorized Name": selectedGivenBy,
+        "Authorized By": selectedGivenBy,
         "Doer Name": selectedDoerName,
+        "Doer's Name": selectedDoerName,
+        "Indentor Name": selectedDoerName,
+        "Indentor's Name": selectedDoerName,
         "Enable Reminders": enableReminder ? "Yes" : "No",
         "Require Attachment": requireAttachment ? "Yes" : "No",
         "Task Start Date": `${startDate} ${startTime}:00`,
@@ -384,7 +394,11 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
         Location: location,
         "Machine Part Name": machinePartName,
         "Image Link": userManualUrl || "link not available",
+        "Machine Image": userManualUrl || "link not available",
+        "Image of the Machine": userManualUrl || "link not available",
         Priority: selectedPriority,
+        UOM: uom,
+        Quantity: quantity,
       };
 
       // Append all fields individually to formData
@@ -601,10 +615,10 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
           </div>
         )}
 
-        {/* Doer's Name */}
+        {/* Indentor Name */}
         <AddNewSelect
           id="doerName"
-          label="Doer's Name *"
+          label="Indentor Name *"
           required
           value={selectedDoerName}
           onChange={setSelectedDoerName}
@@ -614,10 +628,10 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
           setIsAdding={setIsAddingDoer}
         />
 
-        {/* Given By */}
+        {/* Authorized Name */}
         <AddNewSelect
           id="givenBy"
-          label="Given By *"
+          label="Authorized Name *"
           required
           value={selectedGivenBy}
           onChange={setSelectedGivenBy}
@@ -649,6 +663,40 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
             name="machinePartName"
             value={machinePartName}
             onChange={(e) => setMachinePartName(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+        </div>
+
+        {/* UOM */}
+        <div>
+          <label htmlFor="uom" className="block text-sm font-medium text-gray-700 mb-2">
+            UOM
+          </label>
+          <input
+            type="text"
+            id="uom"
+            name="uom"
+            value={uom}
+            onChange={(e) => setUom(e.target.value)}
+            placeholder="Enter UOM (e.g. Nos, Pcs, Set, Kg)"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+        </div>
+
+        {/* Quantity */}
+        <div>
+          <label htmlFor="quantity" className="block text-sm font-medium text-gray-700 mb-2">
+            Quantity
+          </label>
+          <input
+            type="number"
+            id="quantity"
+            name="quantity"
+            value={quantity}
+            onChange={(e) => setQuantity(e.target.value)}
+            placeholder="Enter Quantity"
+            min="0"
+            step="any"
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
         </div>

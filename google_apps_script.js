@@ -105,7 +105,7 @@ function uploadFileToDrive(base64Data, fileName, mimeType, folderId) {
     const decoded = Utilities.base64Decode(fileData);
 
     // Create a blob from the decoded data
-    const blob = Utilities.newBlob(decoded, mimeType, fileName);
+    const blob = Utilities.newBlob(decoded, mimeType || "image/jpeg", fileName || "image.jpg");
 
     // Get the folder reference
     const folder = DriveApp.getFolderById(folderId);
@@ -114,7 +114,11 @@ function uploadFileToDrive(base64Data, fileName, mimeType, folderId) {
     const file = folder.createFile(blob);
 
     // Make the file accessible via link
-    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    try {
+      file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    } catch (shareErr) {
+      console.warn("Sharing permission warning (continuing): " + shareErr.toString());
+    }
 
     // Return the direct link to view the file
     return "https://drive.google.com/uc?export=view&id=" + file.getId();
@@ -142,32 +146,41 @@ function getNextTaskNumber(sheet) {
 // Main function to handle POST requests
 function doPost(e) {
   try {
-    // Log the incoming data for debugging
-    // console.log("Received POST request with parameters:", JSON.stringify(e.parameter));
-
     var params = e.parameter;
 
     // Check if this is a file upload action
     if (params.action === 'uploadFile') {
-      // Extract file upload parameters
-      var base64Data = params.base64Data;
-      var fileName = params.fileName;
-      var mimeType = params.mimeType;
-      var folderId = params.folderId;
+      try {
+        // Extract file upload parameters
+        var base64Data = params.base64Data;
+        var fileName = params.fileName || "image.jpg";
+        var mimeType = params.mimeType || "image/jpeg";
+        var folderId = params.folderId;
 
-      // Validate required parameters
-      if (!base64Data || !fileName || !mimeType || !folderId) {
-        throw new Error("Missing required parameters for file upload");
+        // Validate required parameters
+        if (!base64Data || !folderId) {
+          throw new Error("Missing required parameters: base64Data or folderId");
+        }
+
+        // Upload the file to Google Drive
+        var fileUrl = uploadFileToDrive(base64Data, fileName, mimeType, folderId);
+
+        if (!fileUrl) {
+          throw new Error("Google Drive could not create file. Please check Folder ID and permissions.");
+        }
+
+        // Return the file URL
+        return ContentService.createTextOutput(JSON.stringify({
+          success: true,
+          fileUrl: fileUrl
+        })).setMimeType(ContentService.MimeType.JSON);
+      } catch (uploadErr) {
+        return ContentService.createTextOutput(JSON.stringify({
+          success: false,
+          error: uploadErr.toString(),
+          message: uploadErr.message
+        })).setMimeType(ContentService.MimeType.JSON);
       }
-
-      // Upload the file to Google Drive
-      var fileUrl = uploadFileToDrive(base64Data, fileName, mimeType, folderId);
-
-      // Return the file URL
-      return ContentService.createTextOutput(JSON.stringify({
-        success: true,
-        fileUrl: fileUrl
-      })).setMimeType(ContentService.MimeType.JSON);
     }
 
     // Existing sheet update logic
@@ -255,11 +268,6 @@ function doPost(e) {
     }
 
     else if (action === 'insert1') {
-      // // Add a new row at the end of the sheet
-      // var rowData = JSON.parse(params.rowData);
-      // sheet.appendRow(rowData);
-      // return ContentService.createTextOutput(JSON.stringify({ success: true }));
-
       try {
         // Step 1: Extract data
         const formData = {};
@@ -294,7 +302,6 @@ function doPost(e) {
         return ContentService.createTextOutput(JSON.stringify({
           success: true,
           message: "Row added successfully",
-          // serialNo: finalSerial,
           rowCount: sheet.getLastRow()
         })).setMimeType(ContentService.MimeType.JSON);
 
@@ -308,9 +315,7 @@ function doPost(e) {
     }
 
     else if (action === 'update') {
-
       var taskNo = params.taskNo;
-      // Find the row with matching Task No
       var data = sheet.getDataRange().getValues();
       var headers = data[0];
       var taskNoCol = headers.indexOf('Task No');
@@ -351,7 +356,7 @@ function doPost(e) {
     else if (action === 'update1') {
       var taskNo = params.taskNo;
       var data = sheet.getDataRange().getValues();
-      var headers = data[5]; // fix here
+      var headers = data[5];
 
       var taskNoCol = headers.indexOf('Task No');
       if (taskNoCol === -1) throw new Error("Task No column not found");
