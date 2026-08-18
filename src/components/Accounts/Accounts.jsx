@@ -250,83 +250,94 @@ const Accounts = () => {
           </div>
         </div>
 
-        <div className="relative">
-          <Table>
-            <TableHeader className="sticky top-0 z-10 bg-white">
-              <TableHead>Action</TableHead>
-              <TableHead>Task No</TableHead>
-              <TableHead>Firm Name</TableHead>
-              <TableHead>Machine Name</TableHead>
-              <TableHead>Part Name</TableHead>
-              <TableHead>Department</TableHead>
-              <TableHead>Planned</TableHead>
-              <TableHead>Actual</TableHead>
-              <TableHead>Delay</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Remarks</TableHead>
+        <div>
+          <Table containerClassName="max-h-[calc(100vh-260px)] overflow-y-auto">
+            <TableHeader className="sticky top-0 z-10 bg-gray-50">
+              <TableHead className="min-w-[100px] text-center">Action</TableHead>
+              <TableHead className="min-w-[120px]">Task No</TableHead>
+              <TableHead className="min-w-[140px]">Firm Name</TableHead>
+              <TableHead className="min-w-[150px]">Machine Name</TableHead>
+              <TableHead className="min-w-[140px]">Part Name</TableHead>
+              <TableHead className="min-w-[120px]">Department</TableHead>
+              <TableHead className="min-w-[110px]">Planned</TableHead>
+              <TableHead className="min-w-[110px]">Actual</TableHead>
+              <TableHead className="min-w-[90px]">Delay</TableHead>
+              <TableHead className="min-w-[100px]">Status</TableHead>
+              <TableHead className="min-w-[150px]">Remarks</TableHead>
             </TableHeader>
             <TableBody>
-              {filteredTasks.map((task) => {
-                const step = task.steps[activeStep.key];
-                const canUpdate = step.planned && !step.actual;
-                return (
-                  <TableRow key={task.taskNo}>
-                    <TableCell>
-                      {canUpdate ? (
-                        <Button
-                          size="sm"
-                          onClick={() => handleUpdateClick(task)}
-                          className="flex items-center"
+              {loadingTasks ? (
+                <TableRow>
+                  <TableCell colSpan={11} className="text-center py-12">
+                    <div className="flex flex-col items-center justify-center">
+                      <div className="w-9 h-9 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                      <p className="mt-3 text-sm text-gray-500 font-medium">Loading tasks...</p>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : filteredTasks.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={11} className="text-center py-12 text-gray-500">
+                    No tasks found
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredTasks.map((task) => {
+                  const step = task.steps[activeStep.key] || {};
+                  const canUpdate = step.planned && !step.actual;
+                  return (
+                    <TableRow key={task.taskNo}>
+                      <TableCell className="text-center">
+                        {canUpdate ? (
+                          <Button
+                            size="sm"
+                            onClick={() => handleUpdateClick(task)}
+                            className="flex items-center mx-auto"
+                          >
+                            <CheckSquare className="w-3.5 h-3.5 mr-1" />
+                            Update
+                          </Button>
+                        ) : step.actual ? (
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => handleUpdateClick(task)}
+                            className="mx-auto"
+                          >
+                            Edit
+                          </Button>
+                        ) : (
+                          <span className="text-xs text-gray-400">
+                            Not reached
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell className="font-medium text-blue-600">
+                        {task.taskNo}
+                      </TableCell>
+                      <TableCell>{task.firmName}</TableCell>
+                      <TableCell className="font-medium text-gray-900">{task.machineName}</TableCell>
+                      <TableCell>{task.machinePartName || "-"}</TableCell>
+                      <TableCell>{task.department}</TableCell>
+                      <TableCell>{step.planned || "-"}</TableCell>
+                      <TableCell>{step.actual || "-"}</TableCell>
+                      <TableCell>{step.delay || "-"}</TableCell>
+                      <TableCell>
+                        <span
+                          className={`px-2.5 py-1 text-xs font-medium rounded-full ${getStatusColor(
+                            step.status
+                          )}`}
                         >
-                          <CheckSquare className="w-3 h-3 mr-1" />
-                          Update
-                        </Button>
-                      ) : step.actual ? (
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          onClick={() => handleUpdateClick(task)}
-                        >
-                          Edit
-                        </Button>
-                      ) : (
-                        <span className="text-xs text-gray-400">
-                          Not reached
+                          {step.status || "Pending"}
                         </span>
-                      )}
-                    </TableCell>
-                    <TableCell className="font-medium text-blue-600">
-                      {task.taskNo}
-                    </TableCell>
-                    <TableCell>{task.firmName}</TableCell>
-                    <TableCell>{task.machineName}</TableCell>
-                    <TableCell>{task.machinePartName}</TableCell>
-                    <TableCell>{task.department}</TableCell>
-                    <TableCell>{step.planned || "-"}</TableCell>
-                    <TableCell>{step.actual || "-"}</TableCell>
-                    <TableCell>{step.delay || "-"}</TableCell>
-                    <TableCell>
-                      <span
-                        className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(
-                          step.status
-                        )}`}
-                      >
-                        {step.status || "Pending"}
-                      </span>
-                    </TableCell>
-                    <TableCell>{step.remarks || "-"}</TableCell>
-                  </TableRow>
-                );
-              })}
+                      </TableCell>
+                      <TableCell>{step.remarks || "-"}</TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
             </TableBody>
           </Table>
-
-          {loadingTasks && (
-            <div className="flex flex-col items-center justify-center w-full mt-10">
-              <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-              <p className="mt-4 text-gray-600">Loading tasks...</p>
-            </div>
-          )}
         </div>
       </div>
 

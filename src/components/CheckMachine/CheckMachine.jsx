@@ -379,144 +379,154 @@ const CheckMachine = () => {
 
         {activeTab === "pending" && (
           <div>
-            <Table>
-              <TableHeader>
-                <TableHead>Action</TableHead>
-                <TableHead>Task Number</TableHead>
-                <TableHead>Machine Name</TableHead>
-
-                <TableHead>Planned Date</TableHead>
-
-                <TableHead>Serial No</TableHead>
-                <TableHead>Indenter</TableHead>
-
-                <TableHead>Vendor</TableHead>
-                <TableHead>Transpoter Charges</TableHead>
-                <TableHead>Lead Time</TableHead>
-                <TableHead>Payment Type</TableHead>
-                <TableHead>How Much</TableHead>
+            <Table containerClassName="max-h-[calc(100vh-260px)] overflow-y-auto">
+              <TableHeader className="sticky top-0 z-10 bg-gray-50">
+                <TableHead className="min-w-[100px] text-center">Action</TableHead>
+                <TableHead className="min-w-[120px]">Task Number</TableHead>
+                <TableHead className="min-w-[150px]">Machine Name</TableHead>
+                <TableHead className="min-w-[110px]">Planned Date</TableHead>
+                <TableHead className="min-w-[120px]">Serial No</TableHead>
+                <TableHead className="min-w-[130px]">Indentor Name</TableHead>
+                <TableHead className="min-w-[140px]">Vendor</TableHead>
+                <TableHead className="min-w-[140px]">Transporter Charges</TableHead>
+                <TableHead className="min-w-[100px]">Lead Time</TableHead>
+                <TableHead className="min-w-[120px]">Payment Type</TableHead>
+                <TableHead className="min-w-[120px]">Advance Amount</TableHead>
               </TableHeader>
               <TableBody>
-                {displayedPendingTasks.map((task) => (
-                  <TableRow key={task.taskNo}>
-                    <TableCell>
-                      <Button
-                        size="sm"
-                        onClick={() => handleMaterialClick(task)}
-                        className="flex items-center"
-                      >
-                        <CheckCircle className="w-3 h-3 mr-1" />
-                        Material
-                      </Button>
+                {loadingTasks && pendingRepairTasks.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={11} className="text-center py-12">
+                      <div className="flex flex-col items-center justify-center">
+                        <div className="w-9 h-9 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                        <p className="mt-3 text-sm text-gray-500 font-medium">Loading tasks...</p>
+                      </div>
                     </TableCell>
-                    <TableCell className="font-medium text-blue-600">
-                      {task.taskNo}
-                    </TableCell>
-                    <TableCell>{task.machineName}</TableCell>
-
-                    <TableCell>{task.planned1}</TableCell>
-
-                    <TableCell>{task.serialNo}</TableCell>
-                    <TableCell>{task.doerName}</TableCell>
-                    <TableCell>{task.vendorName || "-"}</TableCell>
-                    <TableCell>{task.transportationCharges}</TableCell>
-                    <TableCell>{task.leadTimeToDeliverDays}</TableCell>
-                    <TableCell>{task.paymentType || "-"}</TableCell>
-                    <TableCell>{task.howMuch || "-"}</TableCell>
                   </TableRow>
-                ))}
+                ) : displayedPendingTasks.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={11} className="text-center py-12 text-gray-500">
+                      No pending tasks found
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  displayedPendingTasks.map((task) => (
+                    <TableRow key={task.taskNo || Math.random()}>
+                      <TableCell className="text-center">
+                        <Button
+                          size="sm"
+                          onClick={() => handleMaterialClick(task)}
+                          className="flex items-center mx-auto"
+                        >
+                          <CheckCircle className="w-3.5 h-3.5 mr-1" />
+                          Material
+                        </Button>
+                      </TableCell>
+                      <TableCell className="font-medium text-blue-600">
+                        {task.taskNo}
+                      </TableCell>
+                      <TableCell className="font-medium text-gray-900">{task.machineName}</TableCell>
+                      <TableCell>{task.planned1 || "-"}</TableCell>
+                      <TableCell>{task.serialNo}</TableCell>
+                      <TableCell>{task.doerName}</TableCell>
+                      <TableCell>{task.vendorName || "-"}</TableCell>
+                      <TableCell>
+                        {task.transportationCharges ? `₹${Number(task.transportationCharges).toLocaleString()}` : "-"}
+                      </TableCell>
+                      <TableCell>{task.leadTimeToDeliverDays ? `${task.leadTimeToDeliverDays} Days` : "-"}</TableCell>
+                      <TableCell>{task.paymentType || "-"}</TableCell>
+                      <TableCell>{task.howMuch ? `₹${Number(task.howMuch).toLocaleString()}` : "-"}</TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
-
-           {loadingTasks && pendingRepairTasks.length === 0 && (
-              <div className="flex flex-col items-center justify-center w-[75vw] mt-10">
-                <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                <p className="mt-4 text-gray-600">Loading tasks...</p>
-              </div>
-            )}
           </div>
         )}
 
         {activeTab === "history" && (
           <div>
-            <Table>
-              <TableHeader>
-                <TableHead>Task Number</TableHead>
-                <TableHead>Machine Name</TableHead>
-
-                <TableHead>Serial No</TableHead>
-                <TableHead>Planned Date</TableHead>
-                <TableHead>Indenter</TableHead>
-                <TableHead>Vendor Name</TableHead>
-                <TableHead>Lead Time</TableHead>
-                <TableHead>Payment Type</TableHead>
-                <TableHead>How Much</TableHead>
-                <TableHead>Transporter Name</TableHead>
-
-                
-                <TableHead>Total Amount</TableHead>
-                <TableHead>Bill No</TableHead>
-                <TableHead>Bill Type</TableHead>
-                <TableHead>To Be Paid</TableHead>
-                <TableHead>Bill Image</TableHead>
+            <Table containerClassName="max-h-[calc(100vh-260px)] overflow-y-auto">
+              <TableHeader className="sticky top-0 z-10 bg-gray-50">
+                <TableHead className="min-w-[120px]">Task Number</TableHead>
+                <TableHead className="min-w-[150px]">Machine Name</TableHead>
+                <TableHead className="min-w-[120px]">Serial No</TableHead>
+                <TableHead className="min-w-[110px]">Planned Date</TableHead>
+                <TableHead className="min-w-[130px]">Indentor Name</TableHead>
+                <TableHead className="min-w-[140px]">Vendor Name</TableHead>
+                <TableHead className="min-w-[100px]">Lead Time</TableHead>
+                <TableHead className="min-w-[120px]">Payment Type</TableHead>
+                <TableHead className="min-w-[120px]">Advance Amount</TableHead>
+                <TableHead className="min-w-[140px]">Transporter Name</TableHead>
+                <TableHead className="min-w-[120px]">To Be Paid</TableHead>
+                <TableHead className="min-w-[120px]">Bill No</TableHead>
+                <TableHead className="min-w-[120px]">Bill Type</TableHead>
+                <TableHead className="min-w-[120px]">Total Bill Amount</TableHead>
+                <TableHead className="min-w-[120px]">Bill Image</TableHead>
               </TableHeader>
               <TableBody>
-                {displayedHistoryTasks.map((task) => (
-                  <TableRow key={task.taskNo}>
-                    <TableCell className="font-medium text-blue-600">
-                      {task.taskNo}
+                {loadingTasks && historyRepairTasks.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={15} className="text-center py-12">
+                      <div className="flex flex-col items-center justify-center">
+                        <div className="w-9 h-9 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                        <p className="mt-3 text-sm text-gray-500 font-medium">Loading tasks...</p>
+                      </div>
                     </TableCell>
-                    <TableCell>{task.machineName}</TableCell>
-                    <TableCell>{task.serialNo}</TableCell>
-                    <TableCell>{task.planned1}</TableCell>
-                    <TableCell>{task.doerName}</TableCell>
-                    <TableCell>{task.vendorName || "-"}</TableCell>
-                    <TableCell>{task.leadTimeToDeliverDays}</TableCell>
-                    <TableCell>{task.paymentType || "-"}</TableCell>
-                    <TableCell>{task.howMuch || "-"}</TableCell>
-                    <TableCell>{task.tranporterName || "-"}</TableCell>
-                    <TableCell>
-                      ₹{task.toBePaidAmount?.toLocaleString() || "-"}
-                    </TableCell>
-
-                    <TableCell>{task.billNo || "-"}</TableCell>
-                    <TableCell>{task.typeOfBill || "-"}</TableCell>
-
-                    <TableCell>
-                      ₹{task.totalBillAmount?.toLocaleString() || "-"}
-                    </TableCell>
-
-                    <TableCell>
-                      {task.billImage ? (
-                        <Button
-                          size="sm"
-                          variant="primary"
-
-                          onClick={() =>
-                            window.open(
-                              task.billImage,
-                              "_blank"
-                            )
-                          }
-                        >
-                          View
-                        </Button>
-                      ) : (
-                        "-"
-                      )}
-                    </TableCell>
-                    
                   </TableRow>
-                ))}
+                ) : displayedHistoryTasks.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={15} className="text-center py-12 text-gray-500">
+                      No history tasks found
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  displayedHistoryTasks.map((task) => (
+                    <TableRow key={task.taskNo || Math.random()}>
+                      <TableCell className="font-medium text-blue-600">
+                        {task.taskNo}
+                      </TableCell>
+                      <TableCell className="font-medium text-gray-900">{task.machineName}</TableCell>
+                      <TableCell>{task.serialNo}</TableCell>
+                      <TableCell>{task.planned1 || "-"}</TableCell>
+                      <TableCell>{task.doerName}</TableCell>
+                      <TableCell>{task.vendorName || "-"}</TableCell>
+                      <TableCell>{task.leadTimeToDeliverDays ? `${task.leadTimeToDeliverDays} Days` : "-"}</TableCell>
+                      <TableCell>{task.paymentType || "-"}</TableCell>
+                      <TableCell>{task.howMuch ? `₹${Number(task.howMuch).toLocaleString()}` : "-"}</TableCell>
+                      <TableCell>{task.tranporterName || "-"}</TableCell>
+                      <TableCell className="font-medium text-gray-900">
+                        {task.toBePaidAmount ? `₹${Number(task.toBePaidAmount).toLocaleString()}` : "-"}
+                      </TableCell>
+                      <TableCell>{task.billNo || "-"}</TableCell>
+                      <TableCell>{task.typeOfBill || "-"}</TableCell>
+                      <TableCell>
+                        {task.totalBillAmount ? `₹${Number(task.totalBillAmount).toLocaleString()}` : "-"}
+                      </TableCell>
+                      <TableCell>
+                        {task.billImage ? (
+                          <button
+                            type="button"
+                            className="text-blue-600 underline text-sm hover:text-blue-800 font-medium"
+                            onClick={() =>
+                              window.open(
+                                task.billImage,
+                                "_blank",
+                                "noopener,noreferrer"
+                              )
+                            }
+                          >
+                            View Bill
+                          </button>
+                        ) : (
+                          <span className="text-gray-400 text-xs">No Bill</span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
-
-             {loadingTasks && historyRepairTasks.length === 0 && (
-              <div className="flex flex-col items-center justify-center w-[75vw] mt-10">
-                <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                <p className="mt-4 text-gray-600">Loading tasks...</p>
-              </div>
-            )}
           </div>
         )}
       </div>

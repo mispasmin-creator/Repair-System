@@ -411,138 +411,149 @@ const StoreIn = () => {
             </div>
           )}
         </div>
-
-        {activeTab === "pending" && (
-          <div className="overflow-x-auto">
-            {loadingTasks ? (
-              <div className="flex flex-col items-center justify-center py-12">
-                <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                <p className="mt-4 text-gray-600">Loading tasks...</p>
-              </div>
-            ) : filteredPendingTasks.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12">
-                <p className="text-gray-500">No pending tasks found</p>
-              </div>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableHead>Action</TableHead>
-                  <TableHead>Task Number</TableHead>
-                  <TableHead>Machine Name</TableHead>
-                  <TableHead>Serial No</TableHead>
-                  <TableHead>Planned Date</TableHead>
-                  <TableHead>Indenter</TableHead>
-                  <TableHead>Vendor Name</TableHead>
-                  <TableHead>Lead Time</TableHead>
-                  <TableHead>Payment Type</TableHead>
-                  <TableHead>Transporter Amount</TableHead>
-                  <TableHead>Bill Image</TableHead>
-                  <TableHead>Bill No</TableHead>
-                  <TableHead>Total Bill Amount</TableHead>
-                  <TableHead>To Be Paid</TableHead>
-                </TableHeader>
-                <TableBody>
-                  {filteredPendingTasks.map((task) => (
+            {activeTab === "pending" && (
+          <div>
+            <Table containerClassName="max-h-[calc(100vh-260px)] overflow-y-auto">
+              <TableHeader className="sticky top-0 z-10 bg-gray-50">
+                <TableHead className="min-w-[100px] text-center">Action</TableHead>
+                <TableHead className="min-w-[120px]">Task Number</TableHead>
+                <TableHead className="min-w-[150px]">Machine Name</TableHead>
+                <TableHead className="min-w-[120px]">Serial No</TableHead>
+                <TableHead className="min-w-[110px]">Planned Date</TableHead>
+                <TableHead className="min-w-[130px]">Indentor Name</TableHead>
+                <TableHead className="min-w-[140px]">Vendor Name</TableHead>
+                <TableHead className="min-w-[100px]">Lead Time</TableHead>
+                <TableHead className="min-w-[120px]">Payment Type</TableHead>
+                <TableHead className="min-w-[140px]">Transporter Amount</TableHead>
+                <TableHead className="min-w-[120px]">Bill Image</TableHead>
+                <TableHead className="min-w-[120px]">Bill No</TableHead>
+                <TableHead className="min-w-[120px]">Total Bill Amount</TableHead>
+                <TableHead className="min-w-[120px]">To Be Paid</TableHead>
+              </TableHeader>
+              <TableBody>
+                {loadingTasks ? (
+                  <TableRow>
+                    <TableCell colSpan={14} className="text-center py-12">
+                      <div className="flex flex-col items-center justify-center">
+                        <div className="w-9 h-9 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                        <p className="mt-3 text-sm text-gray-500 font-medium">Loading tasks...</p>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : filteredPendingTasks.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={14} className="text-center py-12 text-gray-500">
+                      No pending tasks found
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredPendingTasks.map((task) => (
                     <TableRow key={task.id || task.taskNo}>
-                      <TableCell>
+                      <TableCell className="text-center">
                         <Button
                           size="sm"
                           onClick={() => handleMaterialClick(task)}
-                          className="flex items-center"
+                          className="flex items-center mx-auto"
                         >
-                          <Package className="w-3 h-3 mr-1" />
+                          <Package className="w-3.5 h-3.5 mr-1" />
                           Material
                         </Button>
                       </TableCell>
                       <TableCell className="font-medium text-blue-600">
                         {task.taskNo || "-"}
                       </TableCell>
-                      <TableCell>{task.machineName || "-"}</TableCell>
+                      <TableCell className="font-medium text-gray-900">{task.machineName || "-"}</TableCell>
                       <TableCell>{task.serialNo || "-"}</TableCell>
                       <TableCell>{task.planned2 || "-"}</TableCell>
                       <TableCell>{task.doerName || "-"}</TableCell>
                       <TableCell>{task.vendorName || "-"}</TableCell>
-                      <TableCell>{task.leadTimeToDeliverDays || "-"}</TableCell>
+                      <TableCell>{task.leadTimeToDeliverDays ? `${task.leadTimeToDeliverDays} Days` : "-"}</TableCell>
                       <TableCell>{task.paymentType || "-"}</TableCell>
-                      <TableCell>{task.howMuch || "-"}</TableCell>
+                      <TableCell>{task.howMuch ? `₹${Number(task.howMuch).toLocaleString()}` : "-"}</TableCell>
                       <TableCell>
                         {task.billImage ? (
-                          <Button
-                            size="sm"
-                            variant="primary"
-                            onClick={() => window.open(task.billImage, "_blank")}
+                          <button
+                            type="button"
+                            className="text-blue-600 underline text-sm hover:text-blue-800 font-medium"
+                            onClick={() => window.open(task.billImage, "_blank", "noopener,noreferrer")}
                           >
-                            View
-                          </Button>
+                            View Bill
+                          </button>
                         ) : (
-                          "-"
+                          <span className="text-gray-400 text-xs">No Bill</span>
                         )}
                       </TableCell>
                       <TableCell>{task.billNo || "-"}</TableCell>
                       <TableCell>{formatCurrency(task.totalBillAmount)}</TableCell>
-                      <TableCell>{formatCurrency(task.toBePaidAmount)}</TableCell>
+                      <TableCell className="font-medium text-gray-900">{formatCurrency(task.toBePaidAmount)}</TableCell>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
+                  ))
+                )}
+              </TableBody>
+            </Table>
           </div>
         )}
 
         {activeTab === "history" && (
-          <div className="overflow-x-auto">
-            {loadingTasks ? (
-              <div className="flex flex-col items-center justify-center py-12">
-                <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                <p className="mt-4 text-gray-600">Loading tasks...</p>
-              </div>
-            ) : filteredHistoryTasks.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12">
-                <p className="text-gray-500">No history tasks found</p>
-              </div>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableHead>Task Number</TableHead>
-                  <TableHead>Machine Name</TableHead>
-                  <TableHead>Serial No</TableHead>
-                  <TableHead>Part Name</TableHead>
-                  <TableHead>Vendor Name</TableHead>
-                  <TableHead>Received Quantity</TableHead>
-                  <TableHead>Bill Image</TableHead>
-                  <TableHead>Bill Amount</TableHead>
-                  <TableHead>To Be Paid</TableHead>
-                  <TableHead>Bill Match</TableHead>
-                </TableHeader>
-                <TableBody>
-                  {filteredHistoryTasks.map((task) => (
+          <div>
+            <Table containerClassName="max-h-[calc(100vh-260px)] overflow-y-auto">
+              <TableHeader className="sticky top-0 z-10 bg-gray-50">
+                <TableHead className="min-w-[120px]">Task Number</TableHead>
+                <TableHead className="min-w-[150px]">Machine Name</TableHead>
+                <TableHead className="min-w-[120px]">Serial No</TableHead>
+                <TableHead className="min-w-[140px]">Part Name</TableHead>
+                <TableHead className="min-w-[140px]">Vendor Name</TableHead>
+                <TableHead className="min-w-[130px]">Received Quantity</TableHead>
+                <TableHead className="min-w-[120px]">Bill Image</TableHead>
+                <TableHead className="min-w-[120px]">Bill Amount</TableHead>
+                <TableHead className="min-w-[120px]">To Be Paid</TableHead>
+                <TableHead className="min-w-[120px]">Bill Match</TableHead>
+              </TableHeader>
+              <TableBody>
+                {loadingTasks ? (
+                  <TableRow>
+                    <TableCell colSpan={10} className="text-center py-12">
+                      <div className="flex flex-col items-center justify-center">
+                        <div className="w-9 h-9 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                        <p className="mt-3 text-sm text-gray-500 font-medium">Loading tasks...</p>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : filteredHistoryTasks.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={10} className="text-center py-12 text-gray-500">
+                      No history tasks found
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredHistoryTasks.map((task) => (
                     <TableRow key={task.id || task.taskNo}>
                       <TableCell className="font-medium text-blue-600">
                         {task.taskNo || "-"}
                       </TableCell>
-                      <TableCell>{task.machineName || "-"}</TableCell>
+                      <TableCell className="font-medium text-gray-900">{task.machineName || "-"}</TableCell>
                       <TableCell>{task.serialNo || "-"}</TableCell>
                       <TableCell>{task.machinePartName || "-"}</TableCell>
                       <TableCell>{task.vendorName || "-"}</TableCell>
                       <TableCell>{task.receivedQuantity || "-"}</TableCell>
                       <TableCell>
                         {task.billImage ? (
-                          <Button
-                            size="sm"
-                            variant="primary"
-                            onClick={() => window.open(task.billImage, "_blank")}
+                          <button
+                            type="button"
+                            className="text-blue-600 underline text-sm hover:text-blue-800 font-medium"
+                            onClick={() => window.open(task.billImage, "_blank", "noopener,noreferrer")}
                           >
-                            View
-                          </Button>
+                            View Bill
+                          </button>
                         ) : (
-                          "-"
+                          <span className="text-gray-400 text-xs">No Bill</span>
                         )}
                       </TableCell>
                       <TableCell>{formatCurrency(task.totalBillAmount)}</TableCell>
-                      <TableCell>{formatCurrency(task.toBePaidAmount)}</TableCell>
+                      <TableCell className="font-medium text-gray-900">{formatCurrency(task.toBePaidAmount)}</TableCell>
                       <TableCell>
                         <span
-                          className={`px-2 py-1 text-xs font-medium rounded-full ${
+                          className={`px-2.5 py-1 text-xs font-medium rounded-full ${
                             task.billMatch === "Yes"
                               ? "bg-green-100 text-green-800"
                               : "bg-red-100 text-red-800"
@@ -552,10 +563,10 @@ const StoreIn = () => {
                         </span>
                       </TableCell>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
+                  ))
+                )}
+              </TableBody>
+            </Table>
           </div>
         )}
       </div>

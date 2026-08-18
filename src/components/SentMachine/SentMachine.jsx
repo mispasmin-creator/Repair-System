@@ -405,27 +405,42 @@ const SentMachine = () => {
 
         {activeTab === "pending" && (
           <div>
-            <div className="relative">
-              <Table>
-                <TableHeader className="sticky top-0 z-10 bg-white">
-                  <TableHead>Action</TableHead>
-                  <TableHead>Task Number</TableHead>
-                  <TableHead>Planned Date</TableHead>
-                  <TableHead>Machine Name</TableHead>
-                  <TableHead>Serial No</TableHead>
-                  <TableHead>Indenter</TableHead>
-                  <TableHead>Department</TableHead>
-                  <TableHead>Part Name</TableHead>
-                  <TableHead>Priority</TableHead>
-                </TableHeader>
-                <TableBody className="overflow-auto max-h-[calc(100vh-200px)] block">
-                  {displayedPendingTasks.map((task) => (
-                    <TableRow key={task.taskNo}>
-                      <TableCell>
+            <Table containerClassName="max-h-[calc(100vh-260px)] overflow-y-auto">
+              <TableHeader className="sticky top-0 z-10 bg-gray-50">
+                <TableHead className="min-w-[90px] text-center">Action</TableHead>
+                <TableHead className="min-w-[120px]">Task Number</TableHead>
+                <TableHead className="min-w-[110px]">Planned Date</TableHead>
+                <TableHead className="min-w-[150px]">Machine Name</TableHead>
+                <TableHead className="min-w-[120px]">Serial No</TableHead>
+                <TableHead className="min-w-[130px]">Indentor Name</TableHead>
+                <TableHead className="min-w-[120px]">Department</TableHead>
+                <TableHead className="min-w-[150px]">Part Name</TableHead>
+                <TableHead className="min-w-[100px]">Priority</TableHead>
+              </TableHeader>
+              <TableBody>
+                {loadingTasks ? (
+                  <TableRow>
+                    <TableCell colSpan={9} className="text-center py-12">
+                      <div className="flex flex-col items-center justify-center">
+                        <div className="w-9 h-9 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                        <p className="mt-3 text-sm text-gray-500 font-medium">Loading tasks...</p>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : displayedPendingTasks.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={9} className="text-center py-12 text-gray-500">
+                      No pending tasks found
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  displayedPendingTasks.map((task) => (
+                    <TableRow key={task.taskNo || Math.random()}>
+                      <TableCell className="text-center">
                         <Button
                           size="sm"
                           onClick={() => handleSentClick(task)}
-                          className="flex items-center"
+                          className="flex items-center mx-auto"
                         >
                           <Send className="w-3 h-3 mr-1" />
                           Sent
@@ -435,122 +450,115 @@ const SentMachine = () => {
                         {task.taskNo}
                       </TableCell>
                       <TableCell>
-                        {new Date(task.taskStartDate).toLocaleDateString()}
+                        {task.taskStartDate ? new Date(task.taskStartDate).toLocaleDateString() : "-"}
                       </TableCell>
-                      <TableCell>{task.machineName}</TableCell>
+                      <TableCell className="font-medium text-gray-900">{task.machineName}</TableCell>
                       <TableCell>{task.serialNo}</TableCell>
                       <TableCell>{task.doerName}</TableCell>
                       <TableCell>{task.department}</TableCell>
-                      <TableCell>{task.machinePartName}</TableCell>
+                      <TableCell>{task.machinePartName || "-"}</TableCell>
                       <TableCell>
                         <span
-                          className={`px-2 py-1 text-xs font-medium rounded-full ${getPriorityColor(
+                          className={`px-2.5 py-1 text-xs font-medium rounded-full ${getPriorityColor(
                             task.priority
                           )}`}
                         >
-                          {task.priority}
+                          {task.priority || "Normal"}
                         </span>
                       </TableCell>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-
-            {loadingTasks && (
-              <div className="flex flex-col items-center justify-center w-[75vw] mt-10">
-                <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                <p className="mt-4 text-gray-600">Loading tasks...</p>
-              </div>
-            )}
+                  ))
+                )}
+              </TableBody>
+            </Table>
           </div>
         )}
 
         {activeTab === "history" && (
           <div>
-            <Table>
-              <TableHeader>
-                <TableHead>Task Number</TableHead>
-                <TableHead>Planned Date</TableHead>
-                <TableHead>Serial No</TableHead>
-                <TableHead>Machine Name</TableHead>
-                <TableHead>Indenter</TableHead>
-                {/* to do */}
-
-                <TableHead>Part Name</TableHead>
-                <TableHead>Vendor Name</TableHead>
-                <TableHead>Lead Time</TableHead>
-                <TableHead>Transpoter Name</TableHead>
-                <TableHead>Transportation Charges</TableHead>
-                <TableHead>Weighment Slip</TableHead>
-                <TableHead>Transporting Image With Machine</TableHead>
-                <TableHead>Payment Type</TableHead>
-                <TableHead>How Much</TableHead>
-
-                <TableHead>Part Name</TableHead>
-                <TableHead>Vendor Name</TableHead>
-                <TableHead>Transporter</TableHead>
-                <TableHead>Transportation Charges</TableHead>
+            <Table containerClassName="max-h-[calc(100vh-260px)] overflow-y-auto">
+              <TableHeader className="sticky top-0 z-10 bg-gray-50">
+                <TableHead className="min-w-[120px]">Task Number</TableHead>
+                <TableHead className="min-w-[110px]">Planned Date</TableHead>
+                <TableHead className="min-w-[120px]">Serial No</TableHead>
+                <TableHead className="min-w-[150px]">Machine Name</TableHead>
+                <TableHead className="min-w-[130px]">Indentor Name</TableHead>
+                <TableHead className="min-w-[120px]">Department</TableHead>
+                <TableHead className="min-w-[150px]">Part Name</TableHead>
+                <TableHead className="min-w-[140px]">Vendor Name</TableHead>
+                <TableHead className="min-w-[100px]">Lead Time</TableHead>
+                <TableHead className="min-w-[140px]">Transporter</TableHead>
+                <TableHead className="min-w-[130px]">Transport Charges</TableHead>
+                <TableHead className="min-w-[130px]">Weighment Slip</TableHead>
+                <TableHead className="min-w-[130px]">Machine Image</TableHead>
+                <TableHead className="min-w-[120px]">Payment Type</TableHead>
+                <TableHead className="min-w-[120px]">Advance Amount</TableHead>
               </TableHeader>
               <TableBody>
-                {displayedHistoryTasks.map((task) => (
-                  <TableRow key={task.taskNo}>
-                    <TableCell className="font-medium text-blue-600">
-                      {task.taskNo}
-                    </TableCell>
-                    <TableCell>
-                      {new Date(task.taskStartDate).toLocaleDateString()}
-                    </TableCell>
-                    <TableCell>{task.serialNo}</TableCell>
-                    <TableCell>{task.machineName}</TableCell>
-                    <TableCell>{task.doerName}</TableCell>
-                    {/* to do */}
-
-                    <TableCell>{task.department}</TableCell>
-                    <TableCell>{task.vendorName}</TableCell>
-                    <TableCell>{task.leadTimeToDeliverDays}</TableCell>
-                    <TableCell>{task.transporterName}</TableCell>
-                    <TableCell>{task.transportationCharges}</TableCell>
-                    <TableCell>{task.weighmentSlip}</TableCell>
-                    <TableCell>
-                      {task.transportingImageWithMachine ? (
-                        <Button
-                          size="sm"
-                          variant="primary"
-
-                          onClick={() =>
-                            window.open(
-                              task.transportingImageWithMachine,
-                              "_blank"
-                            )
-                          }
-                        >
-                          View
-                        </Button>
-                      ) : (
-                        "-"
-                      )}
-                    </TableCell>
-                    <TableCell>{task.paymentType}</TableCell>
-                    <TableCell>{task.howMuch}</TableCell>
-
-                    <TableCell>{task.machinePartName}</TableCell>
-                    <TableCell>{task.vendorName || "-"}</TableCell>
-                    <TableCell>{task.transporterName || "-"}</TableCell>
-                    <TableCell>
-                      ₹{task.transportationCharges?.toLocaleString() || "-"}
+                {loadingTasks ? (
+                  <TableRow>
+                    <TableCell colSpan={15} className="text-center py-12">
+                      <div className="flex flex-col items-center justify-center">
+                        <div className="w-9 h-9 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                        <p className="mt-3 text-sm text-gray-500 font-medium">Loading tasks...</p>
+                      </div>
                     </TableCell>
                   </TableRow>
-                ))}
+                ) : displayedHistoryTasks.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={15} className="text-center py-12 text-gray-500">
+                      No history tasks found
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  displayedHistoryTasks.map((task) => (
+                    <TableRow key={task.taskNo || Math.random()}>
+                      <TableCell className="font-medium text-blue-600">
+                        {task.taskNo}
+                      </TableCell>
+                      <TableCell>
+                        {task.taskStartDate ? new Date(task.taskStartDate).toLocaleDateString() : "-"}
+                      </TableCell>
+                      <TableCell>{task.serialNo}</TableCell>
+                      <TableCell className="font-medium text-gray-900">{task.machineName}</TableCell>
+                      <TableCell>{task.doerName}</TableCell>
+                      <TableCell>{task.department}</TableCell>
+                      <TableCell>{task.machinePartName || "-"}</TableCell>
+                      <TableCell>{task.vendorName || "-"}</TableCell>
+                      <TableCell>{task.leadTimeToDeliverDays ? `${task.leadTimeToDeliverDays} Days` : "-"}</TableCell>
+                      <TableCell>{task.transporterName || "-"}</TableCell>
+                      <TableCell>
+                        {task.transportationCharges ? `₹${Number(task.transportationCharges).toLocaleString()}` : "-"}
+                      </TableCell>
+                      <TableCell>{task.weighmentSlip || "-"}</TableCell>
+                      <TableCell>
+                        {task.transportingImageWithMachine ? (
+                          <button
+                            type="button"
+                            className="text-blue-600 underline text-sm hover:text-blue-800 font-medium"
+                            onClick={() =>
+                              window.open(
+                                task.transportingImageWithMachine,
+                                "_blank",
+                                "noopener,noreferrer"
+                              )
+                            }
+                          >
+                            View Image
+                          </button>
+                        ) : (
+                          <span className="text-gray-400 text-xs">No Image</span>
+                        )}
+                      </TableCell>
+                      <TableCell>{task.paymentType || "-"}</TableCell>
+                      <TableCell>
+                        {task.howMuch ? `₹${Number(task.howMuch).toLocaleString()}` : "-"}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
-
-            {loadingTasks && (
-              <div className="flex flex-col items-center justify-center w-[75vw] mt-10">
-                <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                <p className="mt-4 text-gray-600">Loading tasks...</p>
-              </div>
-            )}
           </div>
         )}
       </div>
