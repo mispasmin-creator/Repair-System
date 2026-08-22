@@ -62,6 +62,19 @@ const STEPS = [
     statusHeader: "Status 4",
     remarksHeader: "Remarks 4",
   },
+  {
+    key: "completed",
+    label: "Completed",
+    plannedKey: "Planned 4",
+    actualKey: "Actual 4",
+    delayKey: "Delay 4",
+    statusKey: "Status 4",
+    remarksKey: "Remarks 4",
+    actualHeader: "Actual 4",
+    statusHeader: "Status 4",
+    remarksHeader: "Remarks 4",
+    isReadOnly: true,
+  },
 ];
 
 const getStatusColor = (status) => {
@@ -105,19 +118,19 @@ const Accounts = () => {
       const allRows = result?.table?.rows || [];
 
       // Accounts sheet:
-      //   Sheet row 1   → allRows index 0 (banner)
-      //   Sheet row 2   → allRows index 1 (banner)
-      //   Sheet row 3   → allRows index 2 (banner)
-      //   Sheet row 4   → allRows index 3 (banner)
-      //   Sheet row 5   → allRows index 4 (banner)
-      //   Sheet row 6   → allRows index 5 (ACTUAL HEADERS)
-      //   Sheet row 7+  → allRows index 6+ (DATA)
-      const headerRow = allRows[5];
+      //   Apps Script doGet skips Sheet Row 1 (uses as cols/headers),
+      //   so allRows[0] = Sheet Row 2 (banner)
+      //   allRows[1] = Sheet Row 3 (banner)
+      //   allRows[2] = Sheet Row 4 (banner)
+      //   allRows[3] = Sheet Row 5 (banner)
+      //   allRows[4] = Sheet Row 6 (ACTUAL HEADERS) ← fixed from [5]
+      //   allRows[5+] = Sheet Row 7+ (DATA)         ← fixed from slice(6)
+      const headerRow = allRows[4];
       const actualHeaders = (headerRow?.c || []).map(
-        (cell) => (cell?.v ?? cell?.f ?? "").toString().trim()
+        (cell) => (cell?.f ?? cell?.v ?? "").toString().trim()
       );
 
-      const dataRows = allRows.slice(6);
+      const dataRows = allRows.slice(5);
 
       const get = (cells, headerName) => {
         const idx = actualHeaders.indexOf(headerName);
@@ -194,6 +207,16 @@ const Accounts = () => {
   }, []);
 
   const filteredTasks = tasks.filter((task) => {
+    // Completed tab: show entries where Tally (Actual 4) is filled
+    if (activeTab === "completed") {
+      if (!task.steps["tally"].actual) return false;
+    } else {
+      // All other tabs: only show rows where their Planned date exists
+      if (!task.steps[activeStep.key].planned) return false;
+      // Exclude already-completed entries from Tally tab
+      if (activeTab === "tally" && task.steps["tally"].actual) return false;
+    }
+
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
     return (
@@ -318,17 +341,12 @@ const Accounts = () => {
                 <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[130px]">Type of Bill</th>
                 <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[150px]">Total Bill Amount</th>
                 <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[150px]">To Be Paid Amount</th>
-                <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[120px]">Planned</th>
-                <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[120px]">Actual</th>
-                <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[90px]">Delay</th>
-                <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[110px]">Status</th>
-                <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[180px]">Remarks</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 bg-white">
               {loadingTasks ? (
                 <tr>
-                  <td colSpan={26} className="text-center py-12">
+                  <td colSpan={21} className="text-center py-12">
                     <div className="flex flex-col items-center justify-center">
                       <div className="w-9 h-9 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                       <p className="mt-3 text-sm text-gray-500 font-medium">Loading tasks...</p>
@@ -337,7 +355,7 @@ const Accounts = () => {
                 </tr>
               ) : filteredTasks.length === 0 ? (
                 <tr>
-                  <td colSpan={26} className="text-center py-12 text-gray-500">No tasks found</td>
+                  <td colSpan={21} className="text-center py-12 text-gray-500">No tasks found</td>
                 </tr>
               ) : (
                 filteredTasks.map((task, idx) => {
@@ -346,7 +364,11 @@ const Accounts = () => {
                   return (
                     <tr key={task.taskNo || idx} className="hover:bg-blue-50/40 transition-colors duration-150">
                       <td className="px-4 py-3 text-sm whitespace-nowrap text-center">
-                        {canUpdate ? (
+                        {activeTab === "completed" ? (
+                          <span className="inline-flex items-center gap-1 px-3 py-1.5 bg-green-100 text-green-700 text-xs font-semibold rounded-lg">
+                            ✓ Completed
+                          </span>
+                        ) : canUpdate ? (
                           <button onClick={() => handleUpdateClick(task)} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-xs font-semibold rounded-lg transition-colors">
                             <CheckSquare className="w-3.5 h-3.5" />
                             Update
@@ -356,7 +378,9 @@ const Accounts = () => {
                             Edit
                           </button>
                         ) : (
-                          <span className="text-xs text-gray-400">Not reached</span>
+                          <button onClick={() => handleUpdateClick(task)} className="inline-flex items-center px-3 py-1.5 bg-orange-100 hover:bg-orange-200 text-orange-700 text-xs font-semibold rounded-lg transition-colors">
+                            Action
+                          </button>
                         )}
                       </td>
                       <td className="px-4 py-3 text-sm font-medium text-blue-600 whitespace-nowrap">{task.taskNo || "-"}</td>
@@ -401,15 +425,6 @@ const Accounts = () => {
                       <td className="px-4 py-3 text-sm font-medium text-gray-900 whitespace-nowrap">
                         {task.toBePaidAmount ? `₹${Number(task.toBePaidAmount).toLocaleString()}` : "-"}
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">{step.planned || "-"}</td>
-                      <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">{step.actual || "-"}</td>
-                      <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">{step.delay || "-"}</td>
-                      <td className="px-4 py-3 text-sm whitespace-nowrap">
-                        <span className={`px-2.5 py-1 text-xs font-medium rounded-full ${getStatusColor(step.status)}`}>
-                          {step.status || "Pending"}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{step.remarks || "-"}</td>
                     </tr>
                   );
                 })
@@ -422,58 +437,75 @@ const Accounts = () => {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={activeStep?.label}
+        title={`${activeStep?.label} — Update`}
         size="md"
       >
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Task No (Read-only)
-            </label>
-            <input
-              type="text"
-              value={selectedTask?.taskNo || ""}
-              readOnly
-              className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-500"
-            />
+        <form onSubmit={handleSubmit} className="space-y-5">
+          {/* Task Details */}
+          <div className="bg-gray-50 rounded-lg p-4 grid grid-cols-2 gap-x-6 gap-y-3 text-sm border border-gray-200">
+            <div>
+              <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Task No</p>
+              <p className="text-gray-900 font-semibold mt-0.5">{selectedTask?.taskNo || "-"}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Firm Name</p>
+              <p className="text-gray-800 mt-0.5">{selectedTask?.firmName || "-"}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Machine Name</p>
+              <p className="text-gray-800 mt-0.5">{selectedTask?.machineName || "-"}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Serial No</p>
+              <p className="text-gray-800 mt-0.5">{selectedTask?.serialNo || "-"}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Department</p>
+              <p className="text-gray-800 mt-0.5">{selectedTask?.department || "-"}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Vendor Name</p>
+              <p className="text-gray-800 mt-0.5">{selectedTask?.vendorName || "-"}</p>
+            </div>
+            <div className="col-span-2">
+              <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Planned Date</p>
+              <p className="text-blue-600 font-semibold mt-0.5">
+                {selectedTask && activeStep ? selectedTask.steps[activeStep.key]?.planned || "-" : "-"}
+              </p>
+            </div>
           </div>
 
+          {/* Status Dropdown */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Status *
-            </label>
-            <input
-              type="text"
+            <label className="block text-sm font-medium text-gray-700 mb-2">Status *</label>
+            <select
               value={formData.status}
-              onChange={(e) =>
-                setFormData((prev) => ({ ...prev, status: e.target.value }))
-              }
-              placeholder="e.g. Complete / Mismatch"
+              onChange={(e) => setFormData((prev) => ({ ...prev, status: e.target.value }))}
               required
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-800"
+            >
+              <option value="">-- Select Status --</option>
+              <option value="Done">Done</option>
+              {activeTab === "audit" && (
+                <option value="Not Done">Not Done</option>
+              )}
+            </select>
           </div>
 
+          {/* Remarks */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Remarks
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Remarks</label>
             <textarea
               value={formData.remarks}
-              onChange={(e) =>
-                setFormData((prev) => ({ ...prev, remarks: e.target.value }))
-              }
+              onChange={(e) => setFormData((prev) => ({ ...prev, remarks: e.target.value }))}
               rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              placeholder="Add remarks here..."
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
             />
           </div>
 
-          <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => setIsModalOpen(false)}
-            >
+          <div className="flex justify-end space-x-4 pt-4 border-t border-gray-200">
+            <Button type="button" variant="secondary" onClick={() => setIsModalOpen(false)}>
               Cancel
             </Button>
             <Button type="submit" variant="primary" disabled={loaderSubmit}>
