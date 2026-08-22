@@ -12,17 +12,16 @@ import {
 } from "../ui/Table";
 import { useAuth } from "../../context/AuthContext";
 
-// The "Accounts" sheet repeats a Planned/Actual/Delay/Status/Remarks block
-// four times, one block per audit step. Each step becomes a tab here.
+// Each step maps to exact column header names in the Accounts sheet
 const STEPS = [
   {
     key: "audit",
     label: "Audit Data",
-    plannedIdx: 22,
-    actualIdx: 23,
-    delayIdx: 24,
-    statusIdx: 25,
-    remarksIdx: 26,
+    plannedKey: "Planned 1",
+    actualKey: "Actual 1",
+    delayKey: "Delay 1",
+    statusKey: "Status 1",
+    remarksKey: "Remarks1",
     actualHeader: "Actual 1",
     statusHeader: "Status 1",
     remarksHeader: "Remarks1",
@@ -30,11 +29,11 @@ const STEPS = [
   {
     key: "rectify",
     label: "Rectify the Mistake",
-    plannedIdx: 27,
-    actualIdx: 28,
-    delayIdx: 29,
-    statusIdx: 30,
-    remarksIdx: 31,
+    plannedKey: "Planned 2",
+    actualKey: "Actual 2",
+    delayKey: "Delay 2",
+    statusKey: "Status 2",
+    remarksKey: "Remarks 2",
     actualHeader: "Actual 2",
     statusHeader: "Status 2",
     remarksHeader: "Remarks 2",
@@ -42,11 +41,11 @@ const STEPS = [
   {
     key: "reaudit",
     label: "Reaudit Data",
-    plannedIdx: 32,
-    actualIdx: 33,
-    delayIdx: 34,
-    statusIdx: 35,
-    remarksIdx: 36,
+    plannedKey: "Planned 3",
+    actualKey: "Actual 3",
+    delayKey: "Delay 3",
+    statusKey: "Status 3",
+    remarksKey: "Remarks 3",
     actualHeader: "Actual 3",
     statusHeader: "Status 3",
     remarksHeader: "Remarks 3",
@@ -54,11 +53,11 @@ const STEPS = [
   {
     key: "tally",
     label: "Take Entry By Tally",
-    plannedIdx: 37,
-    actualIdx: 38,
-    delayIdx: 39,
-    statusIdx: 40,
-    remarksIdx: 41,
+    plannedKey: "Planned 4",
+    actualKey: "Actual 4",
+    delayKey: "Delay 4",
+    statusKey: "Status 4",
+    remarksKey: "Remarks 4",
     actualHeader: "Actual 4",
     statusHeader: "Status 4",
     remarksHeader: "Remarks 4",
@@ -97,43 +96,82 @@ const Accounts = () => {
   const fetchAllTasks = async () => {
     try {
       setLoadingTasks(true);
+      // Use existing GET endpoint (no redeployment needed)
       const res = await fetch(
         `${SCRIPT_URL}?sheetId=${SHEET_Id}&&sheet=Accounts`
       );
       const result = await res.json();
 
       const allRows = result?.table?.rows || [];
-      // Skip banner rows 1-5; real headers live on row 6 (same layout as "Repair System")
-      const dataRows = allRows.slice(5);
 
-      const formatted = dataRows.map((row) => {
-        const cells = row.c || [];
-        const v = (idx) => cells[idx]?.v || "";
+      // Accounts sheet:
+      //   Sheet row 1   → allRows index 0 (banner)
+      //   Sheet row 2   → allRows index 1 (banner)
+      //   Sheet row 3   → allRows index 2 (banner)
+      //   Sheet row 4   → allRows index 3 (banner)
+      //   Sheet row 5   → allRows index 4 (banner)
+      //   Sheet row 6   → allRows index 5 (ACTUAL HEADERS)
+      //   Sheet row 7+  → allRows index 6+ (DATA)
+      const headerRow = allRows[5];
+      const actualHeaders = (headerRow?.c || []).map(
+        (cell) => (cell?.v ?? cell?.f ?? "").toString().trim()
+      );
 
-        const steps = {};
-        STEPS.forEach((step) => {
-          steps[step.key] = {
-            planned: v(step.plannedIdx),
-            actual: v(step.actualIdx),
-            delay: v(step.delayIdx),
-            status: v(step.statusIdx),
-            remarks: v(step.remarksIdx),
+      const dataRows = allRows.slice(6);
+
+      const get = (cells, headerName) => {
+        const idx = actualHeaders.indexOf(headerName);
+        if (idx < 0) return "";
+        const cell = cells[idx];
+        return (cell?.v ?? cell?.f ?? "").toString().trim();
+      };
+
+      const formatted = dataRows
+        .filter((row) => {
+          // skip completely empty rows
+          const cells = row.c || [];
+          return cells.some((c) => c?.v || c?.f);
+        })
+        .map((row) => {
+          const cells = row.c || [];
+
+          const steps = {};
+          STEPS.forEach((step) => {
+            steps[step.key] = {
+              planned: get(cells, step.plannedKey),
+              actual: get(cells, step.actualKey),
+              delay: get(cells, step.delayKey),
+              status: get(cells, step.statusKey),
+              remarks: get(cells, step.remarksKey),
+            };
+          });
+
+          return {
+            taskNo: get(cells, "Task No"),
+            firmName: get(cells, "Firm Name"),
+            serialNo: get(cells, "Serial No"),
+            machineName: get(cells, "Machine Name"),
+            machinePartName: get(cells, "Machine Part Name"),
+            department: get(cells, "Department"),
+            location: get(cells, "Location"),
+            vendorName: get(cells, "Vendor Name"),
+            transportationCharges: get(cells, "Transportation Charges"),
+            weighmentSlip: get(cells, "Weighment Slip"),
+            transportingImage: get(cells, "Transporting Image With Machine"),
+            paymentType: get(cells, "Payment Type"),
+            howMuch: get(cells, "How Much"),
+            transporterName: get(cells, "Transporter Name"),
+            transportationAmount: get(cells, "Transportation Amount"),
+            billImage: get(cells, "Bill Image"),
+            billNo: get(cells, "Bill No.") || get(cells, "Bill No"),
+            typeOfBill: get(cells, "Type of Bill"),
+            totalBillAmount: get(cells, "Total Bill Amount"),
+            toBePaidAmount: get(cells, "To Be Paid Amount"),
+            steps,
           };
         });
 
-        return {
-          timestamp: v(0),
-          taskNo: v(1),
-          firmName: v(2),
-          serialNo: v(3),
-          machineName: v(4),
-          machinePartName: v(5),
-          department: v(6),
-          location: v(7),
-          steps,
-        };
-      });
-
+      // Filter by firm
       const userFirmName = user?.firmName || "";
       const isAllFirm = !userFirmName || userFirmName.toLowerCase() === "all";
       const filtered = formatted.filter((task) =>
@@ -150,6 +188,7 @@ const Accounts = () => {
     }
   };
 
+
   useEffect(() => {
     fetchAllTasks();
   }, []);
@@ -161,7 +200,8 @@ const Accounts = () => {
       (task.taskNo || "").toLowerCase().includes(term) ||
       (task.machineName || "").toLowerCase().includes(term) ||
       (task.serialNo || "").toLowerCase().includes(term) ||
-      (task.department || "").toLowerCase().includes(term)
+      (task.department || "").toLowerCase().includes(term) ||
+      (task.firmName || "").toLowerCase().includes(term)
     );
   });
 
@@ -219,6 +259,7 @@ const Accounts = () => {
       </div>
 
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+        {/* Tabs */}
         <div className="border-b border-gray-200">
           <nav className="flex space-x-8 px-6 overflow-x-auto">
             {STEPS.map((step) => (
@@ -237,107 +278,144 @@ const Accounts = () => {
           </nav>
         </div>
 
+        {/* Search */}
         <div className="p-6 border-b border-gray-200">
           <div className="relative max-w-md">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
             <input
               type="text"
-              placeholder="Search by task no, machine, department..."
+              placeholder="Search by task no, machine, firm, department..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
             />
           </div>
         </div>
 
-        <div>
-          <Table containerClassName="max-h-[calc(100vh-260px)] overflow-y-auto">
-            <TableHeader className="sticky top-0 z-10 bg-gray-50">
-              <TableHead className="min-w-[100px] text-center">Action</TableHead>
-              <TableHead className="min-w-[120px]">Task No</TableHead>
-              <TableHead className="min-w-[140px]">Firm Name</TableHead>
-              <TableHead className="min-w-[150px]">Machine Name</TableHead>
-              <TableHead className="min-w-[140px]">Part Name</TableHead>
-              <TableHead className="min-w-[120px]">Department</TableHead>
-              <TableHead className="min-w-[110px]">Planned</TableHead>
-              <TableHead className="min-w-[110px]">Actual</TableHead>
-              <TableHead className="min-w-[90px]">Delay</TableHead>
-              <TableHead className="min-w-[100px]">Status</TableHead>
-              <TableHead className="min-w-[150px]">Remarks</TableHead>
-            </TableHeader>
-            <TableBody>
+        {/* Table */}
+        <div className="overflow-auto max-h-[calc(100vh-300px)]">
+          <table className="min-w-full divide-y divide-gray-200 text-left text-sm">
+            <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
+              <tr>
+                <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[100px] text-center">Action</th>
+                <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[120px]">Task No</th>
+                <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[130px]">Firm Name</th>
+                <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[120px]">Serial No</th>
+                <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[160px]">Machine Name</th>
+                <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[150px]">Machine Part Name</th>
+                <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[120px]">Department</th>
+                <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[110px]">Location</th>
+                <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[140px]">Vendor Name</th>
+                <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[160px]">Transportation Charges</th>
+                <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[140px]">Weighment Slip</th>
+                <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[160px]">Transporting Image</th>
+                <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[130px]">Payment Type</th>
+                <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[120px]">How Much</th>
+                <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[150px]">Transporter Name</th>
+                <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[160px]">Transportation Amount</th>
+                <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[120px]">Bill Image</th>
+                <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[120px]">Bill No.</th>
+                <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[130px]">Type of Bill</th>
+                <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[150px]">Total Bill Amount</th>
+                <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[150px]">To Be Paid Amount</th>
+                <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[120px]">Planned</th>
+                <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[120px]">Actual</th>
+                <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[90px]">Delay</th>
+                <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[110px]">Status</th>
+                <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[180px]">Remarks</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200 bg-white">
               {loadingTasks ? (
-                <TableRow>
-                  <TableCell colSpan={11} className="text-center py-12">
+                <tr>
+                  <td colSpan={26} className="text-center py-12">
                     <div className="flex flex-col items-center justify-center">
                       <div className="w-9 h-9 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                       <p className="mt-3 text-sm text-gray-500 font-medium">Loading tasks...</p>
                     </div>
-                  </TableCell>
-                </TableRow>
+                  </td>
+                </tr>
               ) : filteredTasks.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={11} className="text-center py-12 text-gray-500">
-                    No tasks found
-                  </TableCell>
-                </TableRow>
+                <tr>
+                  <td colSpan={26} className="text-center py-12 text-gray-500">No tasks found</td>
+                </tr>
               ) : (
-                filteredTasks.map((task) => {
+                filteredTasks.map((task, idx) => {
                   const step = task.steps[activeStep.key] || {};
                   const canUpdate = step.planned && !step.actual;
                   return (
-                    <TableRow key={task.taskNo}>
-                      <TableCell className="text-center">
+                    <tr key={task.taskNo || idx} className="hover:bg-blue-50/40 transition-colors duration-150">
+                      <td className="px-4 py-3 text-sm whitespace-nowrap text-center">
                         {canUpdate ? (
-                          <Button
-                            size="sm"
-                            onClick={() => handleUpdateClick(task)}
-                            className="flex items-center mx-auto"
-                          >
-                            <CheckSquare className="w-3.5 h-3.5 mr-1" />
+                          <button onClick={() => handleUpdateClick(task)} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-xs font-semibold rounded-lg transition-colors">
+                            <CheckSquare className="w-3.5 h-3.5" />
                             Update
-                          </Button>
+                          </button>
                         ) : step.actual ? (
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            onClick={() => handleUpdateClick(task)}
-                            className="mx-auto"
-                          >
+                          <button onClick={() => handleUpdateClick(task)} className="inline-flex items-center px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold rounded-lg transition-colors">
                             Edit
-                          </Button>
+                          </button>
                         ) : (
-                          <span className="text-xs text-gray-400">
-                            Not reached
-                          </span>
+                          <span className="text-xs text-gray-400">Not reached</span>
                         )}
-                      </TableCell>
-                      <TableCell className="font-medium text-blue-600">
-                        {task.taskNo}
-                      </TableCell>
-                      <TableCell>{task.firmName}</TableCell>
-                      <TableCell className="font-medium text-gray-900">{task.machineName}</TableCell>
-                      <TableCell>{task.machinePartName || "-"}</TableCell>
-                      <TableCell>{task.department}</TableCell>
-                      <TableCell>{step.planned || "-"}</TableCell>
-                      <TableCell>{step.actual || "-"}</TableCell>
-                      <TableCell>{step.delay || "-"}</TableCell>
-                      <TableCell>
-                        <span
-                          className={`px-2.5 py-1 text-xs font-medium rounded-full ${getStatusColor(
-                            step.status
-                          )}`}
-                        >
+                      </td>
+                      <td className="px-4 py-3 text-sm font-medium text-blue-600 whitespace-nowrap">{task.taskNo || "-"}</td>
+                      <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">{task.firmName || "-"}</td>
+                      <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{task.serialNo || "-"}</td>
+                      <td className="px-4 py-3 text-sm font-medium text-gray-900 whitespace-nowrap">{task.machineName || "-"}</td>
+                      <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{task.machinePartName || "-"}</td>
+                      <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">{task.department || "-"}</td>
+                      <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">{task.location || "-"}</td>
+                      <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">{task.vendorName || "-"}</td>
+                      <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">
+                        {task.transportationCharges ? `₹${Number(task.transportationCharges).toLocaleString()}` : "-"}
+                      </td>
+                      <td className="px-4 py-3 text-sm whitespace-nowrap">
+                        {task.weighmentSlip ? (
+                          <button type="button" onClick={() => window.open(task.weighmentSlip, "_blank", "noopener,noreferrer")} className="text-blue-600 underline text-xs hover:text-blue-800 font-medium">View Slip</button>
+                        ) : <span className="text-gray-400 text-xs">-</span>}
+                      </td>
+                      <td className="px-4 py-3 text-sm whitespace-nowrap">
+                        {task.transportingImage ? (
+                          <button type="button" onClick={() => window.open(task.transportingImage, "_blank", "noopener,noreferrer")} className="text-blue-600 underline text-xs hover:text-blue-800 font-medium">View Image</button>
+                        ) : <span className="text-gray-400 text-xs">-</span>}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">{task.paymentType || "-"}</td>
+                      <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">
+                        {task.howMuch ? `₹${Number(task.howMuch).toLocaleString()}` : "-"}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">{task.transporterName || "-"}</td>
+                      <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">
+                        {task.transportationAmount ? `₹${Number(task.transportationAmount).toLocaleString()}` : "-"}
+                      </td>
+                      <td className="px-4 py-3 text-sm whitespace-nowrap">
+                        {task.billImage ? (
+                          <button type="button" onClick={() => window.open(task.billImage, "_blank", "noopener,noreferrer")} className="text-blue-600 underline text-sm hover:text-blue-800 font-medium">View Bill</button>
+                        ) : <span className="text-gray-400 text-xs">No Bill</span>}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">{task.billNo || "-"}</td>
+                      <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">{task.typeOfBill || "-"}</td>
+                      <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">
+                        {task.totalBillAmount ? `₹${Number(task.totalBillAmount).toLocaleString()}` : "-"}
+                      </td>
+                      <td className="px-4 py-3 text-sm font-medium text-gray-900 whitespace-nowrap">
+                        {task.toBePaidAmount ? `₹${Number(task.toBePaidAmount).toLocaleString()}` : "-"}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">{step.planned || "-"}</td>
+                      <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">{step.actual || "-"}</td>
+                      <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">{step.delay || "-"}</td>
+                      <td className="px-4 py-3 text-sm whitespace-nowrap">
+                        <span className={`px-2.5 py-1 text-xs font-medium rounded-full ${getStatusColor(step.status)}`}>
                           {step.status || "Pending"}
                         </span>
-                      </TableCell>
-                      <TableCell>{step.remarks || "-"}</TableCell>
-                    </TableRow>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{step.remarks || "-"}</td>
+                    </tr>
                   );
                 })
               )}
-            </TableBody>
-          </Table>
+            </tbody>
+          </table>
         </div>
       </div>
 
@@ -409,3 +487,4 @@ const Accounts = () => {
 };
 
 export default Accounts;
+

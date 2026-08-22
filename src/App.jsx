@@ -8,6 +8,7 @@ import CheckMachine from "./components/CheckMachine/CheckMachine";
 import StoreIn from "./components/StoreIn/StoreIn";
 import RepairAdvance from "./components/RepairAdvance/RepairAdvance";
 import MakePayment from "./components/MakePayment/MakePayment";
+import FullKitting from "./components/FullKitting/FullKitting";
 import Login from "./components/Login/Login";
 import Users from "./components/Users/Users";
 import Accounts from "./components/Accounts/Accounts";
@@ -117,6 +118,8 @@ function AppContent() {
         return <StoreIn />;
       case "make-payment":
         return <MakePayment />;
+      case "full-kitting":
+        return <FullKitting />;
       case "users":
         return <Users />;
       case "accounts":

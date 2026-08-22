@@ -10,7 +10,8 @@ import {
   LogOut,
   User,
   Users,
-  Calculator
+  Calculator,
+  BoxSelect
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -25,6 +26,7 @@ const Sidebar = ({ activeTab, setActiveTab }) => {
     { id: 'store-in', label: 'Store In', icon: Package },
     // { id: 'repair-advance', label: 'Repair Advance', icon: CreditCard },
     { id: 'make-payment', label: 'Make Payment', icon: DollarSign },
+    { id: 'full-kitting', label: 'Full Kitting', icon: BoxSelect },
     { id: 'accounts', label: 'Accounts', icon: Calculator },
   ];
 

@@ -21,6 +21,87 @@ function doGet(e) {
       return setCorsHeaders(response);
     }
 
+    // Handle Accounts sheet data (row 6 is header row)
+    if (e.parameter.action === 'getAccountsData') {
+      try {
+        var sheetId = e.parameter.sheetId;
+        var ss = SpreadsheetApp.openById(sheetId);
+        var sheet = ss.getSheetByName('Accounts');
+        if (!sheet) {
+          return ContentService.createTextOutput(JSON.stringify({ success: false, error: 'Accounts sheet not found' }))
+            .setMimeType(ContentService.MimeType.JSON);
+        }
+
+        var allData = sheet.getDataRange().getValues();
+        // Row 6 (index 5) = headers, rows 7+ = data
+        var headers = allData[5];
+        var dataRows = allData.slice(6);
+
+        var result = dataRows
+          .filter(function(row) {
+            // Skip completely empty rows
+            return row.some(function(cell) { return cell !== '' && cell !== null && cell !== undefined; });
+          })
+          .map(function(row) {
+            var obj = {};
+            headers.forEach(function(header, idx) {
+              if (header) {
+                var val = row[idx];
+                if (val instanceof Date) {
+                  obj[header] = Utilities.formatDate(val, Session.getScriptTimeZone(), 'dd/MM/yyyy');
+                } else {
+                  obj[header] = val !== null && val !== undefined ? val.toString() : '';
+                }
+              }
+            });
+            return obj;
+          });
+
+        return ContentService.createTextOutput(JSON.stringify({ success: true, data: result }))
+          .setMimeType(ContentService.MimeType.JSON);
+      } catch (err) {
+        return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.toString() }))
+          .setMimeType(ContentService.MimeType.JSON);
+      }
+    }
+
+    // Handle Repair Tasks data
+    if (e.parameter.action === 'getRepairTasks') {
+      try {
+        var sheetId = e.parameter.sheetId;
+        var ss = sheetId ? SpreadsheetApp.openById(sheetId) : SpreadsheetApp.getActiveSpreadsheet();
+        var sheet = ss.getSheetByName('Repair System');
+        if (!sheet) {
+          return ContentService.createTextOutput(JSON.stringify({ success: false, error: 'Repair System sheet not found' }))
+            .setMimeType(ContentService.MimeType.JSON);
+        }
+        var allData = sheet.getDataRange().getValues();
+        var headers = allData[5];
+        var dataRows = allData.slice(6);
+        var result = dataRows
+          .filter(function(row) { return row.some(function(cell) { return cell !== '' && cell !== null; }); })
+          .map(function(row) {
+            var obj = {};
+            headers.forEach(function(header, idx) {
+              if (header) {
+                var val = row[idx];
+                if (val instanceof Date) {
+                  obj[header] = Utilities.formatDate(val, Session.getScriptTimeZone(), 'dd/MM/yyyy HH:mm:ss');
+                } else {
+                  obj[header] = val !== null && val !== undefined ? val.toString() : '';
+                }
+              }
+            });
+            return obj;
+          });
+        return ContentService.createTextOutput(JSON.stringify({ success: true, data: result }))
+          .setMimeType(ContentService.MimeType.JSON);
+      } catch (err) {
+        return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.toString() }))
+          .setMimeType(ContentService.MimeType.JSON);
+      }
+    }
+
     // Existing sheet data retrieval logic
     var sheetName = e.parameter.sheet;
     var sheetId = e.parameter.sheetId;

@@ -62,11 +62,23 @@ const MakePayment = () => {
     return ["All", ...firms].filter(Boolean);
   }, [pendingRepairPayments, historyWithFirm]);
 
+  const uniquePaymentTypes = useMemo(() => {
+    const types = new Set([
+      "Cash",
+      "Online",
+      "Cheque",
+      "Advance",
+      ...pendingRepairPayments.map(t => t.paymentType).filter(Boolean),
+      ...historyWithFirm.map(t => t.paymentType).filter(Boolean)
+    ]);
+    return ["All", ...types].filter(Boolean);
+  }, [pendingRepairPayments, historyWithFirm]);
+
   const filterPending = (list) => {
     return list
       .filter((task) => selectedFirm === "All" || task.firmName === selectedFirm)
-      .filter((task) => selectedPaymentType === "All" || (task.paymentType || "").toLowerCase() === selectedPaymentType.toLowerCase())
-      .filter((task) => selectedPriority === "All" || (task.priority || "").toLowerCase() === selectedPriority.toLowerCase())
+      .filter((task) => selectedPaymentType === "All" || (task.paymentType || "").toString().trim().toLowerCase() === selectedPaymentType.toString().trim().toLowerCase())
+      .filter((task) => selectedPriority === "All" || (task.priority || "").toString().trim().toLowerCase() === selectedPriority.toString().trim().toLowerCase())
       .filter((task) => {
         if (!searchTerm) return true;
         const term = searchTerm.toLowerCase();
@@ -84,8 +96,8 @@ const MakePayment = () => {
   const filterHistory = (list) => {
     return list
       .filter((task) => selectedFirm === "All" || task.firmName === selectedFirm)
-      .filter((task) => selectedPaymentType === "All" || (task.paymentType || "").toLowerCase() === selectedPaymentType.toLowerCase())
-      .filter((task) => selectedPriority === "All" || (task.priority || "").toLowerCase() === selectedPriority.toLowerCase())
+      .filter((task) => selectedPaymentType === "All" || (task.paymentType || "").toString().trim().toLowerCase() === selectedPaymentType.toString().trim().toLowerCase())
+      .filter((task) => selectedPriority === "All" || (task.priority || "").toString().trim().toLowerCase() === selectedPriority.toString().trim().toLowerCase())
       .filter((task) => {
         if (!searchTerm) return true;
         const term = searchTerm.toLowerCase();
@@ -102,6 +114,16 @@ const MakePayment = () => {
 
   const displayedPending = filterPending(pendingRepairPayments);
   const displayedHistory = filterHistory(historyWithFirm);
+
+  const totalBillAmountSum = useMemo(() => {
+    const currentList = activeTab === "pending" ? displayedPending : displayedHistory;
+    return currentList.reduce((sum, task) => {
+      const rawVal = (task.totalBillAmount || "").toString().replace(/[^0-9.-]+/g, "");
+      const amount = parseFloat(rawVal) || 0;
+      return sum + amount;
+    }, 0);
+  }, [activeTab, displayedPending, displayedHistory]);
+
   const [formData, setFormData] = useState({
     totalBillAmount: "",
     paymentType: "",
@@ -453,25 +475,55 @@ const MakePayment = () => {
         </div>
 
         <div className="p-6 border-b border-gray-200">
-          <div className="flex items-center space-x-4">
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-              <input
-                type="text"
-                placeholder="Search tasks..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+            <div className="flex flex-wrap items-center gap-3 flex-1">
+              <div className="relative flex-1 min-w-[220px] max-w-md">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                <input
+                  type="text"
+                  placeholder="Search tasks..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                />
+              </div>
+
+              {/* Direct Payment Type Filter */}
+              <div className="w-44">
+                <select
+                  value={selectedPaymentType}
+                  onChange={(e) => setSelectedPaymentType(e.target.value)}
+                  className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm font-medium text-gray-700"
+                >
+                  {uniquePaymentTypes.map((type) => (
+                    <option key={type} value={type}>
+                      {type === "All" ? "All Payment Types" : type}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <Button 
+                variant={showFilters ? "primary" : "secondary"} 
+                size="sm"
+                onClick={() => setShowFilters(!showFilters)}
+              >
+                <Filter className="w-4 h-4 mr-2" />
+                More Filters
+              </Button>
             </div>
-            <Button 
-              variant={showFilters ? "primary" : "secondary"} 
-              size="sm"
-              onClick={() => setShowFilters(!showFilters)}
-            >
-              <Filter className="w-4 h-4 mr-2" />
-              Filter
-            </Button>
+
+            {/* Total Bill Amount display on the top right */}
+            <div className="flex items-center space-x-3 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200/80 rounded-xl px-5 py-2.5 shadow-sm self-start lg:self-auto">
+              <div className="flex flex-col">
+                <span className="text-[11px] font-semibold text-blue-600 uppercase tracking-wider">
+                  Total Bill Amount
+                </span>
+                <span className="text-lg font-bold text-gray-900 leading-tight">
+                  ₹{totalBillAmountSum.toLocaleString("en-IN")}
+                </span>
+              </div>
+            </div>
           </div>
 
           {showFilters && (
@@ -496,11 +548,11 @@ const MakePayment = () => {
                   onChange={(e) => setSelectedPaymentType(e.target.value)}
                   className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm"
                 >
-                  <option value="All">All Types</option>
-                  <option value="Cash">Cash</option>
-                  <option value="Online">Online</option>
-                  <option value="Cheque">Cheque</option>
-                  <option value="Advance">Advance</option>
+                  {uniquePaymentTypes.map((type) => (
+                    <option key={type} value={type}>
+                      {type === "All" ? "All Types" : type}
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -608,92 +660,106 @@ const MakePayment = () => {
           </div>
         )} */}
 
-
-
         {activeTab === "pending" && (
           <div>
-            <Table containerClassName="max-h-[calc(100vh-260px)] overflow-y-auto">
-              <TableHeader className="sticky top-0 z-10 bg-gray-50">
-                <TableHead className="min-w-[100px] text-center">Action</TableHead>
-                <TableHead className="min-w-[120px]">Task Number</TableHead>
-                <TableHead className="min-w-[150px]">Machine Name</TableHead>
-                <TableHead className="min-w-[120px]">Serial No</TableHead>
-                <TableHead className="min-w-[110px]">Planned Date</TableHead>
-                <TableHead className="min-w-[130px]">Indentor Name</TableHead>
-                <TableHead className="min-w-[140px]">Vendor Name</TableHead>
-                <TableHead className="min-w-[100px]">Lead Time</TableHead>
-                <TableHead className="min-w-[120px]">Payment Type</TableHead>
-                <TableHead className="min-w-[140px]">Transporter Amount</TableHead>
-                <TableHead className="min-w-[120px]">Bill Image</TableHead>
-                <TableHead className="min-w-[120px]">Bill No</TableHead>
-                <TableHead className="min-w-[120px]">Total Bill Amount</TableHead>
-                <TableHead className="min-w-[120px]">To Be Paid</TableHead>
-              </TableHeader>
-              <TableBody>
-                {loadingTasks && pendingRepairPayments.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={14} className="text-center py-12">
-                      <div className="flex flex-col items-center justify-center">
-                        <div className="w-9 h-9 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                        <p className="mt-3 text-sm text-gray-500 font-medium">Loading tasks...</p>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ) : displayedPending.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={14} className="text-center py-12 text-gray-500">
-                      No pending payments found
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  displayedPending.map((task) => (
-                    <TableRow key={task.taskNo || Math.random()}>
-                      <TableCell className="text-center">
-                        <Button
-                          size="sm"
-                          onClick={() => handleMaterialClick(task)}
-                          className="flex items-center mx-auto"
-                        >
-                          <Package className="w-3.5 h-3.5 mr-1" />
-                          Material
-                        </Button>
-                      </TableCell>
-                      <TableCell className="font-medium text-blue-600">
-                        {task.taskNo}
-                      </TableCell>
-                      <TableCell className="font-medium text-gray-900">{task.machineName}</TableCell>
-                      <TableCell>{task.serialNo}</TableCell>
-                      <TableCell>{task.planned2 || "-"}</TableCell>
-                      <TableCell>{task.doerName}</TableCell>
-                      <TableCell>{task.vendorName || "-"}</TableCell>
-                      <TableCell>{task.leadTimeToDeliverDays ? `${task.leadTimeToDeliverDays} Days` : "-"}</TableCell>
-                      <TableCell>{task.paymentType || "-"}</TableCell>
-                      <TableCell>{task.howMuch ? `₹${Number(task.howMuch).toLocaleString()}` : "-"}</TableCell>
-                      <TableCell>
-                        {task.billImage ? (
-                          <button
-                            type="button"
-                            className="text-blue-600 underline text-sm hover:text-blue-800 font-medium"
-                            onClick={() => window.open(task.billImage, "_blank", "noopener,noreferrer")}
-                          >
-                            View Bill
-                          </button>
-                        ) : (
-                          <span className="text-gray-400 text-xs">No Bill</span>
-                        )}
-                      </TableCell>
-                      <TableCell>{task.billNo || "-"}</TableCell>
-                      <TableCell>
-                        {task.totalBillAmount ? `₹${Number(task.totalBillAmount).toLocaleString()}` : "-"}
-                      </TableCell>
-                      <TableCell className="font-medium text-gray-900">
-                        {task.toBePaidAmount ? `₹${Number(task.toBePaidAmount).toLocaleString()}` : "-"}
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+            <div className="overflow-auto max-h-[calc(100vh-260px)]">
+              <table className="min-w-full divide-y divide-gray-200 text-left text-sm">
+                <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
+                  <tr>
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[100px] text-center">Action</th>
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[120px]">Task No</th>
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[130px]">Firm Name</th>
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[120px]">Serial No</th>
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[160px]">Machine Name</th>
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[150px]">Machine Part Name</th>
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[120px]">Department</th>
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[110px]">Location</th>
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[140px]">Vendor Name</th>
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[160px]">Transportation Charges</th>
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[140px]">Weighment Slip</th>
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[160px]">Transporting Image</th>
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[130px]">Payment Type</th>
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[120px]">How Much</th>
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[150px]">Transporter Name</th>
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[160px]">Transportation Amount</th>
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[120px]">Bill Image</th>
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[120px]">Bill No.</th>
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[130px]">Type of Bill</th>
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[150px]">Total Bill Amount</th>
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[150px]">To Be Paid Amount</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 bg-white">
+                  {loadingTasks && pendingRepairPayments.length === 0 ? (
+                    <tr>
+                      <td colSpan={21} className="text-center py-12">
+                        <div className="flex flex-col items-center justify-center">
+                          <div className="w-9 h-9 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                          <p className="mt-3 text-sm text-gray-500 font-medium">Loading tasks...</p>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : displayedPending.length === 0 ? (
+                    <tr>
+                      <td colSpan={21} className="text-center py-12 text-gray-500">No pending payments found</td>
+                    </tr>
+                  ) : (
+                    displayedPending.map((task) => (
+                      <tr key={task.taskNo || Math.random()} className="hover:bg-blue-50/40 transition-colors duration-150">
+                        <td className="px-4 py-3 text-sm whitespace-nowrap text-center">
+                          <Button size="sm" onClick={() => handleMaterialClick(task)} className="flex items-center mx-auto">
+                            <Package className="w-3.5 h-3.5 mr-1" />
+                            Material
+                          </Button>
+                        </td>
+                        <td className="px-4 py-3 text-sm font-medium text-blue-600 whitespace-nowrap">{task.taskNo}</td>
+                        <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">{task.firmName || "-"}</td>
+                        <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{task.serialNo || "-"}</td>
+                        <td className="px-4 py-3 text-sm font-medium text-gray-900 whitespace-nowrap">{task.machineName}</td>
+                        <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">{task.machinePartName || "-"}</td>
+                        <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">{task.department || "-"}</td>
+                        <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">{task.location || "-"}</td>
+                        <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">{task.vendorName || "-"}</td>
+                        <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">
+                          {task.transportationCharges ? `₹${Number(task.transportationCharges).toLocaleString()}` : "-"}
+                        </td>
+                        <td className="px-4 py-3 text-sm whitespace-nowrap">
+                          {task.weighmentSlip ? (
+                            <button type="button" onClick={() => window.open(task.weighmentSlip, "_blank", "noopener,noreferrer")} className="text-blue-600 underline text-xs hover:text-blue-800 font-medium">View Slip</button>
+                          ) : <span className="text-gray-400 text-xs">-</span>}
+                        </td>
+                        <td className="px-4 py-3 text-sm whitespace-nowrap">
+                          {task.transportingImage ? (
+                            <button type="button" onClick={() => window.open(task.transportingImage, "_blank", "noopener,noreferrer")} className="text-blue-600 underline text-xs hover:text-blue-800 font-medium">View Image</button>
+                          ) : <span className="text-gray-400 text-xs">-</span>}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">{task.paymentType || "-"}</td>
+                        <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">
+                          {task.howMuch ? `₹${Number(task.howMuch).toLocaleString()}` : "-"}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">{task.transporterName || "-"}</td>
+                        <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">
+                          {task.transportationAmount ? `₹${Number(task.transportationAmount).toLocaleString()}` : task.howMuch ? `₹${Number(task.howMuch).toLocaleString()}` : "-"}
+                        </td>
+                        <td className="px-4 py-3 text-sm whitespace-nowrap">
+                          {task.billImage ? (
+                            <button type="button" onClick={() => window.open(task.billImage, "_blank", "noopener,noreferrer")} className="text-blue-600 underline text-sm hover:text-blue-800 font-medium">View Bill</button>
+                          ) : <span className="text-gray-400 text-xs">No Bill</span>}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">{task.billNo || "-"}</td>
+                        <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">{task.typeOfBill || "-"}</td>
+                        <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">
+                          {task.totalBillAmount ? `₹${Number(task.totalBillAmount).toLocaleString()}` : "-"}
+                        </td>
+                        <td className="px-4 py-3 text-sm font-medium text-gray-900 whitespace-nowrap">
+                          {task.toBePaidAmount ? `₹${Number(task.toBePaidAmount).toLocaleString()}` : "-"}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 
@@ -710,6 +776,7 @@ const MakePayment = () => {
                 <TableHead className="min-w-[130px]">Total Bill Amount</TableHead>
                 <TableHead className="min-w-[120px]">Payment Type</TableHead>
                 <TableHead className="min-w-[130px]">To Be Paid Amount</TableHead>
+                <TableHead className="min-w-[120px]">Bill Image</TableHead>
                 <TableHead className="min-w-[120px]">Bill Match</TableHead>
               </TableHeader>
               <TableBody>
@@ -745,6 +812,19 @@ const MakePayment = () => {
                       <TableCell>{task.paymentType || "-"}</TableCell>
                       <TableCell className="font-medium text-gray-900">
                         {task.toBePaidAmount ? `₹${Number(task.toBePaidAmount).toLocaleString()}` : "-"}
+                      </TableCell>
+                      <TableCell>
+                        {task.billImage ? (
+                          <button
+                            type="button"
+                            className="text-blue-600 underline text-sm hover:text-blue-800 font-medium"
+                            onClick={() => window.open(task.billImage, "_blank", "noopener,noreferrer")}
+                          >
+                            View Bill
+                          </button>
+                        ) : (
+                          <span className="text-gray-400 text-xs">No Bill</span>
+                        )}
                       </TableCell>
                       <TableCell>
                         <span
