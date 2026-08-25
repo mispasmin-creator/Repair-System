@@ -200,12 +200,19 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
 
         const getColValues = (colIdx) => {
           if (colIdx === -1 || colIdx === undefined) return [];
-          return rows
-            .map((rowObj) => {
-              const cell = rowObj.c && rowObj.c[colIdx];
-              return (cell && cell.v !== null && cell.v !== undefined) ? cell.v.toString().trim() : "";
-            })
-            .filter(Boolean);
+          const seen = new Set();
+          const list = [];
+          rows.forEach((rowObj) => {
+            const cell = rowObj.c && rowObj.c[colIdx];
+            if (cell && cell.v !== null && cell.v !== undefined) {
+              const val = cell.v.toString().trim();
+              if (val && !seen.has(val.toLowerCase())) {
+                seen.add(val.toLowerCase());
+                list.push(val);
+              }
+            }
+          });
+          return list;
         };
 
         const indentorList = getColValues(indentorColIdx);
@@ -215,18 +222,19 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
         const uomList = getColValues(uomColIdx);
         const firmList = getColValues(firmColIdx);
 
-        setDoerName([...new Set(indentorList)]);
-        setGivenByData([...new Set(authList)]);
-        setMachineNameMasterData([...new Set(machineList)]);
-        setDepartmentData([...new Set(deptList)]);
-        setUomData([...new Set(uomList)]);
-        setFirmNameData([...new Set(firmList)]);
+        setDoerName(indentorList);
+        setGivenByData(authList);
+        setMachineNameMasterData(machineList);
+        setDepartmentData(deptList);
+        setUomData(uomList);
+        setFirmNameData(firmList);
 
         if (priorityColIdx !== -1) {
-          setPriorityData([...new Set(getColValues(priorityColIdx))]);
+          const priList = getColValues(priorityColIdx);
+          if (priList.length > 0) setPriorityData(priList);
         }
         if (taskStatusColIdx !== -1) {
-          setTaskStatusData([...new Set(getColValues(taskStatusColIdx))]);
+          setTaskStatusData(getColValues(taskStatusColIdx));
         }
       } else {
         console.error("Server error:", result.message || result.error);
@@ -239,6 +247,9 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
   };
 
   useEffect(() => {
+    if (taskList && taskList.length > 0) {
+      setSheetData(taskList);
+    }
     fetchSheetData();
     fetchMasterSheetData();
   }, []);
@@ -515,10 +526,28 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
                   return;
                 }
                 setSelectedMachine(selected);
-                const serials = sheetData
-                  .filter((item) => item["Machine Name"] === selected)
-                  .map((item) => item["Serial No"]);
+
+                const allSourceTasks = [...sheetData, ...(taskList || [])];
+                const matched = allSourceTasks
+                  .filter((item) => (item["Machine Name"] || item.machineName) === selected)
+                  .map((item) => item["Serial No"] || item.serialNo)
+                  .filter(Boolean);
+
+                let serials = [...new Set(matched)];
+                if (serials.length === 0 && selected) {
+                  const parts = selected.split("/");
+                  if (parts.length > 1) {
+                    const lastPart = parts[parts.length - 1].trim();
+                    if (lastPart) {
+                      serials.push(lastPart);
+                    }
+                  }
+                  serials.push(selected);
+                }
                 setFilteredSerials(serials);
+                if (serials.length === 1) {
+                  setSelectedSerialNo(serials[0]);
+                }
               }}
               className="w-full py-2 rounded-md border border-gray-300 shadow-sm px-4 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               required
@@ -528,16 +557,11 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
                 <option disabled>Wait Please...</option>
               ) : (
                 <>
-                  {[...new Set([
-                    ...machineNameMasterData,
-                    ...sheetData.map((item) => item["Machine Name"]).filter(Boolean)
-                  ])]
-                    .filter(Boolean)
-                    .map((machineName, index) => (
-                      <option key={index} value={machineName}>
-                        {machineName}
-                      </option>
-                    ))}
+                  {machineNameMasterData.map((machineName, index) => (
+                    <option key={index} value={machineName}>
+                      {machineName}
+                    </option>
+                  ))}
                 </>
               )}
               <option value="__add_new__">+ Add New</option>
@@ -617,16 +641,21 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
                     setSelectedSerialNo("");
                     return;
                   }
-                  setSelectedSerialNo(e.target.value);
+                  const val = e.target.value;
+                  setSelectedSerialNo(val);
 
-                  const department = sheetData
-                    .filter((item) => item["Serial No"] === e.target.value)
-                    .map((item) => item["Department"]);
-                  setFilteredDepartment(department);
-
-                  const location = sheetData
-                    .filter((item) => item["Serial No"] === e.target.value)
-                    .map((item) => item["Location"]);
+                  const allSourceTasks = [...sheetData, ...(taskList || [])];
+                  const found = allSourceTasks.find(
+                    (item) => (item["Serial No"] || item.serialNo) === val
+                  );
+                  if (found) {
+                    if (found["Department"] || found.department) {
+                      setSelectedDepartment(found["Department"] || found.department);
+                    }
+                    if (found["Location"] || found.location) {
+                      setLocation(found["Location"] || found.location);
+                    }
+                  }
                 }}
                 className="py-2 w-full rounded-md border border-gray-300 shadow-sm px-4 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 required
@@ -731,7 +760,7 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
           label="Priority"
           value={selectedPriority}
           onChange={setSelectedPriority}
-          options={priorityData}
+          options={priorityData.length > 0 ? priorityData : ["Critical", "High", "Medium", "Low"]}
           loading={loaderMasterSheetData}
           isAdding={isAddingPriority}
           setIsAdding={setIsAddingPriority}
