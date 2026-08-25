@@ -77,6 +77,9 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
   const [taskStatusData, setTaskStatusData] = useState([]);
   const [priorityData, setPriorityData] = useState([]);
   const [departmentData, setDepartmentData] = useState([]);
+  const [uomData, setUomData] = useState([]);
+  const [firmNameData, setFirmNameData] = useState([]);
+  const [machineNameMasterData, setMachineNameMasterData] = useState([]);
 
   const [selectedMachine, setSelectedMachine] = useState("");
   const [filteredSerials, setFilteredSerials] = useState([]);
@@ -121,6 +124,8 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
   const [isAddingGivenBy, setIsAddingGivenBy] = useState(false);
   const [isAddingDepartment, setIsAddingDepartment] = useState(false);
   const [isAddingPriority, setIsAddingPriority] = useState(false);
+  const [isAddingUom, setIsAddingUom] = useState(false);
+  const [isAddingFirmName, setIsAddingFirmName] = useState(false);
 
   const [loaderSheetData, setLoaderSheetData] = useState(false);
   const [loaderSubmit, setLoaderSubmit] = useState(false);
@@ -141,33 +146,21 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
 
   const fetchSheetData = async () => {
     if (!DATA_FETCH_SCRIPT_URL || !DATA_SHEET_ID) return;
-    const SHEET_NAME = "FormResponses";
     try {
       setLoaderSheetData(true);
+      // Use getRepairTasks action — it already handles Repair System sheet (row 6 headers)
       const res = await fetch(
-        `${DATA_FETCH_SCRIPT_URL}?sheetId=${DATA_SHEET_ID}&sheet=${SHEET_NAME}`
+        `${DATA_FETCH_SCRIPT_URL}?action=getRepairTasks&sheetId=${DATA_SHEET_ID}`
       );
       const result = await res.json();
 
-      if (result.success && result.table) {
-        const headers = result.table.cols.map((col) => col.label);
-        const rows = result.table.rows;
-
-        const formattedRows = rows.map((rowObj) => {
-          const row = rowObj.c;
-          const rowData = {};
-          row.forEach((cell, i) => {
-            rowData[headers[i]] = cell.v;
-          });
-          return rowData;
-        });
-
-        setSheetData(formattedRows);
+      if (result.success && result.data) {
+        setSheetData(result.data);
       } else {
-        console.error("Server error:", result.message || result.error);
+        console.warn("fetchSheetData (getRepairTasks):", result.error || result.message);
       }
     } catch (err) {
-      console.error("Fetch error:", err);
+      console.warn("fetchSheetData error:", err);
     } finally {
       setLoaderSheetData(false);
     }
@@ -184,28 +177,57 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
       const result = await res.json();
 
       if (result.success && result.table) {
-        const headers = result.table.cols.map((col) => col.label);
-        const rows = result.table.rows;
+        const headers = (result.table.cols || []).map((col) => (col.label || "").toString().trim());
+        const rows = result.table.rows || [];
 
-        const formattedRows = rows.map((rowObj) => {
-          const row = rowObj.c;
-          const rowData = {};
-          row.forEach((cell, i) => {
-            rowData[headers[i]] = cell.v;
+        // Helper to find column index by potential names or fallback index
+        const findColIndex = (possibleNames, fallbackIndex) => {
+          const idx = headers.findIndex((h) => {
+            const clean = h.toLowerCase().replace(/[^a-z0-9]/g, "");
+            return possibleNames.some((p) => clean.includes(p.toLowerCase().replace(/[^a-z0-9]/g, "")));
           });
-          return rowData;
-        });
+          return idx !== -1 ? idx : fallbackIndex;
+        };
 
-        const DoerNameData = formattedRows.map((item) => item["Doer Name"]);
-        setDoerName(DoerNameData);
-        const giveBy = formattedRows.map((item) => item["Given By"]);
-        setGivenByData(giveBy);
-        const taskStatus = formattedRows.map((item) => item["Task Status"]);
-        setTaskStatusData(taskStatus);
-        const priority = formattedRows.map((item) => item["Priority"]);
-        setPriorityData(priority);
-        const department = formattedRows.map((item) => item["Department"]);
-        setDepartmentData(department);
+        const indentorColIdx = findColIndex(["Indentor Name", "Indentor", "Doer Name", "Doer"], 0);
+        const authColIdx = findColIndex(["Authorized Name", "Authorized", "Given By"], 1);
+        const machineColIdx = findColIndex(["Machine Name", "Machine"], 2);
+        const deptColIdx = findColIndex(["Department", "Dept"], 3);
+        const uomColIdx = findColIndex(["UOM", "Unit"], 4);
+        const firmColIdx = findColIndex(["Firm Name", "Firm"], 5);
+        const priorityColIdx = findColIndex(["Priority"], -1);
+        const taskStatusColIdx = findColIndex(["Task Status", "Status"], -1);
+
+        const getColValues = (colIdx) => {
+          if (colIdx === -1 || colIdx === undefined) return [];
+          return rows
+            .map((rowObj) => {
+              const cell = rowObj.c && rowObj.c[colIdx];
+              return (cell && cell.v !== null && cell.v !== undefined) ? cell.v.toString().trim() : "";
+            })
+            .filter(Boolean);
+        };
+
+        const indentorList = getColValues(indentorColIdx);
+        const authList = getColValues(authColIdx);
+        const machineList = getColValues(machineColIdx);
+        const deptList = getColValues(deptColIdx);
+        const uomList = getColValues(uomColIdx);
+        const firmList = getColValues(firmColIdx);
+
+        setDoerName([...new Set(indentorList)]);
+        setGivenByData([...new Set(authList)]);
+        setMachineNameMasterData([...new Set(machineList)]);
+        setDepartmentData([...new Set(deptList)]);
+        setUomData([...new Set(uomList)]);
+        setFirmNameData([...new Set(firmList)]);
+
+        if (priorityColIdx !== -1) {
+          setPriorityData([...new Set(getColValues(priorityColIdx))]);
+        }
+        if (taskStatusColIdx !== -1) {
+          setTaskStatusData([...new Set(getColValues(taskStatusColIdx))]);
+        }
       } else {
         console.error("Server error:", result.message || result.error);
       }
@@ -344,6 +366,8 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
     setIsAddingGivenBy(false);
     setIsAddingDepartment(false);
     setIsAddingPriority(false);
+    setIsAddingUom(false);
+    setIsAddingFirmName(false);
   };
 
   const handleSubmitForm = async (e) => {
@@ -500,11 +524,14 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
               required
             >
               <option value="">Select Machine</option>
-              {loaderSheetData ? (
+              {loaderMasterSheetData ? (
                 <option disabled>Wait Please...</option>
               ) : (
                 <>
-                  {[...new Set(sheetData.map((item) => item["Machine Name"]))]
+                  {[...new Set([
+                    ...machineNameMasterData,
+                    ...sheetData.map((item) => item["Machine Name"]).filter(Boolean)
+                  ])]
                     .filter(Boolean)
                     .map((machineName, index) => (
                       <option key={index} value={machineName}>
@@ -519,31 +546,32 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
         </div>
 
         {/* Firm Name */}
-        <div>
-          <label
-            htmlFor="firmName"
-            className="block text-sm font-medium text-gray-700 mb-1"
-          >
-            Firm Name *
-          </label>
-          <select
+        {user?.firmName && user.firmName.toLowerCase() !== "all" ? (
+          <div>
+            <label htmlFor="firmName" className="block text-sm font-medium text-gray-700 mb-1">
+              Firm Name *
+            </label>
+            <input
+              type="text"
+              id="firmName"
+              value={selectedFirmName}
+              readOnly
+              className="py-2 w-full rounded-md border border-gray-300 shadow-sm px-4 bg-gray-100 cursor-not-allowed focus:outline-none"
+            />
+          </div>
+        ) : (
+          <AddNewSelect
             id="firmName"
-            value={selectedFirmName}
-            onChange={(e) => setSelectedFirmName(e.target.value)}
-            className={`py-2 w-full rounded-md border border-gray-300 shadow-sm px-4 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-              user?.firmName && user.firmName.toLowerCase() !== "all" ? "bg-gray-100 cursor-not-allowed" : ""
-            }`}
-            disabled={user?.firmName && user.firmName.toLowerCase() !== "all"}
+            label="Firm Name *"
             required
-          >
-            <option value="">Select Firm Name</option>
-            {["Pmmpl", "Purab", "Rkl", "Refrasynth", "Refratech"].map((firm, index) => (
-              <option key={index} value={firm}>
-                {firm}
-              </option>
-            ))}
-          </select>
-        </div>
+            value={selectedFirmName}
+            onChange={setSelectedFirmName}
+            options={firmNameData}
+            loading={loaderMasterSheetData}
+            isAdding={isAddingFirmName}
+            setIsAdding={setIsAddingFirmName}
+          />
+        )}
 
         {/* Serial No Related to Machine Name */}
         {selectedMachine && !loaderSheetData && (
@@ -668,20 +696,16 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
         </div>
 
         {/* UOM */}
-        <div>
-          <label htmlFor="uom" className="block text-sm font-medium text-gray-700 mb-2">
-            UOM
-          </label>
-          <input
-            type="text"
-            id="uom"
-            name="uom"
-            value={uom}
-            onChange={(e) => setUom(e.target.value)}
-            placeholder="Enter UOM (e.g. Nos, Pcs, Set, Kg)"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
-        </div>
+        <AddNewSelect
+          id="uom"
+          label="UOM"
+          value={uom}
+          onChange={setUom}
+          options={uomData}
+          loading={loaderMasterSheetData}
+          isAdding={isAddingUom}
+          setIsAdding={setIsAddingUom}
+        />
 
         {/* Quantity */}
         <div>
