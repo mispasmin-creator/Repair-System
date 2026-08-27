@@ -1,73 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { Plus, X, Upload, Loader2Icon } from "lucide-react";
 import Button from "../ui/Button";
+import SearchableSelect from "../ui/SearchableSelect";
 import toast from "react-hot-toast";
 import { useAuth } from "../../context/AuthContext";
-
-// Dropdown that lets the user pick an existing value or type a brand new one
-// (the typed value is only used for this submission, it is not saved back to the Master sheet)
-const AddNewSelect = ({ id, label, required, value, onChange, options, loading, isAdding, setIsAdding }) => {
-  const plainLabel = label.replace(/\*/g, "").trim();
-
-  return (
-    <div>
-      <label htmlFor={id} className="block text-sm font-medium text-gray-700 mb-1">
-        {label}
-      </label>
-      {isAdding ? (
-        <div className="flex gap-2">
-          <input
-            type="text"
-            id={id}
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            placeholder={`Enter new ${plainLabel}`}
-            required={required}
-            autoFocus
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
-          <button
-            type="button"
-            onClick={() => {
-              setIsAdding(false);
-              onChange("");
-            }}
-            className="text-sm text-blue-600 hover:text-blue-700 whitespace-nowrap"
-          >
-            Choose from list
-          </button>
-        </div>
-      ) : (
-        <select
-          id={id}
-          value={value}
-          onChange={(e) => {
-            if (e.target.value === "__add_new__") {
-              setIsAdding(true);
-              onChange("");
-            } else {
-              onChange(e.target.value);
-            }
-          }}
-          className="py-2 w-full rounded-md border border-gray-300 shadow-sm px-4 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          required={required}
-        >
-          <option value="">Select {plainLabel}</option>
-          {loading ? (
-            <option disabled>Wait Please...</option>
-          ) : (
-            [...new Set(options)].filter(Boolean).map((item, index) => (
-              <option key={index} value={item}>
-                {item}
-              </option>
-            ))
-          )}
-          <option value="__add_new__">+ Add New</option>
-        </select>
-      )}
-    </div>
-  );
-};
 
 const IndentForm = ({ onSubmit, onCancel, taskList }) => {
   const { user } = useAuth();
@@ -215,12 +151,15 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
           return list;
         };
 
-        const indentorList = getColValues(indentorColIdx);
-        const authList = getColValues(authColIdx);
-        const machineList = getColValues(machineColIdx);
-        const deptList = getColValues(deptColIdx);
-        const uomList = getColValues(uomColIdx);
-        const firmList = getColValues(firmColIdx);
+        const sortAlpha = (list) =>
+          [...list].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base", numeric: true }));
+
+        const indentorList = sortAlpha(getColValues(indentorColIdx));
+        const authList = sortAlpha(getColValues(authColIdx));
+        const machineList = sortAlpha(getColValues(machineColIdx));
+        const deptList = sortAlpha(getColValues(deptColIdx));
+        const uomList = sortAlpha(getColValues(uomColIdx));
+        const firmList = sortAlpha(getColValues(firmColIdx));
 
         setDoerName(indentorList);
         setGivenByData(authList);
@@ -231,10 +170,10 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
 
         if (priorityColIdx !== -1) {
           const priList = getColValues(priorityColIdx);
-          if (priList.length > 0) setPriorityData(priList);
+          if (priList.length > 0) setPriorityData(sortAlpha(priList));
         }
         if (taskStatusColIdx !== -1) {
-          setTaskStatusData(getColValues(taskStatusColIdx));
+          setTaskStatusData(sortAlpha(getColValues(taskStatusColIdx)));
         }
       } else {
         console.error("Server error:", result.message || result.error);
@@ -381,6 +320,92 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
     setIsAddingFirmName(false);
   };
 
+  const handleMachineSelect = (selected) => {
+    setSelectedMachine(selected);
+
+    if (!selected) {
+      setFilteredSerials([]);
+      setSelectedSerialNo("");
+      return;
+    }
+
+    const allSourceTasks = [...sheetData, ...(taskList || [])];
+    const matched = allSourceTasks
+      .filter((item) => (item["Machine Name"] || item.machineName) === selected)
+      .map((item) => item["Serial No"] || item.serialNo)
+      .filter(Boolean);
+
+    let serials = [...new Set(matched)].sort((a, b) =>
+      a.localeCompare(b, undefined, { sensitivity: "base", numeric: true })
+    );
+
+    if (serials.length === 0 && selected) {
+      const parts = selected.split("/");
+      if (parts.length > 1) {
+        const lastPart = parts[parts.length - 1].trim();
+        if (lastPart) {
+          serials.push(lastPart);
+        }
+      }
+      serials.push(selected);
+      serials = [...new Set(serials)].sort((a, b) =>
+        a.localeCompare(b, undefined, { sensitivity: "base", numeric: true })
+      );
+    }
+
+    setFilteredSerials(serials);
+    if (serials.length === 1) {
+      setSelectedSerialNo(serials[0]);
+      handleSerialSelect(serials[0]);
+    } else {
+      setSelectedSerialNo("");
+    }
+  };
+
+  const handleAddNewMachine = () => {
+    setIsAddingMachine(true);
+    setSelectedMachine("");
+    setFilteredSerials([]);
+    setIsAddingSerial(false);
+    setSelectedSerialNo("");
+  };
+
+  const handleChooseMachineFromList = () => {
+    setIsAddingMachine(false);
+    setSelectedMachine("");
+    setFilteredSerials([]);
+    setIsAddingSerial(false);
+    setSelectedSerialNo("");
+  };
+
+  const handleSerialSelect = (val) => {
+    setSelectedSerialNo(val);
+    if (!val) return;
+
+    const allSourceTasks = [...sheetData, ...(taskList || [])];
+    const found = allSourceTasks.find(
+      (item) => (item["Serial No"] || item.serialNo) === val
+    );
+    if (found) {
+      if (found["Department"] || found.department) {
+        setSelectedDepartment(found["Department"] || found.department);
+      }
+      if (found["Location"] || found.location) {
+        setLocation(found["Location"] || found.location);
+      }
+    }
+  };
+
+  const handleAddNewSerial = () => {
+    setIsAddingSerial(true);
+    setSelectedSerialNo("");
+  };
+
+  const handleChooseSerialFromList = () => {
+    setIsAddingSerial(false);
+    setSelectedSerialNo("");
+  };
+
   const handleSubmitForm = async (e) => {
     e.preventDefault();
 
@@ -478,96 +503,20 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
     <form onSubmit={handleSubmitForm} className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Machine Name Dropdown */}
-        <div>
-          <label
-            htmlFor="machineName"
-            className="block text-sm font-medium text-gray-700 mb-1"
-          >
-            Machine Name *
-          </label>
-          {isAddingMachine ? (
-            <div className="flex gap-2">
-              <input
-                type="text"
-                id="machineName"
-                value={selectedMachine}
-                onChange={(e) => setSelectedMachine(e.target.value)}
-                placeholder="Enter new machine name"
-                required
-                autoFocus
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-              <button
-                type="button"
-                onClick={() => {
-                  setIsAddingMachine(false);
-                  setSelectedMachine("");
-                  setFilteredSerials([]);
-                  setIsAddingSerial(false);
-                  setSelectedSerialNo("");
-                }}
-                className="text-sm text-blue-600 hover:text-blue-700 whitespace-nowrap"
-              >
-                Choose from list
-              </button>
-            </div>
-          ) : (
-            <select
-              id="machineName"
-              value={selectedMachine}
-              onChange={(e) => {
-                const selected = e.target.value;
-                if (selected === "__add_new__") {
-                  setIsAddingMachine(true);
-                  setSelectedMachine("");
-                  setFilteredSerials([]);
-                  setIsAddingSerial(false);
-                  setSelectedSerialNo("");
-                  return;
-                }
-                setSelectedMachine(selected);
-
-                const allSourceTasks = [...sheetData, ...(taskList || [])];
-                const matched = allSourceTasks
-                  .filter((item) => (item["Machine Name"] || item.machineName) === selected)
-                  .map((item) => item["Serial No"] || item.serialNo)
-                  .filter(Boolean);
-
-                let serials = [...new Set(matched)];
-                if (serials.length === 0 && selected) {
-                  const parts = selected.split("/");
-                  if (parts.length > 1) {
-                    const lastPart = parts[parts.length - 1].trim();
-                    if (lastPart) {
-                      serials.push(lastPart);
-                    }
-                  }
-                  serials.push(selected);
-                }
-                setFilteredSerials(serials);
-                if (serials.length === 1) {
-                  setSelectedSerialNo(serials[0]);
-                }
-              }}
-              className="w-full py-2 rounded-md border border-gray-300 shadow-sm px-4 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              required
-            >
-              <option value="">Select Machine</option>
-              {loaderMasterSheetData ? (
-                <option disabled>Wait Please...</option>
-              ) : (
-                <>
-                  {machineNameMasterData.map((machineName, index) => (
-                    <option key={index} value={machineName}>
-                      {machineName}
-                    </option>
-                  ))}
-                </>
-              )}
-              <option value="__add_new__">+ Add New</option>
-            </select>
-          )}
-        </div>
+        <SearchableSelect
+          id="machineName"
+          label="Machine Name *"
+          required
+          value={selectedMachine}
+          onChange={setSelectedMachine}
+          onOptionSelect={handleMachineSelect}
+          options={machineNameMasterData}
+          loading={loaderMasterSheetData}
+          isAdding={isAddingMachine}
+          setIsAdding={setIsAddingMachine}
+          onAddNew={handleAddNewMachine}
+          onChooseFromList={handleChooseMachineFromList}
+        />
 
         {/* Firm Name */}
         {user?.firmName && user.firmName.toLowerCase() !== "all" ? (
@@ -580,11 +529,11 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
               id="firmName"
               value={selectedFirmName}
               readOnly
-              className="py-2 w-full rounded-md border border-gray-300 shadow-sm px-4 bg-gray-100 cursor-not-allowed focus:outline-none"
+              className="py-2 w-full rounded-md border border-gray-300 shadow-sm px-4 bg-gray-100 cursor-not-allowed focus:outline-none text-sm"
             />
           </div>
         ) : (
-          <AddNewSelect
+          <SearchableSelect
             id="firmName"
             label="Firm Name *"
             required
@@ -599,81 +548,24 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
 
         {/* Serial No Related to Machine Name */}
         {selectedMachine && !loaderSheetData && (
-          <div className="">
-            <label
-              htmlFor="serialNo"
-              className="block text-sm font-medium text-gray-700 mb-1"
-            >
-              Serial Number *
-            </label>
-            {isAddingMachine || isAddingSerial ? (
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  id="serialNo"
-                  value={selectedSerialNo}
-                  onChange={(e) => setSelectedSerialNo(e.target.value)}
-                  placeholder="Enter serial number"
-                  required
-                  autoFocus={!isAddingMachine}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-                {!isAddingMachine && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsAddingSerial(false);
-                      setSelectedSerialNo("");
-                    }}
-                    className="text-sm text-blue-600 hover:text-blue-700 whitespace-nowrap"
-                  >
-                    Choose from list
-                  </button>
-                )}
-              </div>
-            ) : (
-              <select
-                id="serialNo"
-                value={selectedSerialNo}
-                onChange={(e) => {
-                  if (e.target.value === "__add_new__") {
-                    setIsAddingSerial(true);
-                    setSelectedSerialNo("");
-                    return;
-                  }
-                  const val = e.target.value;
-                  setSelectedSerialNo(val);
-
-                  const allSourceTasks = [...sheetData, ...(taskList || [])];
-                  const found = allSourceTasks.find(
-                    (item) => (item["Serial No"] || item.serialNo) === val
-                  );
-                  if (found) {
-                    if (found["Department"] || found.department) {
-                      setSelectedDepartment(found["Department"] || found.department);
-                    }
-                    if (found["Location"] || found.location) {
-                      setLocation(found["Location"] || found.location);
-                    }
-                  }
-                }}
-                className="py-2 w-full rounded-md border border-gray-300 shadow-sm px-4 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                required
-              >
-                <option value="">Select Serial No</option>
-                {filteredSerials.map((serial, idx) => (
-                  <option key={idx} value={serial}>
-                    {serial}
-                  </option>
-                ))}
-                <option value="__add_new__">+ Add New</option>
-              </select>
-            )}
-          </div>
+          <SearchableSelect
+            id="serialNo"
+            label="Serial Number *"
+            required
+            value={selectedSerialNo}
+            onChange={setSelectedSerialNo}
+            onOptionSelect={handleSerialSelect}
+            options={filteredSerials}
+            isAdding={isAddingMachine || isAddingSerial}
+            setIsAdding={setIsAddingSerial}
+            disableChooseFromList={isAddingMachine}
+            onAddNew={handleAddNewSerial}
+            onChooseFromList={handleChooseSerialFromList}
+          />
         )}
 
         {/* Indentor Name */}
-        <AddNewSelect
+        <SearchableSelect
           id="doerName"
           label="Indentor Name *"
           required
@@ -686,7 +578,7 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
         />
 
         {/* Authorized Name */}
-        <AddNewSelect
+        <SearchableSelect
           id="givenBy"
           label="Authorized Name *"
           required
@@ -699,7 +591,7 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
         />
 
         {/* Department */}
-        <AddNewSelect
+        <SearchableSelect
           id="department"
           label="Department"
           value={selectedDepartment}
@@ -720,12 +612,12 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
             name="machinePartName"
             value={machinePartName}
             onChange={(e) => setMachinePartName(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-white"
           />
         </div>
 
         {/* UOM */}
-        <AddNewSelect
+        <SearchableSelect
           id="uom"
           label="UOM"
           value={uom}
@@ -750,17 +642,17 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
             placeholder="Enter Quantity"
             min="0"
             step="any"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-white"
           />
         </div>
 
         {/* Priority */}
-        <AddNewSelect
+        <SearchableSelect
           id="priority"
           label="Priority"
           value={selectedPriority}
           onChange={setSelectedPriority}
-          options={priorityData.length > 0 ? priorityData : ["Critical", "High", "Medium", "Low"]}
+          options={priorityData.length > 0 ? priorityData : ["Critical", "High", "Low", "Medium"]}
           loading={loaderMasterSheetData}
           isAdding={isAddingPriority}
           setIsAdding={setIsAddingPriority}
@@ -770,7 +662,7 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
         <div>
           <label
             htmlFor="startDate"
-            className="block text-sm font-medium text-gray-700"
+            className="block text-sm font-medium text-gray-700 mb-1"
           >
             Task Start Date
           </label>
@@ -779,7 +671,7 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
             id="startDate"
             value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+            className="w-full rounded-md border border-gray-300 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm p-2 bg-white"
           />
         </div>
 
@@ -787,7 +679,7 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
         <div>
           <label
             htmlFor="startTime"
-            className="block text-sm font-medium text-gray-700"
+            className="block text-sm font-medium text-gray-700 mb-1"
           >
             Task Start Time
           </label>
@@ -796,7 +688,7 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
             id="startTime"
             value={startTime}
             onChange={(e) => setStartTime(e.target.value)}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+            className="w-full rounded-md border border-gray-300 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm p-2 bg-white"
           />
         </div>
 
@@ -813,7 +705,7 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
             id="endTaskDate"
             value={endTaskDate}
             onChange={(e) => setEndTaskDate(e.target.value)}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+            className="w-full rounded-md border border-gray-300 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm p-2 bg-white"
           />
         </div>
 
@@ -821,7 +713,7 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
         <div>
           <label
             htmlFor="endTime"
-            className="block text-sm font-medium text-gray-700"
+            className="block text-sm font-medium text-gray-700 mb-1"
           >
             Task End Time
           </label>
@@ -830,7 +722,7 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
             id="endTime"
             value={endTime}
             onChange={(e) => setEndTime(e.target.value)}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+            className="w-full rounded-md border border-gray-300 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm p-2 bg-white"
           />
         </div>
       </div>
@@ -848,7 +740,7 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
           onChange={(e) => setPromblemInMachine(e.target.value)}
           value={description}
           rows={4}
-          className="w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          className="w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
           placeholder="Enter Machine Problem..."
         />
       </div>
@@ -867,7 +759,7 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
           value={location}
           onChange={(e) => setLocation(e.target.value)}
           placeholder="Enter location"
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-white"
         />
       </div>
 
@@ -876,7 +768,7 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
         <label className="block text-sm font-medium text-gray-700 mb-2">
           Image of the Machine
         </label>
-        <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md hover:border-blue-400 transition-colors duration-200">
+        <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md hover:border-blue-400 transition-colors duration-200 bg-white">
           <div className="space-y-1 text-center">
             <Upload className="mx-auto h-12 w-12 text-gray-400" />
             <div className="flex text-sm text-gray-600">
@@ -903,7 +795,7 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
       </div>
 
       <div className="flex items-center space-x-6">
-        <label className="flex items-center">
+        <label className="flex items-center cursor-pointer">
           <input
             type="checkbox"
             name="enableReminders"
@@ -914,7 +806,7 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
           <span className="ml-2 text-sm text-gray-700">Enable Reminders</span>
         </label>
 
-        <label className="flex items-center">
+        <label className="flex items-center cursor-pointer">
           <input
             type="checkbox"
             name="requireAttachment"
