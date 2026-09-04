@@ -37,7 +37,10 @@ const Users = () => {
     "Sent to Vendor": false,
     "Check Machin": false,
     "Store In": false,
+    Posting: false,
     "Make Payment": false,
+    "Full Kitting": false,
+    Accounts: false,
   });
 
   const SCRIPT_URL = import.meta.env.VITE_SCRIPT_URL;
@@ -49,7 +52,10 @@ const Users = () => {
     { key: "Sent to Vendor", label: "Sent to Vendor" },
     { key: "Check Machin", label: "Check Machine" },
     { key: "Store In", label: "Store In" },
+    { key: "Posting", label: "Posting" },
     { key: "Make Payment", label: "Make Payment" },
+    { key: "Full Kitting", label: "Full Kitting" },
+    { key: "Accounts", label: "Accounts" },
   ];
 
   const firmOptions = ["All", "Pmmpl", "Purab", "Rkl", "Refrasynth", "Refratech"];
@@ -112,7 +118,10 @@ const Users = () => {
       "Sent to Vendor": false,
       "Check Machin": false,
       "Store In": false,
+      Posting: false,
       "Make Payment": false,
+      "Full Kitting": false,
+      Accounts: false,
     });
     setIsModalOpen(true);
   };
@@ -126,12 +135,15 @@ const Users = () => {
     
     const accessArray = (userRow.access || "").split(",").map(p => p.trim());
     const initialPages = {
-      Dashboard: accessArray.includes("Dashboard"),
-      Indent: accessArray.includes("Indent"),
-      "Sent to Vendor": accessArray.includes("Sent to Vendor"),
+      Dashboard: accessArray.some(p => p.toLowerCase() === "dashboard"),
+      Indent: accessArray.some(p => p.toLowerCase() === "indent"),
+      "Sent to Vendor": accessArray.some(p => p.toLowerCase().includes("vendor")),
       "Check Machin": accessArray.some(p => p.toLowerCase().includes("check")),
-      "Store In": accessArray.includes("Store In"),
-      "Make Payment": accessArray.includes("Make Payment"),
+      "Store In": accessArray.some(p => p.toLowerCase().includes("store")),
+      Posting: accessArray.some(p => p.toLowerCase().includes("posting")),
+      "Make Payment": accessArray.some(p => p.toLowerCase().includes("payment")),
+      "Full Kitting": accessArray.some(p => p.toLowerCase().includes("kitting")),
+      Accounts: accessArray.some(p => p.toLowerCase().includes("account")),
     };
     setSelectedPages(initialPages);
     setIsModalOpen(true);
@@ -208,7 +220,10 @@ const Users = () => {
           "Sent to Vendor": false,
           "Check Machin": false,
           "Store In": false,
+          Posting: false,
           "Make Payment": false,
+          "Full Kitting": false,
+          Accounts: false,
         });
 
         setIsModalOpen(false);

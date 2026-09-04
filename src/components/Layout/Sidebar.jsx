@@ -36,6 +36,20 @@ const Sidebar = ({ activeTab, setActiveTab }) => {
     menuItems.push({ id: 'users', label: 'Users', icon: Users });
   }
 
+  const userAccess = Array.isArray(user?.access)
+    ? user.access.map((a) => a.toLowerCase().trim())
+    : [];
+
+  const visibleMenuItems = menuItems.filter((item) => {
+    if (user?.role === 'admin') return true;
+    if (item.id === 'users') return false;
+    if (userAccess.length === 0) return true;
+    return (
+      userAccess.includes(item.label.toLowerCase().trim()) ||
+      userAccess.some((a) => item.label.toLowerCase().includes(a) || a.includes(item.label.toLowerCase()))
+    );
+  });
+
   return (
     <div className="w-64 bg-white shadow-lg h-screen flex flex-col">
       <div className="p-6 border-b border-gray-200">
@@ -47,7 +61,7 @@ const Sidebar = ({ activeTab, setActiveTab }) => {
 
       <nav className="flex-1 p-4">
         <ul className="space-y-2">
-          {menuItems.map((item) => {
+          {visibleMenuItems.map((item) => {
             const Icon = item.icon;
             return (
               <li key={item.id}>
