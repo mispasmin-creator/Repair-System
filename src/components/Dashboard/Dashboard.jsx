@@ -89,6 +89,36 @@ const Dashboard = ({ setActiveTab }) => {
   const SHEET_Id = import.meta.env.VITE_SHEET_ID;
   const FOLDER_ID = import.meta.env.VITE_FOLDER_ID;
 
+  const safeFetchJson = async (url, retries = 2, delayMs = 800) => {
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        const res = await fetch(url);
+        if (!res.ok) {
+          if (attempt < retries) {
+            await new Promise((r) => setTimeout(r, delayMs));
+            continue;
+          }
+          throw new Error(`HTTP ${res.status}`);
+        }
+        const text = await res.text();
+        if (text.trim().startsWith("<")) {
+          if (attempt < retries) {
+            await new Promise((r) => setTimeout(r, delayMs));
+            continue;
+          }
+          throw new Error("Server returned HTML response");
+        }
+        return JSON.parse(text);
+      } catch (err) {
+        if (attempt < retries) {
+          await new Promise((r) => setTimeout(r, delayMs));
+          continue;
+        }
+        throw err;
+      }
+    }
+  };
+
   const fetchAllTasks = async (isBackground = false) => {
     try {
       if (!isBackground) {
@@ -96,10 +126,9 @@ const Dashboard = ({ setActiveTab }) => {
       }
       const SHEET_NAME_TASK = "Repair System";
 
-      const res = await fetch(
-        `${SCRIPT_URL}?sheetId=${SHEET_Id}&&sheet=${SHEET_NAME_TASK}`
+      const result = await safeFetchJson(
+        `${SCRIPT_URL}?sheetId=${SHEET_Id}&sheet=${SHEET_NAME_TASK}`
       );
-      const result = await res.json();
 
       const allRows = result?.table?.rows || [];
       const taskRows = allRows.slice(5);
@@ -141,11 +170,10 @@ const Dashboard = ({ setActiveTab }) => {
         setLoadingMaster(true);
       }
       const SHEET_NAME_MASTER = "Master";
-      const res = await fetch(
+      const result = await safeFetchJson(
         `${SCRIPT_URL}?sheetId=${SHEET_Id}&sheet=${SHEET_NAME_MASTER}`
       );
-      const result = await res.json();
-      if (result.success && result.table && result.table.rows) {
+      if (result && result.table && result.table.rows) {
         const rows = result.table.rows;
         const loadedVendors = rows
           .map((row) => row.c[0]?.v)
@@ -263,8 +291,13 @@ const Dashboard = ({ setActiveTab }) => {
     const hasTasks = cachedTasks && cachedTasks.length > 0;
     const hasMaster = (vendors && vendors.length > 0) || (transporters && transporters.length > 0);
 
-    fetchAllTasks(hasTasks);
-    fetchMasterData(hasMaster);
+    const init = async () => {
+      await fetchAllTasks(hasTasks);
+      setTimeout(() => {
+        fetchMasterData(hasMaster);
+      }, 400);
+    };
+    init();
   }, []);
 
 

@@ -6,6 +6,7 @@ import Indent from "./components/Indent/Indent";
 import SentMachine from "./components/SentMachine/SentMachine";
 import CheckMachine from "./components/CheckMachine/CheckMachine";
 import StoreIn from "./components/StoreIn/StoreIn";
+import Posting from "./components/Posting/Posting";
 import RepairAdvance from "./components/RepairAdvance/RepairAdvance";
 import MakePayment from "./components/MakePayment/MakePayment";
 import FullKitting from "./components/FullKitting/FullKitting";
@@ -116,6 +117,8 @@ function AppContent() {
         return <CheckMachine />;
       case "store-in":
         return <StoreIn />;
+      case "posting":
+        return <Posting />;
       case "make-payment":
         return <MakePayment />;
       case "full-kitting":

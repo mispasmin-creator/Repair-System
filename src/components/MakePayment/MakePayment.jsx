@@ -285,8 +285,19 @@ const MakePayment = () => {
         allowedTaskNos.has(payment.repairTaskNo)
       );
 
-      setRepairPayments(filteredPayments);
-      setHistoryRepairPayments(filteredPayments);
+      // Deduplicate accidental duplicate entries (same task, billNo, and amount)
+      const seenPaymentKeys = new Set();
+      const deduplicatedPayments = filteredPayments.filter((p) => {
+        const key = `${p.repairTaskNo}_${p.billNo}_${p.totalBillAmount}_${p.toBePaidAmount}`;
+        if (seenPaymentKeys.has(key)) {
+          return false;
+        }
+        seenPaymentKeys.add(key);
+        return true;
+      });
+
+      setRepairPayments(deduplicatedPayments);
+      setHistoryRepairPayments(deduplicatedPayments);
 
     } catch (err) {
       console.error("Error fetching payments:", err);
