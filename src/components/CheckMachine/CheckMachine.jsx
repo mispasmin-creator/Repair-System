@@ -14,6 +14,7 @@ import { mockRepairTasks } from "../../data/mockData";
 import { useAuth } from "../../context/AuthContext";
 import useDataStore from "../../store/dataStore";
 import toast from "react-hot-toast";
+import { fetchRepairTasks as fetchRepairTasksSvc } from "../../services/repairService";
 
 const CheckMachine = () => {
   const { user } = useAuth();
@@ -90,83 +91,54 @@ const CheckMachine = () => {
 
   const fetchAllTasks = async (isBackground = false) => {
     try {
-      if (!isBackground) {
-        setLoadingTasks(true);
-      }
-      const SHEET_NAME_TASK = "Repair System";
+      if (!isBackground) setLoadingTasks(true);
 
-      const res = await fetch(
-        `${SCRIPT_URL}?sheetId=${SHEET_Id}&&sheet=${SHEET_NAME_TASK}`
-      );
-      const result = await res.json();
+      // Use shared service — returns objects keyed by sheet header names (Row 6)
+      const rawTasks = await fetchRepairTasksSvc(user?.firmName);
 
-      const allRows = result?.table?.rows || [];
-      const taskRows = allRows.slice(5);
+      const formattedTasks = rawTasks.map((row, index) => ({
+        id: `check-task-${index}`,
+        taskNo: row["Task No"] || "",
+        firmName: row["Firm Name"] || "",
+        serialNo: row["Serial No"] || "",
+        machineName: row["Machine Name"] || "",
+        machinePartName: row["Machine Part Name"] || "",
+        doerName: row["Doer Name"] || "",
+        problem: row["Problem"] || "",
+        priority: row["Priority"] || "",
+        department: row["Department"] || "",
+        location: row["Location"] || "",
+        // Sent Machine step
+        planned: row["Planned 1"] || "",
+        actual: row["Actual 1"] || "",
+        vendorName: row["Vendor Name"] || "",
+        leadTimeToDeliverDays: row["Lead Time To Deliver ( In No. Of Days)"] || "",
+        transporterName: row["(Transporter Name)"] || "",
+        transportationCharges: row["Transportation Charges"] || "",
+        weighmentSlip: row["Weighment Slip"] || "",
+        paymentType: row["Payment Type"] || "",
+        howMuch: row["How Much"] || "",
+        // Check Machine step (Actual 2)
+        planned1: row["Planned 2"] || "",
+        actual1: row["Actual 2"] || "",         // Local name actual1 maps to sheet 'Actual 2'
+        billImage: row["Bill Image"] || "",
+        billNo: row["Bill No."] || "",
+        typeOfBill: row["Type of Bill"] || "",
+        totalBillAmount: row["Total Bill Amount"] || "",
+        toBePaidAmount: row["To Be Paid Amount"] || "",
+        // Management step
+        managementApprovalDate: row["Management Approval Date"] || "",
+        managementRemark: row["Management Remark"] || "",
+      }));
 
-      const formattedTasks = taskRows.map((row) => {
-        const cells = row.c;
+      setRepairTasks(formattedTasks);
 
-        return {
-          timestamp: cells[0]?.v || "",
-          taskNo: cells[1]?.v || "",
-          firmName: cells[2]?.v || "",
-          serialNo: cells[3]?.v || "",
-          machineName: cells[4]?.v || "",
-          machinePartName: cells[5]?.v || "",
-          givenBy: cells[6]?.v || "",
-          doerName: cells[7]?.v || "",
-          problem: cells[8]?.v || "",
-          enableReminder: cells[9]?.v || "",
-          requireAttachment: cells[10]?.v || "",
-          taskStartDate: cells[11]?.v || "",
-          taskEndDate: cells[12]?.v || "",
-          priority: cells[13]?.v || "",
-          department: cells[14]?.v || "",
-          location: cells[15]?.v || "",
-          imageUrl: cells[16]?.v || "",
-          planned: cells[17]?.v || "",
-          actual: cells[18]?.v || "",
-          delay: cells[19]?.v || "",
-          vendorName: cells[20]?.v || "",
-          leadTimeToDeliverDays: cells[21]?.v || "",
-          transporterName: cells[22]?.v || "",
-          transportationCharges: cells[23]?.v || "",
-          weighmentSlip: cells[24]?.v || "",
-          transportingImageWithMachine: cells[25]?.v || "",
-          paymentType: cells[26]?.v || "",
-          howMuch: cells[27]?.v || "",
-          planned1: cells[28]?.v || "",
-          actual1: cells[29]?.v || "",
-          tranporterName: cells[31]?.v || "",
-          billImage: cells[33]?.v || "",
-          billNo: cells[34]?.v || "",
-          typeOfBill: cells[35]?.v || "",
-          totalBillAmount: cells[36]?.v || "",
-          toBePaidAmount: cells[37]?.v || "",
-        };
-      });
+      // ✅ PENDING: Management Approval Date bhari ho + Actual 2 KHALI ho
+      setPendingRepairTasks(formattedTasks.filter((t) => t.managementApprovalDate && !t.actual1));
 
-      const userFirmName = user?.firmName || "";
-      const isAllFirm = !userFirmName || userFirmName.toLowerCase() === "all";
+      // ✅ HISTORY: Management Approval Date bhari ho + Actual 2 bhari ho
+      setHistoryRepairTasks(formattedTasks.filter((t) => t.managementApprovalDate && t.actual1));
 
-      const filtered = formattedTasks.filter((task) => {
-        if (isAllFirm) return true;
-        return (task.firmName || "").toLowerCase() === userFirmName.toLowerCase();
-      });
-
-      setRepairTasks(filtered);
-
-      // Set pending tasks - where AB (planned1) is not empty and AC (actual1) is empty
-      const pendingTasks = filtered.filter(
-        (task) => task.planned1 && !task.actual1
-      );
-      setPendingRepairTasks(pendingTasks);
-
-      // Set history tasks - where both AB (planned1) and AC (actual1) are not empty
-      const historyTasks = filtered.filter(
-        (task) => task.planned1 && task.actual1
-      );
-      setHistoryRepairTasks(historyTasks);
     } catch (err) {
       console.error("Error fetching tasks:", err);
       toast.error("Failed to fetch tasks");
@@ -239,10 +211,10 @@ const CheckMachine = () => {
         action: "update1",
         sheetName: "Repair System",
         taskNo: selectedTask.taskNo,
-         "Actual 2": new Date().toLocaleDateString("en-GB", {
-    timeZone: "Asia/Kolkata",
-  }),
-        "Transporter Name": formData.transporterName,
+        "Actual 2": new Date().toLocaleDateString("en-GB", {
+          timeZone: "Asia/Kolkata",
+        }),
+        "(Transporter Name)": formData.transporterName,
         "Transportation Amount": formData.transportationAmount,
         "Bill Image": billImageUrl,
         "Bill No.": formData.billNo,

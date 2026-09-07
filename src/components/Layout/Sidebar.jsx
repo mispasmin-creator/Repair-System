@@ -3,6 +3,7 @@ import {
   LayoutDashboard,
   FileText,
   Send,
+  ShieldCheck,
   CheckCircle,
   Package,
   CreditCard,
@@ -23,6 +24,7 @@ const Sidebar = ({ activeTab, setActiveTab }) => {
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'indent', label: 'Indent', icon: FileText },
     { id: 'sent-machine', label: 'Sent to Vendor', icon: Send },
+    { id: 'management-approval', label: 'Management Approval', icon: ShieldCheck },
     { id: 'check-machine', label: 'Check Machine', icon: CheckCircle },
     { id: 'store-in', label: 'Store In', icon: Package },
     { id: 'posting', label: 'Posting', icon: ClipboardCheck },
@@ -52,28 +54,34 @@ const Sidebar = ({ activeTab, setActiveTab }) => {
 
   return (
     <div className="w-64 bg-white shadow-lg h-screen flex flex-col">
-      <div className="p-6 border-b border-gray-200">
+      {/* Logo Header */}
+      <div className="px-5 py-4 border-b border-gray-200 flex-shrink-0">
         <div className="flex items-center space-x-3">
-          <img src="/logo.png" alt="Logo" className="w-10 h-10 rounded-full object-cover" />
-          <h1 className="text-2xl font-bold text-gray-800">Repair App</h1>
+          <img src="/logo.png" alt="Logo" className="w-9 h-9 rounded-full object-cover flex-shrink-0" />
+          <h1 className="text-xl font-bold text-gray-800 truncate">Repair App</h1>
         </div>
       </div>
 
-      <nav className="flex-1 p-4">
-        <ul className="space-y-2">
+      {/* Scrollable Nav */}
+      <nav className="flex-1 overflow-y-auto px-3 py-3"
+        style={{ scrollbarWidth: 'thin', scrollbarColor: '#cbd5e1 transparent' }}
+      >
+        <ul className="space-y-1">
           {visibleMenuItems.map((item) => {
             const Icon = item.icon;
             return (
               <li key={item.id}>
                 <button
                   onClick={() => setActiveTab(item.id)}
-                  className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-all duration-200 ${activeTab === item.id
-                    ? 'bg-blue-50 text-blue-600 border-r-4 border-blue-600'
-                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-800'
-                    }`}
+                  title={item.label}
+                  className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition-all duration-200 text-left ${
+                    activeTab === item.id
+                      ? 'bg-blue-50 text-blue-600 border-r-4 border-blue-600 font-semibold'
+                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-800'
+                  }`}
                 >
-                  <Icon className="w-5 h-5" />
-                  <span className="font-medium">{item.label}</span>
+                  <Icon className="w-4 h-4 flex-shrink-0" />
+                  <span className="text-sm font-medium truncate leading-tight">{item.label}</span>
                 </button>
               </li>
             );
@@ -81,25 +89,27 @@ const Sidebar = ({ activeTab, setActiveTab }) => {
         </ul>
       </nav>
 
-      <div className="p-4 border-t border-gray-200">
-        <div className="flex items-center space-x-3 px-4 py-2">
-          <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center">
-            <User className="w-5 h-5 text-white" />
+      {/* User Info */}
+      <div className="px-4 py-3 border-t border-gray-200 flex-shrink-0">
+        <div className="flex items-center space-x-3">
+          <div className="w-9 h-9 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
+            <User className="w-4 h-4 text-white" />
           </div>
-          <div>
-            <p className="font-medium text-gray-800">{user?.name}</p>
-            <p className="text-sm text-gray-500 capitalize">{user?.role}</p>
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-gray-800 truncate">{user?.name}</p>
+            <p className="text-xs text-gray-500 capitalize">{user?.role}</p>
           </div>
         </div>
       </div>
 
-      <div className="p-1 mb-10 border-t border-gray-200">
+      {/* Logout */}
+      <div className="px-3 pb-4 flex-shrink-0 border-t border-gray-200">
         <button
           onClick={logout}
-          className="w-full flex items-center space-x-3 px-4 py-3 text-gray-600 hover:bg-gray-50 hover:text-gray-800 rounded-lg transition-all duration-200"
+          className="w-full flex items-center space-x-3 px-3 py-2.5 mt-2 text-gray-600 hover:bg-red-50 hover:text-red-600 rounded-lg transition-all duration-200"
         >
-          <LogOut className="w-5 h-5" />
-          <span className="font-medium">Logout</span>
+          <LogOut className="w-4 h-4 flex-shrink-0" />
+          <span className="text-sm font-medium">Logout</span>
         </button>
       </div>
     </div>

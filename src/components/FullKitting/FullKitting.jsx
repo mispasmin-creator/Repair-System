@@ -13,6 +13,7 @@ import {
 import { useAuth } from "../../context/AuthContext";
 import useDataStore from "../../store/dataStore";
 import toast from "react-hot-toast";
+import { fetchRepairTasks as fetchRepairTasksSvc } from "../../services/repairService";
 
 const SCRIPT_URL = import.meta.env.VITE_SCRIPT_URL;
 
@@ -36,13 +37,13 @@ const FullKitting = () => {
     kittingDate: new Date().toISOString().slice(0, 10),
   });
 
-  // Pending: payment done (actual4 filled) but kitting not done (actual5 empty)
+  // ✅ PENDING: Actual 4 bhari ho + Actual 5 KHALI ho
   const pendingTasks = useMemo(
     () => repairTasks.filter((t) => t.actual4 && !t.actual5),
     [repairTasks]
   );
 
-  // History: kitting done (actual5 filled)
+  // ✅ HISTORY: Actual 5 bhari ho (kitting done)
   const historyTasks = useMemo(
     () => repairTasks.filter((t) => t.actual5),
     [repairTasks]
@@ -81,13 +82,29 @@ const FullKitting = () => {
     const fetchTasks = async () => {
       setLoadingTasks(true);
       try {
-        const res = await fetch(`${SCRIPT_URL}?action=getRepairTasks`);
-        const data = await res.json();
-        if (data.success) {
-          setRepairTasks(data.data || []);
-        } else {
-          toast.error("Failed to load tasks");
-        }
+        // Use shared service — returns objects keyed by sheet header names (Row 6)
+        const rawTasks = await fetchRepairTasksSvc(user?.firmName);
+
+        const formattedTasks = rawTasks.map((row, index) => ({
+          id: `kitting-task-${index}`,
+          taskNo: row["Task No"] || "",
+          firmName: row["Firm Name"] || "",
+          serialNo: row["Serial No"] || "",
+          machineName: row["Machine Name"] || "",
+          machinePartName: row["Machine Part Name"] || "",
+          doerName: row["Doer Name"] || "",
+          priority: row["Priority"] || "",
+          department: row["Department"] || "",
+          vendorName: row["Vendor Name"] || "",
+          billNo: row["Bill No."] || "",
+          totalBillAmount: row["Total Bill Amount"] || "",
+          // Make Payment step
+          actual4: row["Actual 4"] || "",
+          // Full Kitting step
+          actual5: row["Actual 5"] || "",
+        }));
+
+        setRepairTasks(formattedTasks);
       } catch {
         toast.error("Error fetching tasks");
       } finally {
@@ -114,24 +131,26 @@ const FullKitting = () => {
     }
     setSubmitLoading(true);
     try {
+      // ✅ FIXED: use update1 action with correct header name 'Actual 5'
       const payload = new URLSearchParams({
-        action: "updateRepairTask",
+        action: "update1",
+        sheetName: "Repair System",
         taskNo: selectedTask.taskNo,
-        actual5: formData.kittingDate,
-        Remark: formData.kittingRemark,
+        "Actual 5": formData.kittingDate,
+        "Kitting Done By": formData.kittingDoneBy,
+        "Kitting Remark": formData.kittingRemark,
       });
-      const res = await fetch(SCRIPT_URL, { method: "POST", body: payload });
+      const res = await fetch(SCRIPT_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: payload.toString(),
+      });
       const data = await res.json();
       if (data.success) {
+        // Update local state optimistically
         const updated = repairTasks.map((t) =>
           t.taskNo === selectedTask.taskNo
-            ? {
-                ...t,
-                actual5: formData.kittingDate,
-                fullKittingDoneBy: formData.kittingDoneBy,
-                fullKittingRemark: formData.kittingRemark,
-                fullKittingDate: formData.kittingDate,
-              }
+            ? { ...t, actual5: formData.kittingDate }
             : t
         );
         setRepairTasks(updated);

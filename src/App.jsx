@@ -10,6 +10,7 @@ import Posting from "./components/Posting/Posting";
 import RepairAdvance from "./components/RepairAdvance/RepairAdvance";
 import MakePayment from "./components/MakePayment/MakePayment";
 import FullKitting from "./components/FullKitting/FullKitting";
+import ManagementApproval from "./components/ManagementApproval/ManagementApproval";
 import Login from "./components/Login/Login";
 import Users from "./components/Users/Users";
 import Accounts from "./components/Accounts/Accounts";
@@ -113,6 +114,8 @@ function AppContent() {
         return <Indent />;
       case "sent-machine":
         return <SentMachine />;
+      case "management-approval":
+        return <ManagementApproval />;
       case "check-machine":
         return <CheckMachine />;
       case "store-in":

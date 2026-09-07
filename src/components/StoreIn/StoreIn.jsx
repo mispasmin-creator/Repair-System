@@ -13,6 +13,7 @@ import {
 import { useAuth } from "../../context/AuthContext";
 import useDataStore from "../../store/dataStore";
 import toast from "react-hot-toast";
+import { fetchRepairTasks as fetchRepairTasksSvc } from "../../services/repairService";
 
 const StoreIn = () => {
   const { user } = useAuth();
@@ -83,106 +84,59 @@ const StoreIn = () => {
 
   const fetchAllTasks = async (isBackground = false) => {
     try {
-      if (!isBackground) {
-        setLoadingTasks(true);
-      }
-      const SHEET_NAME_TASK = "Repair System";
+      if (!isBackground) setLoadingTasks(true);
 
-      const res = await fetch(
-        `${SCRIPT_URL}?sheetId=${SHEET_Id}&&sheet=${SHEET_NAME_TASK}`
-      );
-      const result = await res.json();
+      // Use shared service — returns objects keyed by sheet header names (Row 6)
+      const rawTasks = await fetchRepairTasksSvc(user?.firmName);
 
-      const allRows = result?.table?.rows || [];
-      const taskRows = allRows.slice(5);
+      const formattedTasks = rawTasks.map((row, index) => ({
+        id: `store-task-${index}`,
+        taskNo: row["Task No"] || "",
+        firmName: row["Firm Name"] || "",
+        serialNo: row["Serial No"] || "",
+        machineName: row["Machine Name"] || "",
+        machinePartName: row["Machine Part Name"] || "",
+        doerName: row["Doer Name"] || "",
+        problem: row["Problem"] || "",
+        priority: row["Priority"] || "",
+        department: row["Department"] || "",
+        location: row["Location"] || "",
+        // Sent Machine step
+        planned: row["Planned 1"] || "",
+        actual: row["Actual 1"] || "",
+        vendorName: row["Vendor Name"] || "",
+        leadTimeToDeliverDays: row["Lead Time To Deliver ( In No. Of Days)"] || "",
+        transporterName: row["(Transporter Name)"] || "",
+        transportationCharges: row["Transportation Charges"] || "",
+        paymentType: row["Payment Type"] || "",
+        howMuch: row["How Much"] || "",
+        // Check Machine step
+        planned1: row["Planned 2"] || "",
+        actual1: row["Actual 2"] || "",
+        billImage: row["Bill Image"] || "",
+        billNo: row["Bill No."] || "",
+        typeOfBill: row["Type of Bill"] || "",
+        totalBillAmount: row["Total Bill Amount"] || "",
+        toBePaidAmount: row["To Be Paid Amount"] || "",
+        // Store In step (Actual 3)
+        planned2: row["Planned 3"] || "",
+        actual2: row["Actual 3"] || "",        // Local name actual2 maps to sheet 'Actual 3'
+        receivedQuantity: row["Received Quantity"] || "",
+        billMatch: row["Bill Match"] || "",
+        productImage: row["Product Image"] || "",
+      }));
 
-      const formattedTasks = taskRows.map((row, index) => {
-        const cells = row.c || [];
+      setRepairTasks(formattedTasks);
 
-        // Safe cell value extraction
-        const getCellValue = (index) => {
-          return cells[index]?.v || "";
-        };
+      // ✅ PENDING: Actual 2 bhari ho + Actual 3 KHALI ho
+      setPendingRepairTasks(formattedTasks.filter((t) => t.actual1 && !t.actual2));
 
-        return {
-          id: `store-task-${index}`, // Add unique id
-          timestamp: getCellValue(0),
-          taskNo: getCellValue(1),
-          firmName: getCellValue(2),
-          serialNo: getCellValue(3),
-          machineName: getCellValue(4),
-          machinePartName: getCellValue(5),
-          givenBy: getCellValue(6),
-          doerName: getCellValue(7),
-          problem: getCellValue(8),
-          enableReminder: getCellValue(9),
-          requireAttachment: getCellValue(10),
-          taskStartDate: getCellValue(11),
-          taskEndDate: getCellValue(12),
-          priority: getCellValue(13),
-          department: getCellValue(14),
-          location: getCellValue(15),
-          imageUrl: getCellValue(16),
-          planned: getCellValue(17),
-          actual: getCellValue(18),
-          delay: getCellValue(19),
-          vendorName: getCellValue(20),
-          leadTimeToDeliverDays: getCellValue(21),
-          transporterName: getCellValue(22),
-          transportationCharges: getCellValue(23),
-          weighmentSlip: getCellValue(24),
-          transportingImageWithMachine: getCellValue(25),
-          paymentType: getCellValue(26),
-          howMuch: getCellValue(27),
-          planned1: getCellValue(28),
-          actual1: getCellValue(29),
-          tranporterName: getCellValue(31),
-          billImage: getCellValue(33),
-          billNo: getCellValue(34),
-          typeOfBill: getCellValue(35),
-          totalBillAmount: getCellValue(36),
-          toBePaidAmount: getCellValue(37),
-          planned2: getCellValue(38),
-          actual2: getCellValue(39),
-          delay2: getCellValue(40),
-          receivedQuantity: getCellValue(41),
-          billMatch: getCellValue(42),
-          productImage: getCellValue(43),
-        };
-      });
+      // ✅ HISTORY: Dono bhari hoon
+      setHistoryRepairTasks(formattedTasks.filter((t) => t.actual1 && t.actual2));
 
-      const userFirmName = user?.firmName || "";
-      const isAllFirm = !userFirmName || userFirmName.toLowerCase() === "all";
-
-      const filtered = formattedTasks.filter((task) => {
-        if (isAllFirm) return true;
-        return (task.firmName || "").toLowerCase() === userFirmName.toLowerCase();
-      });
-
-      console.log("Formatted Store Tasks (filtered):", filtered);
-      setRepairTasks(filtered);
-      
-      // Filter pending tasks (has planned2 but no actual2)
-      const pendingTasks = filtered.filter(
-        (task) => task.planned2 && !task.actual2
-      );
-      console.log("Pending Tasks:", pendingTasks);
-      setPendingRepairTasks(pendingTasks);
-
-      // Filter history tasks (has both planned2 and actual2)
-      const historyTasks = filtered.filter(
-        (task) => task.planned2 && task.actual2
-      );
-      console.log("History Tasks:", historyTasks);
-      setHistoryRepairTasks(historyTasks);
-      
     } catch (err) {
       console.error("Error fetching tasks:", err);
       toast.error("Failed to fetch tasks");
-      // Set empty arrays on error to prevent undefined states
-      setRepairTasks([]);
-      setPendingRepairTasks([]);
-      setHistoryRepairTasks([]);
     } finally {
       setLoadingTasks(false);
     }
@@ -252,9 +206,9 @@ const StoreIn = () => {
         action: "update1",
         sheetName: "Repair System",
         taskNo: selectedTask.taskNo,
-       "Actual 3": new Date().toLocaleDateString("en-GB", {
-    timeZone: "Asia/Kolkata",
-  }),
+        "Actual 3": new Date().toLocaleDateString("en-GB", {
+          timeZone: "Asia/Kolkata",
+        }),
         "Received Quantity": formData.receivedQuantity,
         "Bill Match": formData.billMatch ? "Yes" : "No",
         "Bill Image": billImageUrl,

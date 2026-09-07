@@ -13,6 +13,7 @@ import {
 import { useAuth } from "../../context/AuthContext";
 import useDataStore from "../../store/dataStore";
 import toast from "react-hot-toast";
+import { fetchRepairTasks as fetchRepairTasksSvc } from "../../services/repairService";
 
 const MakePayment = () => {
   const { user } = useAuth();
@@ -157,87 +158,51 @@ const MakePayment = () => {
 
   const fetchAllTasks = async (isBackground = false) => {
     try {
-      if (!isBackground) {
-        setLoadingTasks(true);
-      }
-      const SHEET_NAME_TASK = "Repair System";
+      if (!isBackground) setLoadingTasks(true);
 
-      const res = await fetch(
-        `${SCRIPT_URL}?sheetId=${SHEET_Id}&&sheet=${SHEET_NAME_TASK}`
-      );
-      const result = await res.json();
+      // Use shared service — returns objects keyed by sheet header names (Row 6)
+      const rawTasks = await fetchRepairTasksSvc(user?.firmName);
 
-      const allRows = result?.table?.rows || [];
-      const taskRows = allRows.slice(5);
+      const formattedTasks = rawTasks.map((row, index) => ({
+        id: `payment-task-${index}`,
+        taskNo: row["Task No"] || "",
+        firmName: row["Firm Name"] || "",
+        serialNo: row["Serial No"] || "",
+        machineName: row["Machine Name"] || "",
+        machinePartName: row["Machine Part Name"] || "",
+        doerName: row["Doer Name"] || "",
+        problem: row["Problem"] || "",
+        priority: row["Priority"] || "",
+        department: row["Department"] || "",
+        vendorName: row["Vendor Name"] || "",
+        paymentType: row["Payment Type"] || "",
+        howMuch: row["How Much"] || "",
+        billImage: row["Bill Image"] || "",
+        billNo: row["Bill No."] || "",
+        typeOfBill: row["Type of Bill"] || "",
+        totalBillAmount: row["Total Bill Amount"] || "",
+        toBePaidAmount: row["To Be Paid Amount"] || "",
+        // Posting step
+        actualPosting: row["Actual Posting"] || "",
+        // Make Payment step
+        planned4: row["Planned 4"] || "",
+        actual4: row["Actual 4"] || "",
+      }));
 
-      const formattedTasks = taskRows.map((row) => {
-        const cells = row.c;
+      setRepairTasks(formattedTasks);
 
-        return {
-          timestamp: cells[0]?.v || "",
-          taskNo: cells[1]?.v || "",
-          firmName: cells[2]?.v || "",
-          serialNo: cells[3]?.v || "",
-          machineName: cells[4]?.v || "",
-          machinePartName: cells[5]?.v || "",
-          givenBy: cells[6]?.v || "",
-          doerName: cells[7]?.v || "",
-          problem: cells[8]?.v || "",
-          enableReminder: cells[9]?.v || "",
-          requireAttachment: cells[10]?.v || "",
-          taskStartDate: cells[11]?.v || "",
-          taskEndDate: cells[12]?.v || "",
-          priority: cells[13]?.v || "",
-          department: cells[14]?.v || "",
-          location: cells[15]?.v || "",
-          imageUrl: cells[16]?.v || "",
-          planned: cells[17]?.v || "",
-          actual: cells[18]?.v || "",
-          delay: cells[19]?.v || "",
-          leadTimeToDeliverDays: cells[21]?.v || "",
-          transporterName: cells[22]?.v || "",
-          transportationCharges: cells[23]?.v || "",
-          weighmentSlip: cells[24]?.v || "",
-          transportingImageWithMachine: cells[25]?.v || "",
-
-          vendorName: cells[20]?.v || "",
-          paymentType: cells[26]?.v || "",
-          howMuch: cells[27]?.v || "",
-
-          planned1: cells[28]?.v || "",
-          actual1: cells[29]?.v || "",
-          tranporterName: cells[31]?.v || "",
-          billImage: cells[33]?.v || "",
-          billNo: cells[34]?.v || "",
-          typeOfBill: cells[35]?.v || "",
-          totalBillAmount: cells[36]?.v || "",
-          toBePaidAmount: cells[37]?.v || "",
-
-          planned2: cells[38]?.v || "",
-          actual2: cells[39]?.v || "",
-          delay2: cells[40]?.v || "",
-          receivedQuantity: cells[41]?.v || "",
-          billMatch: cells[42]?.v ,
-          productImage: cells[43]?.v || "",
-          planned4: cells[44]?.v || "",
-          actual4: cells[45]?.v || "",
-        };
-      });
-
-      const userFirmName = user?.firmName || "";
-      const isAllFirm = !userFirmName || userFirmName.toLowerCase() === "all";
-
-      const filtered = formattedTasks.filter((task) => {
-        if (isAllFirm) return true;
-        return (task.firmName || "").toLowerCase() === userFirmName.toLowerCase();
-      });
-
-      setRepairTasks(filtered);
-
-      const pendingTasks = filtered.filter(
-        (task) => task.planned4 && !task.actual4
+      // ✅ PENDING: Actual Posting bhari ho + Actual 4 KHALI ho
+      const pendingTasks = formattedTasks.filter(
+        (task) => task.actualPosting && !task.actual4
       );
       setPendingRepairPayments(pendingTasks);
+
+      // ✅ HISTORY: Actual 4 bhari ho (payment ho chuka)
+      //    Same Repair System sheet se — NO separate Advance Payment sheet needed
+      const historyTasks = formattedTasks.filter(
+        (task) => task.actual4
+      );
+      setHistoryRepairPayments(historyTasks);
 
     } catch (err) {
       console.error("Error fetching tasks:", err);
@@ -247,61 +212,45 @@ const MakePayment = () => {
     }
   };
 
+  // fetchPayments is kept for submitting new payment entries to Advance Payment sheet
+  // History is now sourced from Repair System sheet (Actual 4 filled) via fetchAllTasks
   const fetchPayments = async (isBackground = false) => {
     try {
-      if (!isBackground) {
-        setLoadingTasks(true);
-      }
+      if (!isBackground) setLoadingTasks(true);
       const SHEET_NAME_PAYMENTS = "Repair FMS Advance Payment";
-
       const res = await fetch(
         `${SCRIPT_URL}?sheetId=${SHEET_Id}&&sheet=${SHEET_NAME_PAYMENTS}`
       );
       const result = await res.json();
-
       const allRows = result?.table?.rows || [];
       const paymentRows = allRows.slice(5);
-
       const formattedPayments = paymentRows.map((row) => {
         const cells = row.c;
-      return {
-        timestamp: cells[0]?.v || "",
-        paymentNo: cells[1]?.v || "",
-        repairTaskNo: cells[2]?.v || "",
-        serialNo: cells[3]?.v || "",
-        machineName: cells[4]?.v || "",
-        vendorName: cells[5]?.v || "",
-        billNo: cells[6]?.v || "",
-        totalBillAmount: cells[7]?.v || "",
-        paymentType: cells[8]?.v || "",
-        toBePaidAmount: cells[9]?.v || "",
-        // Add any additional columns you need
-        // ...
-      };
-    });
-
-      const allowedTaskNos = new Set(useDataStore.getState().repairTasks.map(t => t.taskNo));
-      const filteredPayments = formattedPayments.filter((payment) => 
-        allowedTaskNos.has(payment.repairTaskNo)
-      );
-
-      // Deduplicate accidental duplicate entries (same task, billNo, and amount)
-      const seenPaymentKeys = new Set();
-      const deduplicatedPayments = filteredPayments.filter((p) => {
-        const key = `${p.repairTaskNo}_${p.billNo}_${p.totalBillAmount}_${p.toBePaidAmount}`;
-        if (seenPaymentKeys.has(key)) {
-          return false;
-        }
-        seenPaymentKeys.add(key);
+        return {
+          timestamp: cells[0]?.v || "",
+          paymentNo: cells[1]?.v || "",
+          repairTaskNo: cells[2]?.v || "",
+          serialNo: cells[3]?.v || "",
+          machineName: cells[4]?.v || "",
+          vendorName: cells[5]?.v || "",
+          billNo: cells[6]?.v || "",
+          totalBillAmount: cells[7]?.v || "",
+          paymentType: cells[8]?.v || "",
+          toBePaidAmount: cells[9]?.v || "",
+        };
+      });
+      // Only used for payment number generation, not for history display
+      const seenKeys = new Set();
+      const deduped = formattedPayments.filter((p) => {
+        const key = `${p.repairTaskNo}_${p.billNo}_${p.totalBillAmount}`;
+        if (seenKeys.has(key)) return false;
+        seenKeys.add(key);
         return true;
       });
-
-      setRepairPayments(deduplicatedPayments);
-      setHistoryRepairPayments(deduplicatedPayments);
-
+      setRepairPayments(deduped);
+      // ❌ DO NOT set historyRepairPayments here — history comes from Repair System sheet
     } catch (err) {
       console.error("Error fetching payments:", err);
-      toast.error("Failed to fetch payment history");
     } finally {
       setLoadingTasks(false);
     }

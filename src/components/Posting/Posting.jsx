@@ -12,6 +12,7 @@ import {
 } from "../ui/Table";
 import { useAuth } from "../../context/AuthContext";
 import toast from "react-hot-toast";
+import { fetchRepairTasks as fetchRepairTasksSvc } from "../../services/repairService";
 
 const FIRM_FORM_URLS = {
   pmmpl: "https://docs.google.com/forms/d/e/1FAIpQLScn8tHEUldlOM_8DKpHUfHHiRImDVjkpkhhfduaZUIxpxlJrA/viewform",
@@ -152,69 +153,46 @@ const Posting = () => {
 
   const fetchAllTasks = async (isBackground = false) => {
     try {
-      if (!isBackground) {
-        setLoadingTasks(true);
-      }
-      const SHEET_NAME_TASK = "Repair System";
+      if (!isBackground) setLoadingTasks(true);
 
-      const result = await safeFetchJson(
-        `${SCRIPT_URL}?sheetId=${SHEET_Id}&sheet=${SHEET_NAME_TASK}`
-      );
-      if (!result) return;
+      // Use shared service — returns objects keyed by sheet header names (Row 6)
+      const rawTasks = await fetchRepairTasksSvc(user?.firmName);
 
-      const allRows = result?.table?.rows || [];
-      const taskRows = allRows.slice(5);
+      const formattedTasks = rawTasks.map((row, index) => ({
+        id: `posting-task-${index}`,
+        taskNo: row["Task No"] || "",
+        firmName: row["Firm Name"] || "",
+        serialNo: row["Serial No"] || "",
+        machineName: row["Machine Name"] || "",
+        machinePartName: row["Machine Part Name"] || "",
+        doerName: row["Doer Name"] || "",
+        problem: row["Problem"] || "",
+        priority: row["Priority"] || "",
+        department: row["Department"] || "",
+        location: row["Location"] || "",
+        vendorName: row["Vendor Name"] || "",
+        // Previous steps
+        actual1: row["Actual 1"] || "",
+        actual2: row["Actual 2"] || "",
+        actual3: row["Actual 3"] || "",        // Store In done date
+        billNo: row["Bill No."] || "",
+        typeOfBill: row["Type of Bill"] || "",
+        totalBillAmount: row["Total Bill Amount"] || "",
+        receivedQuantity: row["Received Quantity"] || "",
+        // Posting step
+        plannedPosting: row["Planned Posting"] || "",
+        actualPosting: row["Actual Posting"] || "",
+        delayPosting: row["Delay Posting"] || "",
+      }));
 
-      const formattedTasks = taskRows.map((row, index) => {
-        const cells = row.c || [];
-        const getCellValue = (idx) => cells[idx]?.v ?? cells[idx]?.f ?? "";
+      setTasks(formattedTasks);
 
-        return {
-          id: `posting-task-${index}`,
-          timestamp: getCellValue(0),
-          taskNo: getCellValue(1),
-          firmName: getCellValue(2),
-          serialNo: getCellValue(3),
-          machineName: getCellValue(4),
-          machinePartName: getCellValue(5),
-          givenBy: getCellValue(6),
-          doerName: getCellValue(7),
-          problem: getCellValue(8),
-          priority: getCellValue(13),
-          department: getCellValue(14),
-          location: getCellValue(15),
-          vendorName: getCellValue(20),
-          billNo: getCellValue(34),
-          typeOfBill: getCellValue(35),
-          totalBillAmount: getCellValue(36),
-          receivedQuantity: getCellValue(41),
-          plannedPosting: getCellValue(54),
-          actualPosting: getCellValue(55),
-          delayPosting: getCellValue(56),
-        };
-      });
+      // ✅ PENDING: Actual 3 bhari ho + Actual Posting KHALI ho
+      setPendingTasks(formattedTasks.filter((t) => t.actual3 && !t.actualPosting));
 
-      const userFirmName = user?.firmName || "";
-      const isAllFirm = !userFirmName || userFirmName.toLowerCase() === "all";
+      // ✅ HISTORY: Actual 3 bhari ho + Actual Posting bhari ho
+      setHistoryTasks(formattedTasks.filter((t) => t.actual3 && t.actualPosting));
 
-      const filtered = formattedTasks.filter((task) => {
-        if (isAllFirm) return true;
-        return (task.firmName || "").toLowerCase() === userFirmName.toLowerCase();
-      });
-
-      setTasks(filtered);
-
-      // Pending: Planned Posting is filled but Actual Posting is empty
-      const pending = filtered.filter(
-        (task) => task.plannedPosting && !task.actualPosting
-      );
-      setPendingTasks(pending);
-
-      // History: Both Planned Posting and Actual Posting are filled
-      const history = filtered.filter(
-        (task) => task.plannedPosting && task.actualPosting
-      );
-      setHistoryTasks(history);
     } catch (err) {
       console.error("Error fetching tasks for posting:", err);
       toast.error("Failed to fetch posting tasks");
