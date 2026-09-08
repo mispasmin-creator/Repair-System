@@ -142,6 +142,7 @@ const ManagementApproval = () => {
         taskNo: selectedTask.taskNo,
         "Management Approval Date": approvalDate,
         "Management Remark": remark,
+        "Payment type 2": selectedTask.paymentType || "",
       };
 
       const response = await fetch(SCRIPT_URL, {

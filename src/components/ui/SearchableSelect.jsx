@@ -23,6 +23,7 @@ const SearchableSelect = ({
   onChooseFromList,
   disabled = false,
   className = "",
+  autoFocusOnAdd = true,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -113,7 +114,7 @@ const SearchableSelect = ({
             onChange={(e) => onChange && onChange(e.target.value)}
             placeholder={`Enter new ${plainLabel}`}
             required={required}
-            autoFocus
+            autoFocus={autoFocusOnAdd}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-white"
           />
           {!disableChooseFromList && (

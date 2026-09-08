@@ -518,6 +518,53 @@ function doPost(e) {
       }
     }
 
+    else if (action === 'addToMaster') {
+      // Adds a new value to a specific column in the Master sheet (no duplicates)
+      try {
+        var masterSheetName = params.sheetName || "Master";
+        var columnName = params.columnName;
+        var newValue = (params.value || "").toString().trim();
+
+        if (!columnName || !newValue) {
+          throw new Error("columnName and value are required");
+        }
+
+        var ss2 = SpreadsheetApp.openById(params.sheetId || SHEET_ID);
+        var masterSheet = ss2.getSheetByName(masterSheetName);
+        if (!masterSheet) throw new Error("Sheet '" + masterSheetName + "' not found");
+
+        var masterData = masterSheet.getDataRange().getValues();
+        var masterHeaders = masterData[0];
+        var colIdx = masterHeaders.indexOf(columnName);
+        if (colIdx === -1) throw new Error("Column '" + columnName + "' not found in " + masterSheetName);
+
+        // Check for duplicates (case-insensitive)
+        var existingValues = masterData.slice(1).map(function(r) {
+          return (r[colIdx] || "").toString().trim().toLowerCase();
+        });
+        if (existingValues.indexOf(newValue.toLowerCase()) !== -1) {
+          return ContentService.createTextOutput(JSON.stringify({
+            success: true,
+            message: "Value already exists, no duplicate added"
+          })).setMimeType(ContentService.MimeType.JSON);
+        }
+
+        // Find first empty row in that column (after header)
+        var lastRow = masterSheet.getLastRow();
+        masterSheet.getRange(lastRow + 1, colIdx + 1).setValue(newValue);
+
+        return ContentService.createTextOutput(JSON.stringify({
+          success: true,
+          message: "Value added to Master sheet successfully"
+        })).setMimeType(ContentService.MimeType.JSON);
+      } catch (masterErr) {
+        return ContentService.createTextOutput(JSON.stringify({
+          success: false,
+          message: "addToMaster failed: " + masterErr.message
+        })).setMimeType(ContentService.MimeType.JSON);
+      }
+    }
+
     else {
       throw new Error("Unknown action: " + action);
     }

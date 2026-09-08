@@ -476,7 +476,28 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
       
       if (result.success || response.ok) {
         toast.success("✅ Task assigned successfully!");
-        
+
+        // ✅ If user added a NEW machine name, save it to Master sheet silently
+        if (isAddingMachine && selectedMachine && DATA_FETCH_SCRIPT_URL && DATA_SHEET_ID) {
+          try {
+            await fetch(SUBMIT_SCRIPT_URL, {
+              method: "POST",
+              headers: { "Content-Type": "application/x-www-form-urlencoded" },
+              body: new URLSearchParams({
+                action: "addToMaster",
+                sheetName: "Master",
+                sheetId: DATA_SHEET_ID,
+                columnName: "Machine Name",
+                value: selectedMachine,
+              }).toString(),
+            });
+            // Refresh master data so dropdown shows new machine next time
+            fetchMasterSheetData();
+          } catch (masterErr) {
+            console.warn("Could not save machine to Master sheet:", masterErr);
+          }
+        }
+
         // Clear form state
         clearFormState();
         
@@ -547,7 +568,7 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
         )}
 
         {/* Serial No Related to Machine Name */}
-        {selectedMachine && !loaderSheetData && (
+        {(selectedMachine || isAddingMachine) && !loaderSheetData && (
           <SearchableSelect
             id="serialNo"
             label="Serial Number *"
@@ -561,6 +582,7 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
             disableChooseFromList={isAddingMachine}
             onAddNew={handleAddNewSerial}
             onChooseFromList={handleChooseSerialFromList}
+            autoFocusOnAdd={!isAddingMachine}
           />
         )}
 
