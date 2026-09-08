@@ -29,14 +29,20 @@ export const fetchRepairTasks = async (userFirmName = "") => {
     Object.values(row).some((v) => v !== "" && v !== null && v !== undefined)
   );
 
-  // Filter by firm
+  // Filter by firm — support multiple firms (comma-separated, e.g. "Rkl, Pmmpl")
   const isAllFirm = !userFirmName || userFirmName.toLowerCase() === "all";
-  return isAllFirm
-    ? tasks
-    : tasks.filter(
-        (t) =>
-          (t["Firm Name"] || "").toLowerCase() === userFirmName.toLowerCase()
-      );
+  if (isAllFirm) return tasks;
+
+  // Parse comma-separated firm names
+  const allowedFirms = userFirmName
+    .split(",")
+    .map((f) => f.trim().toLowerCase())
+    .filter(Boolean);
+
+  return tasks.filter((t) => {
+    const taskFirm = (t["Firm Name"] || "").toLowerCase().trim();
+    return allowedFirms.includes(taskFirm) || allowedFirms.includes("all");
+  });
 };
 
 /**

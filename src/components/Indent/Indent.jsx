@@ -30,16 +30,16 @@ const Indent = () => {
   const [selectedStatus, setSelectedStatus] = useState("All");
 
   // Base accessible tasks based on user role and firm
-  const accessibleTasks = tasks
-    .filter(
-      (task) => user?.role === "admin" || task.nameOfIndenter === user?.name
-    )
-    .filter(
-      (task) => {
-        if (!user?.firmName || user.firmName.toLowerCase() === "all") return true;
-        return (task.firmName || "").toLowerCase() === user.firmName.toLowerCase();
-      }
-    );
+  const accessibleTasks = tasks.filter((task) => {
+    if (!user?.firmName || user.firmName.toLowerCase() === "all") return true;
+    // Support multi-firm: "Rkl, Pmmpl"
+    const allowedFirms = user.firmName
+      .split(",")
+      .map((f) => f.trim().toLowerCase())
+      .filter(Boolean);
+    if (allowedFirms.includes("all")) return true;
+    return allowedFirms.includes((task.firmName || "").toLowerCase().trim());
+  });
 
   // Dynamically compute unique values for filters
   const uniqueFirms = ["All", ...new Set(accessibleTasks.map(t => t.firmName).filter(Boolean))];

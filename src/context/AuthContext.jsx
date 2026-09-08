@@ -100,13 +100,22 @@ export const AuthProvider = ({ children }) => {
     localStorage.setItem('repairSystemUser', JSON.stringify(userData));
   };
 
+  // Update currently logged-in user's data (e.g. after admin edits their own account)
+  const updateUser = (updatedFields) => {
+    setUser((prev) => {
+      const merged = { ...prev, ...updatedFields };
+      localStorage.setItem('repairSystemUser', JSON.stringify(merged));
+      return merged;
+    });
+  };
+
   const logout = () => {
     setUser(null);
     localStorage.removeItem('repairSystemUser');
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout }}>
+    <AuthContext.Provider value={{ user, login, logout, updateUser }}>
       {children}
     </AuthContext.Provider>
   );

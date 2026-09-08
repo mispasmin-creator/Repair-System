@@ -14,7 +14,7 @@ import toast from "react-hot-toast";
 import { useAuth } from "../../context/AuthContext";
 
 const Users = () => {
-  const { user: loggedInUser } = useAuth();
+  const { user: loggedInUser, updateUser } = useAuth();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -30,7 +30,7 @@ const Users = () => {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState("user");
-  const [firmName, setFirmName] = useState("Pmmpl");
+  const [firmName, setFirmName] = useState(["Pmmpl"]);
   const [selectedPages, setSelectedPages] = useState({
     Dashboard: true,
     Indent: true,
@@ -61,12 +61,29 @@ const Users = () => {
   ];
 
   const firmOptions = ["All", "Pmmpl", "Purab", "Rkl", "Refrasynth", "Refratech"];
+  const FIRM_OPTIONS_WITHOUT_ALL = ["Pmmpl", "Purab", "Rkl", "Refrasynth", "Refratech"];
+
+  const handleFirmToggle = (firm) => {
+    if (firm === "All") {
+      setFirmName(["All"]);
+    } else {
+      setFirmName((prev) => {
+        const withoutAll = prev.filter((f) => f !== "All");
+        if (withoutAll.includes(firm)) {
+          const next = withoutAll.filter((f) => f !== firm);
+          return next.length === 0 ? ["Pmmpl"] : next;
+        } else {
+          return [...withoutAll, firm];
+        }
+      });
+    }
+  };
 
   const fetchUsers = async () => {
     try {
       setLoading(true);
       const res = await fetch(
-        `${SCRIPT_URL}?sheetId=${SHEET_Id}&sheet=Repair Login`
+        `${SCRIPT_URL}?sheetId=${SHEET_Id}&sheet=Repair%20Login`
       );
       const result = await res.json();
 
@@ -79,7 +96,7 @@ const Users = () => {
             password: (cells[1]?.v || "").toString().trim(),
             role: (cells[2]?.v || "").toString().trim(),
             access: (cells[3]?.v || "").toString().trim(),
-            firmName: (cells[4]?.v || "").toString().trim() || "N/A",
+            firmName: (cells[4]?.v || "").toString().trim(),
           };
         }).filter(u => u.username !== ""); // Filter out empty rows
 
@@ -93,7 +110,7 @@ const Users = () => {
 
         setUsers(scopedUsers);
       } else {
-        console.error("Failed to load users:", result.message);
+        console.error("Failed to load users:", result);
         toast.error("❌ Failed to fetch users");
       }
     } catch (error) {
@@ -105,19 +122,22 @@ const Users = () => {
   };
 
   useEffect(() => {
-    fetchUsers();
-  }, []);
+    if (loggedInUser) {
+      fetchUsers();
+    }
+  }, [loggedInUser?.firmName]);
 
   const handleAddClick = () => {
     setIsEditMode(false);
     setUsername("");
     setPassword("");
     setRole("user");
-    setFirmName("Pmmpl");
+    setFirmName(["Pmmpl"]);
     setSelectedPages({
       Dashboard: true,
       Indent: true,
       "Sent to Vendor": false,
+      "Management Approval": false,
       "Check Machin": false,
       "Store In": false,
       Posting: false,
@@ -133,13 +153,17 @@ const Users = () => {
     setUsername(userRow.username);
     setPassword(userRow.password);
     setRole(userRow.role || "user");
-    setFirmName(userRow.firmName || "Pmmpl");
+    setFirmName(userRow.firmName
+      ? userRow.firmName.split(",").map((f) => f.trim()).filter(Boolean)
+      : ["Pmmpl"]
+    );
     
     const accessArray = (userRow.access || "").split(",").map(p => p.trim());
     const initialPages = {
       Dashboard: accessArray.some(p => p.toLowerCase() === "dashboard"),
       Indent: accessArray.some(p => p.toLowerCase() === "indent"),
       "Sent to Vendor": accessArray.some(p => p.toLowerCase().includes("vendor")),
+      "Management Approval": accessArray.some(p => p.toLowerCase().includes("management") || p.toLowerCase().includes("approval")),
       "Check Machin": accessArray.some(p => p.toLowerCase().includes("check")),
       "Store In": accessArray.some(p => p.toLowerCase().includes("store")),
       Posting: accessArray.some(p => p.toLowerCase().includes("posting")),
@@ -185,7 +209,7 @@ const Users = () => {
         formPayload.append("Password", password.trim());
         formPayload.append("Role", role);
         formPayload.append("Page Access", accessList);
-        formPayload.append("Firm Name", firmName);
+        formPayload.append("Firm Name", Array.isArray(firmName) ? firmName.join(", ") : firmName);
       } else {
         formPayload.append("action", "insert");
         
@@ -194,7 +218,7 @@ const Users = () => {
           Password: password.trim(),
           Role: role,
           "Page Access": accessList,
-          "Firm Name": firmName,
+          "Firm Name": Array.isArray(firmName) ? firmName.join(", ") : firmName,
         };
 
         Object.entries(userData).forEach(([key, val]) => {
@@ -212,14 +236,25 @@ const Users = () => {
       if (result.success || response.ok) {
         toast.success(isEditMode ? "✅ User updated successfully!" : "✅ User created successfully!");
         
+        // If the edited user is the currently logged-in user, update their session too
+        if (isEditMode && loggedInUser?.name?.toLowerCase() === username.trim().toLowerCase()) {
+          const newAccessList = accessList.split(", ").map(a => a.trim()).filter(Boolean);
+          updateUser({
+            role: role,
+            access: newAccessList,
+            firmName: Array.isArray(firmName) ? firmName.join(", ") : firmName,
+          });
+        }
+
         setUsername("");
         setPassword("");
         setRole("user");
-        setFirmName("Pmmpl");
+        setFirmName(["Pmmpl"]);
         setSelectedPages({
           Dashboard: true,
           Indent: true,
           "Sent to Vendor": false,
+          "Management Approval": false,
           "Check Machin": false,
           "Store In": false,
           Posting: false,
@@ -241,165 +276,231 @@ const Users = () => {
     }
   };
 
-  const filteredUsers = users.filter((user) => {
+  const filteredUsers = users.filter((u) => {
     const search = searchTerm.toLowerCase();
     const matchesSearch =
-      user.username.toLowerCase().includes(search) ||
-      user.firmName.toLowerCase().includes(search) ||
-      user.role.toLowerCase().includes(search);
+      (u.username || "").toLowerCase().includes(search) ||
+      (u.firmName || "").toLowerCase().includes(search) ||
+      (u.role || "").toLowerCase().includes(search);
 
-    const matchesRole = selectedRole === "All" || (user.role || "").toLowerCase() === selectedRole.toLowerCase();
-    const matchesFirm = selectedFirmFilter === "All" || (user.firmName || "").toLowerCase() === selectedFirmFilter.toLowerCase();
+    const matchesRole = selectedRole === "All" || (u.role || "").toLowerCase() === selectedRole.toLowerCase();
+    // Support multi-firm: check if any of user's firms matches the filter
+    const userFirms = (u.firmName || "").split(",").map((f) => f.trim().toLowerCase());
+    const matchesFirm =
+      selectedFirmFilter === "All" ||
+      userFirms.includes(selectedFirmFilter.toLowerCase()) ||
+      userFirms.includes("all");
 
     return matchesSearch && matchesRole && matchesFirm;
   });
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
+      {/* Page Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-gray-900">User Management</h1>
-        <Button onClick={handleAddClick}>
-          <Plus className="w-4 h-4 mr-2" />
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">User Management</h1>
+          <p className="text-sm text-gray-500 mt-0.5">
+            Manage users, roles, firm access and page permissions
+          </p>
+        </div>
+        <Button onClick={handleAddClick} className="flex items-center gap-2">
+          <Plus className="w-4 h-4" />
           Add User
         </Button>
       </div>
 
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-        {/* Search Header */}
-        <div className="p-6 border-b border-gray-200">
-          <div className="flex items-center space-x-4">
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-              <input
-                type="text"
-                placeholder="Search by username, firm name or role..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
+      {/* Stats row */}
+      {!loading && loggedInUser && users.length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[
+            { label: "Total Users", value: users.length, color: "bg-blue-50 text-blue-700 border-blue-100" },
+            { label: "Admins", value: users.filter(u => u.role === "admin").length, color: "bg-purple-50 text-purple-700 border-purple-100" },
+            { label: "Regular Users", value: users.filter(u => u.role !== "admin").length, color: "bg-green-50 text-green-700 border-green-100" },
+            { label: "Shown", value: filteredUsers.length, color: "bg-orange-50 text-orange-700 border-orange-100" },
+          ].map((stat) => (
+            <div key={stat.label} className={`rounded-xl border p-3 flex flex-col ${stat.color}`}>
+              <span className="text-xs font-medium opacity-70">{stat.label}</span>
+              <span className="text-2xl font-bold mt-0.5">{stat.value}</span>
             </div>
-            <Button
-              variant={showFilters ? "primary" : "secondary"}
-              size="sm"
-              onClick={() => setShowFilters(!showFilters)}
-            >
-              <Filter className="w-4 h-4 mr-2" />
-              Filter
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={fetchUsers}
-              disabled={loading}
-            >
-              {loading ? "Refreshing..." : "Refresh"}
-            </Button>
+          ))}
+        </div>
+      )}
+
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200">
+        {/* Search & Filter Bar */}
+        <div className="px-5 py-4 border-b border-gray-100 flex flex-wrap items-center gap-3">
+          <div className="relative flex-1 min-w-[200px] max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+            <input
+              type="text"
+              placeholder="Search username, firm or role..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-50"
+            />
           </div>
-
-          {showFilters && (
-            <div className="mt-4 pt-4 border-t border-gray-200 grid grid-cols-1 sm:grid-cols-2 gap-4 animate-fadeIn">
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Role</label>
-                <select
-                  value={selectedRole}
-                  onChange={(e) => setSelectedRole(e.target.value)}
-                  className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm"
-                >
-                  <option value="All">All Roles</option>
-                  <option value="Admin">Admin</option>
-                  <option value="User">User</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Firm Name</label>
-                <select
-                  value={selectedFirmFilter}
-                  onChange={(e) => setSelectedFirmFilter(e.target.value)}
-                  className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm"
-                >
-                  <option value="All">All Firms</option>
-                  <option value="Pmmpl">Pmmpl</option>
-                  <option value="Purab">Purab</option>
-                  <option value="Rkl">Rkl</option>
-                  <option value="Refrasynth">Refrasynth</option>
-                  <option value="Refratech">Refratech</option>
-                </select>
-              </div>
-            </div>
-          )}
+          <Button
+            variant={showFilters ? "primary" : "secondary"}
+            size="sm"
+            onClick={() => setShowFilters(!showFilters)}
+          >
+            <Filter className="w-4 h-4 mr-1.5" />
+            {showFilters ? "Hide Filters" : "Filter"}
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={fetchUsers}
+            disabled={loading}
+          >
+            {loading ? "Refreshing..." : "Refresh"}
+          </Button>
         </div>
 
-        {/* Users Table */}
+        {/* Filters Panel */}
+        {showFilters && (
+          <div className="px-5 py-3 border-b border-gray-100 bg-gray-50 grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Role</label>
+              <select
+                value={selectedRole}
+                onChange={(e) => setSelectedRole(e.target.value)}
+                className="w-full p-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              >
+                <option value="All">All Roles</option>
+                <option value="Admin">Admin</option>
+                <option value="User">User</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Firm Name</label>
+              <select
+                value={selectedFirmFilter}
+                onChange={(e) => setSelectedFirmFilter(e.target.value)}
+                className="w-full p-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              >
+                <option value="All">All Firms</option>
+                <option value="Pmmpl">Pmmpl</option>
+                <option value="Purab">Purab</option>
+                <option value="Rkl">Rkl</option>
+                <option value="Refrasynth">Refrasynth</option>
+                <option value="Refratech">Refratech</option>
+              </select>
+            </div>
+          </div>
+        )}
+
+        {/* Table */}
         <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableHead className="min-w-[150px]">User Name</TableHead>
-              <TableHead className="min-w-[150px]">Password</TableHead>
-              <TableHead className="min-w-[120px]">Role</TableHead>
-              <TableHead className="min-w-[150px]">Firm Name</TableHead>
-              <TableHead className="min-w-[250px]">Page Access</TableHead>
-              <TableHead className="w-[100px] text-right">Actions</TableHead>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8">
-                    <div className="flex flex-col items-center justify-center">
-                      <Loader2Icon className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin text-blue-500" />
-                      <p className="mt-4 text-gray-600">Loading users list...</p>
+          <table className="w-full text-sm min-w-[900px]">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-100">
+                <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap w-[160px]">User Name</th>
+                <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap w-[140px]">Password</th>
+                <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap w-[100px]">Role</th>
+                <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap w-[150px]">Firm Name</th>
+                <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Page Access</th>
+                <th className="text-center px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap w-[80px]">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {(loading || !loggedInUser) ? (
+                <tr>
+                  <td colSpan={6} className="text-center py-14">
+                    <div className="flex flex-col items-center justify-center gap-3">
+                      <Loader2Icon className="w-8 h-8 animate-spin text-blue-500" />
+                      <p className="text-gray-500 text-sm">Loading users...</p>
                     </div>
-                  </TableCell>
-                </TableRow>
+                  </td>
+                </tr>
               ) : filteredUsers.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8">
-                    <p className="text-gray-500">No users found</p>
-                  </TableCell>
-                </TableRow>
+                <tr>
+                  <td colSpan={6} className="text-center py-14">
+                    <div className="flex flex-col items-center gap-2">
+                      <ShieldAlert className="w-10 h-10 text-gray-300" />
+                      <p className="text-gray-400 font-medium">No users found</p>
+                      <p className="text-gray-400 text-xs">Try adjusting your search or filters</p>
+                    </div>
+                  </td>
+                </tr>
               ) : (
                 filteredUsers.map((u) => (
-                  <TableRow key={u.id}>
-                    <TableCell className="font-semibold text-gray-800">
-                      {u.username}
-                    </TableCell>
-                    <TableCell className="font-mono text-gray-600">
-                      {u.password}
-                    </TableCell>
-                    <TableCell>
-                      <span
-                        className={`px-2 py-1 text-xs font-semibold rounded-full capitalize ${
-                          u.role === "admin"
-                            ? "bg-purple-100 text-purple-800"
-                            : "bg-gray-100 text-gray-800"
-                        }`}
-                      >
+                  <tr key={u.id} className="hover:bg-blue-50/40 transition-colors group">
+                    {/* Username */}
+                    <td className="px-5 py-3.5">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                          {(u.username || "?")[0].toUpperCase()}
+                        </div>
+                        <span className="font-semibold text-gray-800 truncate max-w-[100px]" title={u.username}>
+                          {u.username}
+                        </span>
+                      </div>
+                    </td>
+                    {/* Password */}
+                    <td className="px-5 py-3.5">
+                      <span className="font-mono text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                        {u.password}
+                      </span>
+                    </td>
+                    {/* Role */}
+                    <td className="px-5 py-3.5">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold capitalize ${
+                        u.role === "admin"
+                          ? "bg-purple-100 text-purple-800"
+                          : "bg-gray-100 text-gray-700"
+                      }`}>
                         {u.role}
                       </span>
-                    </TableCell>
-                    <TableCell>
-                      <span className="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
-                        {u.firmName}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-gray-600 max-w-[300px] break-words">
-                      {u.access}
-                    </TableCell>
-                    <TableCell className="text-right">
+                    </td>
+                    {/* Firm Name */}
+                    <td className="px-5 py-3.5">
+                      <div className="flex flex-wrap gap-1">
+                        {(u.firmName || "").split(",").map((f) => f.trim()).filter(Boolean).map((firm) => (
+                          <span key={firm} className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold ${
+                            firm.toLowerCase() === "all"
+                              ? "bg-green-100 text-green-800"
+                              : "bg-blue-100 text-blue-800"
+                          }`}>
+                            {firm}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                    {/* Page Access */}
+                    <td className="px-5 py-3.5">
+                      <div className="flex flex-wrap gap-1">
+                        {(u.access || "").split(",").map((p) => p.trim()).filter(Boolean).map((page) => (
+                          <span key={page} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-100">
+                            {page}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                    {/* Actions */}
+                    <td className="px-5 py-3.5 text-center">
                       <button
                         onClick={() => handleEditClick(u)}
-                        className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg transition-colors duration-150 inline-flex items-center"
+                        className="p-1.5 text-blue-600 hover:text-white hover:bg-blue-600 rounded-lg transition-all duration-150 inline-flex items-center gap-1 border border-blue-200 hover:border-blue-600"
                         title="Edit User"
                       >
-                        <Edit className="w-4 h-4" />
+                        <Edit className="w-3.5 h-3.5" />
                       </button>
-                    </TableCell>
-                  </TableRow>
+                    </td>
+                  </tr>
                 ))
               )}
-            </TableBody>
-          </Table>
+            </tbody>
+          </table>
         </div>
+
+        {/* Footer count */}
+        {!loading && loggedInUser && filteredUsers.length > 0 && (
+          <div className="px-5 py-3 border-t border-gray-100 bg-gray-50 text-xs text-gray-500">
+            Showing {filteredUsers.length} of {users.length} users
+          </div>
+        )}
       </div>
 
       {/* Add/Edit User Modal */}
@@ -410,86 +511,80 @@ const Users = () => {
         size="md"
       >
         <form onSubmit={handleFormSubmit} className="space-y-4">
-          {/* User Name */}
-          <div>
-            <label
-              htmlFor="username"
-              className="block text-sm font-medium text-gray-700 mb-1"
-            >
-              Username *
-            </label>
-            <input
-              type="text"
-              id="username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="e.g. Subhash"
-              className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                isEditMode ? "bg-gray-100 cursor-not-allowed text-gray-500" : ""
-              }`}
-              required
-              disabled={isEditMode}
-            />
-          </div>
-
-          {/* Password */}
-          <div>
-            <label
-              htmlFor="password"
-              className="block text-sm font-medium text-gray-700 mb-1"
-            >
-              Password *
-            </label>
-            <input
-              type="text"
-              id="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="e.g. Subhash123"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              required
-            />
+          {/* Username & Password side by side */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-1">
+                Username <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                id="username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="e.g. Subhash"
+                className={`w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                  isEditMode ? "bg-gray-100 cursor-not-allowed text-gray-500" : ""
+                }`}
+                required
+                disabled={isEditMode}
+              />
+            </div>
+            <div>
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+                Password <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                id="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="e.g. Subhash123"
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                required
+              />
+            </div>
           </div>
 
           {/* Role */}
           <div>
-            <label
-              htmlFor="role"
-              className="block text-sm font-medium text-gray-700 mb-1"
-            >
+            <label htmlFor="role" className="block text-sm font-medium text-gray-700 mb-1">
               Role
             </label>
             <select
               id="role"
               value={role}
               onChange={(e) => setRole(e.target.value)}
-              className="w-full py-2 rounded-md border border-gray-300 shadow-sm px-4 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full py-2 px-3 text-sm rounded-lg border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="user">User</option>
               <option value="admin">Admin</option>
             </select>
           </div>
 
-          {/* Firm Name */}
+          {/* Firm Name — multi-select checkboxes */}
           <div>
-            <label
-              htmlFor="firmName"
-              className="block text-sm font-medium text-gray-700 mb-1"
-            >
+            <label className="block text-sm font-medium text-gray-700 mb-2">
               Firm Name
+              {Array.isArray(firmName) && firmName.length > 0 && (
+                <span className="ml-2 text-xs font-normal text-blue-600">
+                  ({firmName.join(", ")})
+                </span>
+              )}
             </label>
-            <select
-              id="firmName"
-              value={firmName}
-              onChange={(e) => setFirmName(e.target.value)}
-              className="w-full py-2 rounded-md border border-gray-300 shadow-sm px-4 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
+            <div className="grid grid-cols-3 gap-2 bg-gray-50 p-3 rounded-lg border border-gray-200">
               {firmOptions.map((firm) => (
-                <option key={firm} value={firm}>
-                  {firm}
-                </option>
+                <label key={firm} className="flex items-center gap-2 p-1.5 hover:bg-white rounded cursor-pointer transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={Array.isArray(firmName) ? firmName.includes(firm) : firmName === firm}
+                    onChange={() => handleFirmToggle(firm)}
+                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  />
+                  <span className="text-sm text-gray-700">{firm}</span>
+                </label>
               ))}
-            </select>
+            </div>
           </div>
 
           {/* Page Access */}
@@ -499,7 +594,7 @@ const Users = () => {
             </label>
             <div className="grid grid-cols-2 gap-2 bg-gray-50 p-3 rounded-lg border border-gray-200">
               {pageOptions.map((opt) => (
-                <label key={opt.key} className="flex items-center space-x-2 p-1 hover:bg-gray-100 rounded cursor-pointer">
+                <label key={opt.key} className="flex items-center gap-2 p-1.5 hover:bg-white rounded cursor-pointer transition-colors">
                   <input
                     type="checkbox"
                     checked={selectedPages[opt.key]}
@@ -513,7 +608,7 @@ const Users = () => {
           </div>
 
           {/* Buttons */}
-          <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
+          <div className="flex justify-end gap-3 pt-3 border-t border-gray-100">
             <Button
               type="button"
               variant="secondary"
@@ -522,7 +617,7 @@ const Users = () => {
               Cancel
             </Button>
             <Button type="submit" variant="primary" disabled={loaderSubmit}>
-              {loaderSubmit && <Loader2Icon className="animate-spin mr-2" />}
+              {loaderSubmit && <Loader2Icon className="animate-spin w-4 h-4 mr-2" />}
               {isEditMode ? "Update User" : "Save User"}
             </Button>
           </div>
