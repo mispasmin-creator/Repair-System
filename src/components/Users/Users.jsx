@@ -54,7 +54,7 @@ const Users = () => {
     { key: "Management Approval", label: "Management Approval" },
     { key: "Check Machin", label: "Check Machine" },
     { key: "Store In", label: "Store In" },
-    { key: "Posting", label: "Posting" },
+    { key: "Posting", label: "Process for payment" },
     { key: "Make Payment", label: "Make Payment" },
     { key: "Full Kitting", label: "Full Kitting" },
     { key: "Accounts", label: "Accounts" },

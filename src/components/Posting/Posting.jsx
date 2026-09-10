@@ -14,14 +14,6 @@ import { useAuth } from "../../context/AuthContext";
 import toast from "react-hot-toast";
 import { fetchRepairTasks as fetchRepairTasksSvc } from "../../services/repairService";
 
-const FIRM_FORM_URLS = {
-  pmmpl: "https://docs.google.com/forms/d/e/1FAIpQLScn8tHEUldlOM_8DKpHUfHHiRImDVjkpkhhfduaZUIxpxlJrA/viewform",
-  purab: "https://docs.google.com/forms/d/e/1FAIpQLSdLWKfGPNXK62Orndb137GPKadFiRQZS8W_MM0c11HvdR4KkA/viewform",
-  rkl: "https://docs.google.com/forms/d/e/1FAIpQLScJJFvh6zchRosSzX0mU-u7-oeMaQW6iv1osE70hRDoE-uVrg/viewform",
-  refrasynth: "https://docs.google.com/forms/d/e/1FAIpQLSdHF5shP_liUbm1tsyOS3nrEmNUY9Y5zl4y2odXK0weaDjcpA/viewform",
-  refratech: "https://docs.google.com/forms/d/e/1FAIpQLScTunRezHE3TKtNpXjISVWjnywDwUcT6F62DYtkLlgXL6MMaQ/viewform",
-};
-
 const Posting = () => {
   const { user } = useAuth();
 
@@ -36,15 +28,13 @@ const Posting = () => {
   const [searchTerm, setSearchTerm] = useState("");
 
   const [formData, setFormData] = useState({
-    postingDate: new Date().toLocaleDateString("en-GB", { timeZone: "Asia/Kolkata" }),
-    voucherNo: "",
     remark: "",
   });
 
   const [showFilters, setShowFilters] = useState(false);
   const [selectedFirm, setSelectedFirm] = useState("All");
-  const [selectedPriority, setSelectedPriority] = useState("All");
   const [selectedDepartment, setSelectedDepartment] = useState("All");
+  const [selectedPriority, setSelectedPriority] = useState("All");
 
   const uniqueFirms = ["All", ...new Set(tasks.map((t) => t.firmName).filter(Boolean))];
   const uniqueDepartments = ["All", ...new Set(tasks.map((t) => t.department).filter(Boolean))];
@@ -70,34 +60,9 @@ const Posting = () => {
   const handlePostingClick = (task) => {
     setSelectedTask(task);
     setFormData({
-      postingDate: new Date().toLocaleDateString("en-GB", { timeZone: "Asia/Kolkata" }),
-      voucherNo: "",
       remark: "",
     });
     setIsModalOpen(true);
-  };
-
-  const handleOpenForm = (task) => {
-    const firmKey = (task.firmName || "").toLowerCase().trim();
-    const baseUrl = FIRM_FORM_URLS[firmKey];
-    if (!baseUrl) {
-      toast.error(`No Google Form configured for firm: "${task.firmName || "Unknown"}"`);
-      return;
-    }
-
-    const params = new URLSearchParams();
-    params.set("usp", "pp_url");
-    if (task.taskNo) {
-      params.set("entry.1200639812", task.taskNo);
-    }
-    params.set("entry.604194301", "Repair FMS");
-    params.set("entry.1358288895", "Yes");
-    if (task.problem || task.machineName) {
-      params.set("entry.1091308719", task.problem || task.machineName);
-    }
-
-    const fullUrl = `${baseUrl}?${params.toString()}`;
-    window.open(fullUrl, "_blank", "noopener,noreferrer");
   };
 
   const SCRIPT_URL = import.meta.env.VITE_SCRIPT_URL;
@@ -184,6 +149,7 @@ const Posting = () => {
         plannedPosting: row["Planned Posting"] || "",
         actualPosting: row["Actual Posting"] || "",
         delayPosting: row["Delay Posting"] || "",
+        processRemark: row["Process Remark"] || row["Remark"] || "",
       }));
 
       setTasks(formattedTasks);
@@ -214,14 +180,22 @@ const Posting = () => {
 
     if (!selectedTask) return;
 
+    if (!formData.remark.trim()) {
+      toast.error("Please enter a process remark");
+      return;
+    }
+
     try {
       setSubmitLoading(true);
 
+      const todayIST = new Date().toLocaleDateString("en-GB", { timeZone: "Asia/Kolkata" });
       const payload = {
         action: "update1",
         sheetName: "Repair System",
         taskNo: selectedTask.taskNo,
-        "Actual Posting": formData.postingDate,
+        "Actual Posting": todayIST,
+        "Process Remark": formData.remark.trim(),
+        "Remark": formData.remark.trim(),
       };
 
       const response = await fetch(SCRIPT_URL, {
@@ -235,11 +209,11 @@ const Posting = () => {
       const result = await response.json();
 
       if (result.success) {
-        toast.success("✅ Posting completed successfully");
+        toast.success("✅ Processed for payment successfully");
         setIsModalOpen(false);
         await fetchAllTasks(true);
       } else {
-        toast.error("❌ Failed to update posting: " + (result.message || "Unknown error"));
+        toast.error("❌ Failed to process: " + (result.message || "Unknown error"));
       }
     } catch (error) {
       console.error("Submit error:", error);
@@ -257,8 +231,8 @@ const Posting = () => {
           <div className="flex items-center space-x-3">
             <ClipboardCheck className="w-8 h-8 text-blue-600" />
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Posting</h1>
-              <p className="text-gray-600">Manage and confirm machine posting records</p>
+              <h1 className="text-2xl font-bold text-gray-900">Process for payment</h1>
+              <p className="text-gray-600">Manage and confirm payment processing records</p>
             </div>
           </div>
         </div>
@@ -402,26 +376,14 @@ const Posting = () => {
                   filteredPendingTasks.map((task) => (
                     <TableRow key={task.id || task.taskNo} className="hover:bg-gray-50 transition-colors">
                       <TableCell className="text-center whitespace-nowrap">
-                        <div className="flex items-center justify-center gap-2">
-                          <Button
-                            size="sm"
-                            onClick={() => handlePostingClick(task)}
-                            className="flex items-center"
-                          >
-                            <ClipboardCheck className="w-3.5 h-3.5 mr-1" />
-                            Posting
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleOpenForm(task)}
-                            className="flex items-center border-purple-300 text-purple-700 hover:bg-purple-50 hover:border-purple-400 font-medium"
-                            title={`Open Google Form for ${task.firmName || "Firm"}`}
-                          >
-                            <ExternalLink className="w-3.5 h-3.5 mr-1 text-purple-600" />
-                            Form
-                          </Button>
-                        </div>
+                        <Button
+                          size="sm"
+                          onClick={() => handlePostingClick(task)}
+                          className="flex items-center mx-auto"
+                        >
+                          <ClipboardCheck className="w-3.5 h-3.5 mr-1" />
+                          Process
+                        </Button>
                       </TableCell>
                       <TableCell className="font-medium text-blue-600 whitespace-nowrap">
                         {task.taskNo || "-"}
@@ -465,11 +427,12 @@ const Posting = () => {
                 <TableHead className="min-w-[140px] whitespace-nowrap">Planned Posting</TableHead>
                 <TableHead className="min-w-[140px] whitespace-nowrap">Actual Posting</TableHead>
                 <TableHead className="min-w-[100px] text-center whitespace-nowrap">Delay</TableHead>
+                <TableHead className="min-w-[160px] whitespace-nowrap">Process Remark</TableHead>
               </TableHeader>
               <TableBody>
                 {loadingTasks ? (
                   <TableRow>
-                    <TableCell colSpan={11} className="text-center py-12">
+                    <TableCell colSpan={12} className="text-center py-12">
                       <div className="flex flex-col items-center justify-center">
                         <div className="w-9 h-9 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                         <p className="mt-3 text-sm text-gray-500 font-medium">Loading tasks...</p>
@@ -478,7 +441,7 @@ const Posting = () => {
                   </TableRow>
                 ) : filteredHistoryTasks.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={11} className="text-center py-12 text-gray-500">
+                    <TableCell colSpan={12} className="text-center py-12 text-gray-500">
                       No history posting tasks found
                     </TableCell>
                   </TableRow>
@@ -520,6 +483,9 @@ const Posting = () => {
                           {task.delayPosting || "0"}
                         </span>
                       </TableCell>
+                      <TableCell className="whitespace-nowrap text-gray-700">
+                        {task.processRemark || task.remark || "-"}
+                      </TableCell>
                     </TableRow>
                   ))
                 )}
@@ -529,11 +495,11 @@ const Posting = () => {
         )}
       </div>
 
-      {/* Posting Modal */}
+      {/* Process for payment Modal */}
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={`Confirm Posting: ${selectedTask?.taskNo || ""}`}
+        title={`Confirm Process for Payment: ${selectedTask?.taskNo || ""}`}
       >
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="bg-blue-50/50 p-4 rounded-lg border border-blue-100 space-y-1.5 text-sm">
@@ -546,15 +512,15 @@ const Posting = () => {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Posting Date <span className="text-red-500">*</span>
+              Process Remark <span className="text-red-500">*</span>
             </label>
-            <input
-              type="text"
+            <textarea
               required
-              value={formData.postingDate}
-              onChange={(e) => setFormData({ ...formData, postingDate: e.target.value })}
+              rows={3}
+              value={formData.remark}
+              onChange={(e) => setFormData({ ...formData, remark: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              placeholder="DD/MM/YYYY"
+              placeholder="Enter process remark..."
             />
           </div>
 
@@ -572,7 +538,7 @@ const Posting = () => {
               disabled={submitLoading}
               className="bg-blue-600 hover:bg-blue-700 text-white"
             >
-              {submitLoading ? "Submitting..." : "Confirm Posting"}
+              {submitLoading ? "Submitting..." : "Confirm Process"}
             </Button>
           </div>
         </form>

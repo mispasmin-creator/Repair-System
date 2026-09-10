@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from "react";
-import { Search, Filter, Package } from "lucide-react";
+import { Search, Filter, Package, ExternalLink } from "lucide-react";
 import Button from "../ui/Button";
 import Modal from "../ui/Modal";
 import {
@@ -14,6 +14,15 @@ import { useAuth } from "../../context/AuthContext";
 import useDataStore from "../../store/dataStore";
 import toast from "react-hot-toast";
 import { fetchRepairTasks as fetchRepairTasksSvc } from "../../services/repairService";
+
+// Google Form URLs mapped by firm name
+const FIRM_FORM_URLS = {
+  pmmpl: "https://docs.google.com/forms/d/e/1FAIpQLScn8tHEUldlOM_8DKpHUfHHiRImDVjkpkhhfduaZUIxpxlJrA/viewform",
+  purab: "https://docs.google.com/forms/d/e/1FAIpQLSdLWKfGPNXK62Orndb137GPKadFiRQZS8W_MM0c11HvdR4KkA/viewform",
+  rkl: "https://docs.google.com/forms/d/e/1FAIpQLScJJFvh6zchRosSzX0mU-u7-oeMaQW6iv1osE70hRDoE-uVrg/viewform",
+  refrasynth: "https://docs.google.com/forms/d/e/1FAIpQLSdHF5shP_liUbm1tsyOS3nrEmNUY9Y5zl4y2odXK0weaDjcpA/viewform",
+  refratech: "https://docs.google.com/forms/d/e/1FAIpQLScTunRezHE3TKtNpXjISVWjnywDwUcT6F62DYtkLlgXL6MMaQ/viewform",
+};
 
 const MakePayment = () => {
   const { user } = useAuth();
@@ -38,6 +47,23 @@ const MakePayment = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [selectedFirm, setSelectedFirm] = useState("All");
+
+  const handleOpenForm = (task) => {
+    const firmKey = (task.firmName || "").toLowerCase().trim();
+    const baseUrl = FIRM_FORM_URLS[firmKey] || FIRM_FORM_URLS.refrasynth;
+    const taskNumber = task.taskNo || task.repairTaskNo || "";
+    const description = task.problem || task.machineName || "";
+
+    const params = new URLSearchParams({
+      "usp": "pp_url",
+      "entry.1200639812": taskNumber,
+      "entry.604194301": "Repair FMS",
+      "entry.1358288895": "Yes",
+      "entry.1091308719": description,
+    });
+
+    window.open(`${baseUrl}?${params.toString()}`, "_blank");
+  };
   const [selectedPaymentType, setSelectedPaymentType] = useState("All");
   const [selectedPriority, setSelectedPriority] = useState("All");
 
@@ -667,10 +693,22 @@ const MakePayment = () => {
                     displayedPending.map((task) => (
                       <tr key={task.taskNo || Math.random()} className="hover:bg-blue-50/40 transition-colors duration-150">
                         <td className="px-4 py-3 text-sm whitespace-nowrap text-center">
-                          <Button size="sm" onClick={() => handleMaterialClick(task)} className="flex items-center mx-auto">
-                            <Package className="w-3.5 h-3.5 mr-1" />
-                            Material
-                          </Button>
+                          <div className="flex items-center justify-center gap-2">
+                            <Button size="sm" onClick={() => handleMaterialClick(task)} className="flex items-center">
+                              <Package className="w-3.5 h-3.5 mr-1" />
+                              Material
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              onClick={() => handleOpenForm(task)}
+                              className="flex items-center text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200"
+                              title="Open Google Form"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5 mr-1" />
+                              Form
+                            </Button>
+                          </div>
                         </td>
                         <td className="px-4 py-3 text-sm font-medium text-blue-600 whitespace-nowrap">{task.taskNo}</td>
                         <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">{task.firmName || "-"}</td>

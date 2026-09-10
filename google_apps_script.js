@@ -173,6 +173,39 @@ function doGet(e) {
       }
     }
 
+    // Handle adding Process Remark column in Repair System sheet
+    if (e.parameter.action === 'addProcessRemarkColumn') {
+      try {
+        var sheetId = e.parameter.sheetId;
+        var ss = sheetId ? SpreadsheetApp.openById(sheetId) : SpreadsheetApp.getActiveSpreadsheet();
+        var sheet = ss.getSheetByName('Repair System');
+        if (!sheet) {
+          return ContentService.createTextOutput(JSON.stringify({ success: false, error: 'Repair System sheet not found' }))
+            .setMimeType(ContentService.MimeType.JSON);
+        }
+
+        var headers = sheet.getRange(6, 1, 1, sheet.getLastColumn()).getValues()[0];
+        var existingIndex = headers.indexOf('Process Remark');
+        if (existingIndex !== -1) {
+          return ContentService.createTextOutput(JSON.stringify({
+            success: true,
+            message: "Process Remark column already exists at column " + (existingIndex + 1)
+          })).setMimeType(ContentService.MimeType.JSON);
+        }
+
+        var nextCol = sheet.getLastColumn() + 1;
+        sheet.getRange(6, nextCol).setValue('Process Remark');
+
+        return ContentService.createTextOutput(JSON.stringify({
+          success: true,
+          message: "Successfully added 'Process Remark' header in Row 6 at Column " + nextCol + "!"
+        })).setMimeType(ContentService.MimeType.JSON);
+      } catch (err) {
+        return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.toString() }))
+          .setMimeType(ContentService.MimeType.JSON);
+      }
+    }
+
     // Existing sheet data retrieval logic
     var sheetName = e.parameter.sheet;
     var sheetId = e.parameter.sheetId;
@@ -836,5 +869,28 @@ function addCommonBillColumns() {
     Logger.log("Headers already exist in Row 6!");
   }
 }
+
+/**
+ * Run this function once in Google Apps Script Editor to automatically
+ * add "Process Remark" header in Row 6 of "Repair System" sheet.
+ */
+function addProcessRemarkColumn() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName("Repair System");
+  if (!sheet) {
+    Logger.log("Repair System sheet not found");
+    return;
+  }
+
+  var headers = sheet.getRange(6, 1, 1, sheet.getLastColumn()).getValues()[0];
+  if (headers.indexOf("Process Remark") === -1) {
+    var nextCol = sheet.getLastColumn() + 1;
+    sheet.getRange(6, nextCol).setValue("Process Remark");
+    Logger.log("Successfully added 'Process Remark' header at Col " + nextCol + " of Row 6!");
+  } else {
+    Logger.log("'Process Remark' already exists in Row 6!");
+  }
+}
+
 
 

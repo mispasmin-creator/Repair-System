@@ -27,7 +27,7 @@ const Sidebar = ({ activeTab, setActiveTab }) => {
     { id: 'management-approval', label: 'Management Approval', icon: ShieldCheck },
     { id: 'check-machine', label: 'Check Machine', icon: CheckCircle },
     { id: 'store-in', label: 'Store In', icon: Package },
-    { id: 'posting', label: 'Posting', icon: ClipboardCheck },
+    { id: 'posting', label: 'Process for payment', icon: ClipboardCheck },
     // { id: 'repair-advance', label: 'Repair Advance', icon: CreditCard },
     { id: 'make-payment', label: 'Make Payment', icon: DollarSign },
     { id: 'full-kitting', label: 'Full Kitting', icon: BoxSelect },
@@ -46,9 +46,13 @@ const Sidebar = ({ activeTab, setActiveTab }) => {
     if (user?.role === 'admin') return true;
     if (item.id === 'users') return false;
     if (userAccess.length === 0) return true;
+    const labelLower = item.label.toLowerCase().trim();
+    const idLower = item.id.toLowerCase().trim();
     return (
-      userAccess.includes(item.label.toLowerCase().trim()) ||
-      userAccess.some((a) => item.label.toLowerCase().includes(a) || a.includes(item.label.toLowerCase()))
+      userAccess.includes(labelLower) ||
+      userAccess.includes(idLower) ||
+      (item.id === 'posting' && (userAccess.includes('posting') || userAccess.includes('process for payment'))) ||
+      userAccess.some((a) => labelLower.includes(a) || a.includes(labelLower))
     );
   });
 
