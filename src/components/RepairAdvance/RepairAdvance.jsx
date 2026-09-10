@@ -284,6 +284,7 @@ const RepairAdvance = () => {
             <TableHeader>
               <TableHead>Action</TableHead>
               <TableHead>Task Number</TableHead>
+              <TableHead>Firm Name</TableHead>
               <TableHead>Machine Name</TableHead>
               <TableHead>Part Name</TableHead>
               <TableHead>Vendor Name</TableHead>
@@ -306,6 +307,7 @@ const RepairAdvance = () => {
                   <TableCell className="font-medium text-blue-600">
                     {task.taskNo}
                   </TableCell>
+                  <TableCell>{task.firmName || "-"}</TableCell>
                   <TableCell>{task.machineName}</TableCell>
                   <TableCell>{task.machinePartName}</TableCell>
                   <TableCell>{task.vendorName || "-"}</TableCell>
@@ -339,6 +341,7 @@ const RepairAdvance = () => {
           <Table>
             <TableHeader>
               <TableHead>Task Number</TableHead>
+              <TableHead>Firm Name</TableHead>
               <TableHead>Machine Name</TableHead>
               <TableHead>Part Name</TableHead>
               <TableHead>Vendor Name</TableHead>
@@ -352,6 +355,7 @@ const RepairAdvance = () => {
                   <TableCell className="font-medium text-blue-600">
                     {task.taskNo}
                   </TableCell>
+                  <TableCell>{task.firmName || "-"}</TableCell>
                   <TableCell>{task.machineName}</TableCell>
                   <TableCell>{task.machinePartName}</TableCell>
                   <TableCell>{task.vendorName || "-"}</TableCell>

@@ -102,6 +102,77 @@ function doGet(e) {
       }
     }
 
+    // Handle adding 31 columns for Advance Payment Workflow
+    if (e.parameter.action === 'addAdvanceColumns') {
+      try {
+        var sheetId = e.parameter.sheetId;
+        var ss = sheetId ? SpreadsheetApp.openById(sheetId) : SpreadsheetApp.getActiveSpreadsheet();
+        var sheet = ss.getSheetByName('Repair FMS Advance Payment');
+        if (!sheet) {
+          return ContentService.createTextOutput(JSON.stringify({ success: false, error: 'Repair FMS Advance Payment sheet not found' }))
+            .setMimeType(ContentService.MimeType.JSON);
+        }
+
+        var newHeaders = [
+          // A. Basic & Approval Info
+          "Firm Name",
+          "Department",
+          "Management Approval Date",
+          "Management Remark",
+
+          // B. Step 2: Posting
+          "Planned Posting",
+          "Actual Posting",
+          "Posting Voucher No",
+          "Posting Done By",
+
+          // C. Step 3: Make Payment (Advance Release)
+          "Planned Payment",
+          "Actual Payment Date",
+          "Advance Payment UTR / Cheque No",
+          "Advance Amount Paid",
+          "Payment Done By",
+
+          // D. Step 4: Check Machine
+          "Planned Check Machine",
+          "Actual Check Machine Date",
+          "Bill Date",
+          "Bill Image Link",
+          "Checked By",
+
+          // E. Step 5: Store In
+          "Planned Store In",
+          "Actual Store In Date",
+          "Received Quantity",
+          "Store In Done By",
+
+          // F. Step 6: Full Billing
+          "Planned Full Billing",
+          "Actual Full Billing Date",
+          "Balance Amount To Pay",
+          "Balance Payment UTR / Cheque No",
+          "Billing Status",
+
+          // G. Step 7: Accounts
+          "Planned Accounts",
+          "Actual Accounts Date",
+          "Accounts Status",
+          "Accounts Remark"
+        ];
+
+        sheet.getRange(6, 11, 1, newHeaders.length).setValues([newHeaders]);
+
+        return ContentService.createTextOutput(JSON.stringify({
+          success: true,
+          count: newHeaders.length,
+          message: "Successfully added " + newHeaders.length + " headers in Row 6 of Repair FMS Advance Payment starting at Column 11 (K)!"
+        })).setMimeType(ContentService.MimeType.JSON);
+      } catch (err) {
+        return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.toString() }))
+          .setMimeType(ContentService.MimeType.JSON);
+      }
+    }
+
     // Existing sheet data retrieval logic
     var sheetName = e.parameter.sheet;
     var sheetId = e.parameter.sheetId;
@@ -440,6 +511,7 @@ function doPost(e) {
       var headers = data[5];
 
       var taskNoCol = headers.indexOf('Task No');
+      if (taskNoCol === -1) taskNoCol = headers.indexOf('Repair Task No');
       if (taskNoCol === -1) throw new Error("Task No column not found");
 
       var rowIndex = -1;
@@ -623,3 +695,146 @@ function handleLogin(username, password) {
     };
   }
 }
+
+/**
+ * Run this function once in Google Apps Script Editor to automatically
+ * add the 24 comparison headers in Row 6 of "Repair System" sheet starting at Col 62 (BJ).
+ */
+function addVendorComparisonColumns() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName("Repair System");
+  if (!sheet) {
+    Logger.log("Repair System sheet not found");
+    return;
+  }
+
+  var newHeaders = [
+    // Vendor 1 Details
+    "Vendor Name 1",
+    "(Transporter Name) 1",
+    "Transportation Charges 1",
+    "Weighment Slip 1",
+    "Lead Time To Deliver 1",
+    "Vendor 1 Payment Type",
+    "Advance Payment 1",
+
+    // Vendor 2 Details
+    "Vendor Name 2",
+    "(Transporter Name) 2",
+    "Transportation Charges 2",
+    "Weighment Slip 2",
+    "Lead Time To Deliver 2",
+    "Vendor 2 Payment Type",
+    "Advance Payment 2",
+
+    // Vendor 3 Details
+    "Vendor Name 3",
+    "(Transporter Name) 3",
+    "Transportation Charges 3",
+    "Weighment Slip 3",
+    "Lead Time To Deliver 3",
+    "Vendor 3 Payment Type",
+    "Advance Payment 3",
+
+    // Selection & Approval
+    "Approved Vendor Name",
+    "Approved Payment Term",
+    "ThreePartyStatus"
+  ];
+
+  // Starting at Row 6, Column 62 (Col BJ, right after 'Payment type 2' at Col 61)
+  sheet.getRange(6, 62, 1, newHeaders.length).setValues([newHeaders]);
+  Logger.log("Successfully added " + newHeaders.length + " headers in Row 6 starting at Col 62 (BJ)!");
+}
+
+/**
+ * Run this function once in Google Apps Script Editor to automatically
+ * add all 31 Advance Payment workflow headers in Row 6 of "Repair FMS Advance Payment" sheet
+ * starting at Column 11 (Col K, right after 'To Be Paid Amount' at Col 10).
+ */
+function addAdvancePaymentWorkflowColumns() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName("Repair FMS Advance Payment");
+  if (!sheet) {
+    Logger.log("Repair FMS Advance Payment sheet not found");
+    return;
+  }
+
+  var newHeaders = [
+    // A. Basic & Approval Info
+    "Firm Name",
+    "Department",
+    "Management Approval Date",
+    "Management Remark",
+
+    // B. Step 2: Posting
+    "Planned Posting",
+    "Actual Posting",
+    "Posting Voucher No",
+    "Posting Done By",
+
+    // C. Step 3: Make Payment (Advance Release)
+    "Planned Payment",
+    "Actual Payment Date",
+    "Advance Payment UTR / Cheque No",
+    "Advance Amount Paid",
+    "Payment Done By",
+
+    // D. Step 4: Check Machine
+    "Planned Check Machine",
+    "Actual Check Machine Date",
+    "Bill Date",
+    "Bill Image Link",
+    "Checked By",
+
+    // E. Step 5: Store In
+    "Planned Store In",
+    "Actual Store In Date",
+    "Received Quantity",
+    "Store In Done By",
+
+    // F. Step 6: Full Billing
+    "Planned Full Billing",
+    "Actual Full Billing Date",
+    "Balance Amount To Pay",
+    "Balance Payment UTR / Cheque No",
+    "Billing Status",
+
+    // G. Step 7: Accounts
+    "Planned Accounts",
+    "Actual Accounts Date",
+    "Accounts Status",
+    "Accounts Remark"
+  ];
+
+  // Starting at Row 6, Column 11 (Col K, right after 'To Be Paid Amount' at Col 10)
+  sheet.getRange(6, 11, 1, newHeaders.length).setValues([newHeaders]);
+  Logger.log("Successfully added " + newHeaders.length + " headers in Row 6 of Repair FMS Advance Payment starting at Col 11 (K)!");
+}
+
+/**
+ * Run this function once in Google Apps Script Editor to automatically
+ * add "Common Bill Tasks" and "Common Parent Task" headers in Row 6 of "Repair System" sheet.
+ */
+function addCommonBillColumns() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName("Repair System");
+  if (!sheet) {
+    Logger.log("Repair System sheet not found");
+    return;
+  }
+
+  var headers = sheet.getRange(6, 1, 1, sheet.getLastColumn()).getValues()[0];
+  var toAdd = [];
+  if (headers.indexOf("Common Bill Tasks") === -1) toAdd.push("Common Bill Tasks");
+  if (headers.indexOf("Common Parent Task") === -1) toAdd.push("Common Parent Task");
+
+  if (toAdd.length > 0) {
+    sheet.getRange(6, headers.length + 1, 1, toAdd.length).setValues([toAdd]);
+    Logger.log("Successfully added headers: " + toAdd.join(", ") + " at Row 6!");
+  } else {
+    Logger.log("Headers already exist in Row 6!");
+  }
+}
+
+

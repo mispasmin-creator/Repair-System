@@ -55,7 +55,7 @@ const ListItemSkeleton = () => (
 
 const Dashboard = ({ setActiveTab }) => {
   const { user } = useAuth();
-  const { vendors, transporters, setVendors, setTransporters } = useDataStore();
+  const { vendors, transporters, setVendors, setTransporters, setPaymentTypes } = useDataStore();
 
   const [masterType, setMasterType] = useState("vendor");
   const [masterValue, setMasterValue] = useState("");
@@ -184,6 +184,22 @@ const Dashboard = ({ setActiveTab }) => {
 
         setVendors(loadedVendors);
         setTransporters(loadedTransporters);
+
+        const pTypeColIdx = (result.table.cols || []).findIndex(
+          (c) => (c.label || "").toLowerCase().replace(/[^a-z0-9]/g, "") === "paymenttype"
+        );
+        const resolvedPTypeIdx = pTypeColIdx !== -1 ? pTypeColIdx : 6;
+        const loadedPaymentTypes = [
+          ...new Set(
+            rows
+              .map((row) => row.c[resolvedPTypeIdx]?.v)
+              .filter((v) => v !== null && v !== undefined && v.toString().trim() !== "")
+              .map((v) => v.toString().trim())
+          ),
+        ];
+        if (loadedPaymentTypes.length > 0) {
+          setPaymentTypes(loadedPaymentTypes);
+        }
       }
     } catch (err) {
       console.error("Error fetching master lists:", err);

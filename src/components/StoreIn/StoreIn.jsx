@@ -96,8 +96,9 @@ const StoreIn = () => {
         serialNo: row["Serial No"] || "",
         machineName: row["Machine Name"] || "",
         machinePartName: row["Machine Part Name"] || "",
-        doerName: row["Doer Name"] || "",
-        problem: row["Problem"] || "",
+        doerName: row["Indentor Name"] || row["Doer Name"] || row["Authorized Name"] || "",
+        nameOfIndenter: row["Indentor Name"] || row["Doer Name"] || row["Authorized Name"] || "",
+        problem: row["Problem With Machine"] || row["Problem"] || "",
         priority: row["Priority"] || "",
         department: row["Department"] || "",
         location: row["Location"] || "",
@@ -371,6 +372,7 @@ const StoreIn = () => {
               <TableHeader className="sticky top-0 z-10 bg-gray-50">
                 <TableHead className="min-w-[100px] text-center">Action</TableHead>
                 <TableHead className="min-w-[120px]">Task Number</TableHead>
+                <TableHead className="min-w-[130px]">Firm Name</TableHead>
                 <TableHead className="min-w-[150px]">Machine Name</TableHead>
                 <TableHead className="min-w-[120px]">Serial No</TableHead>
                 <TableHead className="min-w-[110px]">Planned Date</TableHead>
@@ -387,7 +389,7 @@ const StoreIn = () => {
               <TableBody>
                 {loadingTasks ? (
                   <TableRow>
-                    <TableCell colSpan={14} className="text-center py-12">
+                    <TableCell colSpan={15} className="text-center py-12">
                       <div className="flex flex-col items-center justify-center">
                         <div className="w-9 h-9 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                         <p className="mt-3 text-sm text-gray-500 font-medium">Loading tasks...</p>
@@ -396,7 +398,7 @@ const StoreIn = () => {
                   </TableRow>
                 ) : filteredPendingTasks.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={14} className="text-center py-12 text-gray-500">
+                    <TableCell colSpan={15} className="text-center py-12 text-gray-500">
                       No pending tasks found
                     </TableCell>
                   </TableRow>
@@ -416,6 +418,7 @@ const StoreIn = () => {
                       <TableCell className="font-medium text-blue-600">
                         {task.taskNo || "-"}
                       </TableCell>
+                      <TableCell>{task.firmName || "-"}</TableCell>
                       <TableCell className="font-medium text-gray-900">{task.machineName || "-"}</TableCell>
                       <TableCell>{task.serialNo || "-"}</TableCell>
                       <TableCell>{task.planned2 || "-"}</TableCell>
@@ -453,6 +456,7 @@ const StoreIn = () => {
             <Table containerClassName="max-h-[calc(100vh-260px)] overflow-y-auto">
               <TableHeader className="sticky top-0 z-10 bg-gray-50">
                 <TableHead className="min-w-[120px]">Task Number</TableHead>
+                <TableHead className="min-w-[130px]">Firm Name</TableHead>
                 <TableHead className="min-w-[150px]">Machine Name</TableHead>
                 <TableHead className="min-w-[120px]">Serial No</TableHead>
                 <TableHead className="min-w-[140px]">Part Name</TableHead>
@@ -466,7 +470,7 @@ const StoreIn = () => {
               <TableBody>
                 {loadingTasks ? (
                   <TableRow>
-                    <TableCell colSpan={10} className="text-center py-12">
+                    <TableCell colSpan={11} className="text-center py-12">
                       <div className="flex flex-col items-center justify-center">
                         <div className="w-9 h-9 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                         <p className="mt-3 text-sm text-gray-500 font-medium">Loading tasks...</p>
@@ -475,7 +479,7 @@ const StoreIn = () => {
                   </TableRow>
                 ) : filteredHistoryTasks.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={10} className="text-center py-12 text-gray-500">
+                    <TableCell colSpan={11} className="text-center py-12 text-gray-500">
                       No history tasks found
                     </TableCell>
                   </TableRow>
@@ -485,6 +489,7 @@ const StoreIn = () => {
                       <TableCell className="font-medium text-blue-600">
                         {task.taskNo || "-"}
                       </TableCell>
+                      <TableCell>{task.firmName || "-"}</TableCell>
                       <TableCell className="font-medium text-gray-900">{task.machineName || "-"}</TableCell>
                       <TableCell>{task.serialNo || "-"}</TableCell>
                       <TableCell>{task.machinePartName || "-"}</TableCell>

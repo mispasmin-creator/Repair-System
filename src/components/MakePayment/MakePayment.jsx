@@ -729,6 +729,7 @@ const MakePayment = () => {
               <TableHeader className="sticky top-0 z-10 bg-gray-50">
                 <TableHead className="min-w-[120px]">Payment No.</TableHead>
                 <TableHead className="min-w-[130px]">Repair Task No.</TableHead>
+                <TableHead className="min-w-[130px]">Firm Name</TableHead>
                 <TableHead className="min-w-[120px]">Serial No</TableHead>
                 <TableHead className="min-w-[150px]">Machine Name</TableHead>
                 <TableHead className="min-w-[140px]">Vendor Name</TableHead>
@@ -742,7 +743,7 @@ const MakePayment = () => {
               <TableBody>
                 {loadingTasks && historyRepairPayments.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={10} className="text-center py-12">
+                    <TableCell colSpan={12} className="text-center py-12">
                       <div className="flex flex-col items-center justify-center">
                         <div className="w-9 h-9 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                         <p className="mt-3 text-sm text-gray-500 font-medium">Loading payment history...</p>
@@ -751,7 +752,7 @@ const MakePayment = () => {
                   </TableRow>
                 ) : displayedHistory.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={10} className="text-center py-12 text-gray-500">
+                    <TableCell colSpan={12} className="text-center py-12 text-gray-500">
                       No payment history found
                     </TableCell>
                   </TableRow>
@@ -759,9 +760,10 @@ const MakePayment = () => {
                   displayedHistory.map((task, index) => (
                     <TableRow key={index}>
                       <TableCell className="font-medium text-blue-600">
-                        {task.paymentNo}
+                        {task.paymentNo || task.taskNo}
                       </TableCell>
-                      <TableCell>{task.repairTaskNo}</TableCell>
+                      <TableCell>{task.repairTaskNo || task.taskNo}</TableCell>
+                      <TableCell>{task.firmName || "-"}</TableCell>
                       <TableCell>{task.serialNo}</TableCell>
                       <TableCell className="font-medium text-gray-900">{task.machineName}</TableCell>
                       <TableCell>{task.vendorName || "-"}</TableCell>

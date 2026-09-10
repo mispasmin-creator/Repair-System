@@ -165,8 +165,9 @@ const Posting = () => {
         serialNo: row["Serial No"] || "",
         machineName: row["Machine Name"] || "",
         machinePartName: row["Machine Part Name"] || "",
-        doerName: row["Doer Name"] || "",
-        problem: row["Problem"] || "",
+        doerName: row["Indentor Name"] || row["Doer Name"] || row["Authorized Name"] || "",
+        nameOfIndenter: row["Indentor Name"] || row["Doer Name"] || row["Authorized Name"] || "",
+        problem: row["Problem With Machine"] || row["Problem"] || "",
         priority: row["Priority"] || "",
         department: row["Department"] || "",
         location: row["Location"] || "",
@@ -374,7 +375,7 @@ const Posting = () => {
                 <TableHead className="min-w-[120px] whitespace-nowrap">Task Number</TableHead>
                 <TableHead className="min-w-[150px] whitespace-nowrap">Machine Name</TableHead>
                 <TableHead className="min-w-[130px] whitespace-nowrap">Serial No</TableHead>
-                <TableHead className="min-w-[120px] whitespace-nowrap">Firm</TableHead>
+                <TableHead className="min-w-[130px] whitespace-nowrap">Firm Name</TableHead>
                 <TableHead className="min-w-[130px] whitespace-nowrap">Department</TableHead>
                 <TableHead className="min-w-[140px] whitespace-nowrap">Vendor Name</TableHead>
                 <TableHead className="min-w-[120px] whitespace-nowrap">Bill No</TableHead>
@@ -456,7 +457,7 @@ const Posting = () => {
                 <TableHead className="min-w-[120px] whitespace-nowrap">Task Number</TableHead>
                 <TableHead className="min-w-[150px] whitespace-nowrap">Machine Name</TableHead>
                 <TableHead className="min-w-[130px] whitespace-nowrap">Serial No</TableHead>
-                <TableHead className="min-w-[120px] whitespace-nowrap">Firm</TableHead>
+                <TableHead className="min-w-[130px] whitespace-nowrap">Firm Name</TableHead>
                 <TableHead className="min-w-[130px] whitespace-nowrap">Department</TableHead>
                 <TableHead className="min-w-[140px] whitespace-nowrap">Vendor Name</TableHead>
                 <TableHead className="min-w-[120px] whitespace-nowrap">Bill No</TableHead>

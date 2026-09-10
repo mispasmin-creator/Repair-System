@@ -92,7 +92,8 @@ const FullKitting = () => {
           serialNo: row["Serial No"] || "",
           machineName: row["Machine Name"] || "",
           machinePartName: row["Machine Part Name"] || "",
-          doerName: row["Doer Name"] || "",
+          doerName: row["Indentor Name"] || row["Doer Name"] || row["Authorized Name"] || "",
+          nameOfIndenter: row["Indentor Name"] || row["Doer Name"] || row["Authorized Name"] || "",
           priority: row["Priority"] || "",
           department: row["Department"] || "",
           vendorName: row["Vendor Name"] || "",
@@ -264,7 +265,7 @@ const FullKitting = () => {
                 <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[110px]">Task No</th>
                 <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[160px]">Machine Name</th>
                 <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[130px]">Serial No</th>
-                <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[120px]">Firm</th>
+                <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[130px]">Firm Name</th>
                 <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[130px]">Department</th>
                 <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[130px]">Vendor</th>
                 <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[110px]">Bill No</th>
@@ -278,7 +279,7 @@ const FullKitting = () => {
             <tbody className="divide-y divide-gray-200 bg-white">
               {displayedPending.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="text-center py-16 text-gray-400">
+                  <td colSpan={13} className="text-center py-16 text-gray-400">
                     <Package className="w-10 h-10 mx-auto mb-2 opacity-30" />
                     No pending kitting tasks found
                   </td>
@@ -345,7 +346,7 @@ const FullKitting = () => {
                 <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[110px]">Task No</th>
                 <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[160px]">Machine Name</th>
                 <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[130px]">Serial No</th>
-                <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[120px]">Firm</th>
+                <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[130px]">Firm Name</th>
                 <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[130px]">Department</th>
                 <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[130px]">Vendor</th>
                 <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[130px]">Payment Date</th>
@@ -358,7 +359,7 @@ const FullKitting = () => {
             <tbody className="divide-y divide-gray-200 bg-white">
               {displayedHistory.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="text-center py-16 text-gray-400">
+                  <td colSpan={12} className="text-center py-16 text-gray-400">
                     <Package className="w-10 h-10 mx-auto mb-2 opacity-30" />
                     No kitting history found
                   </td>
