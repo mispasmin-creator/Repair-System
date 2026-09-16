@@ -136,8 +136,8 @@ const Indent = () => {
           problem: getCellValue(8),
           enableReminder: getCellValue(9),
           requireAttachment: getCellValue(10),
-          taskStartDate: getCellValue(11),
-          taskEndDate: getCellValue(12),
+          taskStartDate: getByHeader("task start date", 11),
+          taskEndDate: getByHeader("task ending date", 12) || getByHeader("task end date", 12),
           priority: getCellValue(13),
           department: getCellValue(14),
           location: getCellValue(15),
@@ -198,9 +198,24 @@ const Indent = () => {
   const formatDate = (dateString) => {
     if (!dateString) return "N/A";
     try {
-      const date = new Date(dateString);
+      let str = String(dateString).trim();
+      // Remove trailing invalid ":00" like "2026-09-16 :00" or empty " :00"
+      str = str.replace(/\s*:00$/, "").trim();
+      if (!str) return "N/A";
+
+      // If format is DD/MM/YYYY or DD-MM-YYYY
+      const dmyMatch = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})(.*)$/);
+      if (dmyMatch) {
+        const [, d, m, y, rest] = dmyMatch;
+        const dObj = new Date(`${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}${rest}`);
+        if (!isNaN(dObj.getTime())) {
+          return dObj.toLocaleDateString("en-GB");
+        }
+      }
+
+      const date = new Date(str);
       if (isNaN(date.getTime())) return "N/A";
-      return date.toLocaleDateString();
+      return date.toLocaleDateString("en-GB");
     } catch (error) {
       return "N/A";
     }
