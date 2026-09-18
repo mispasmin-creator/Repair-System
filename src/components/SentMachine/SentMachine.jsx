@@ -136,6 +136,7 @@ const SentMachine = () => {
         transportingImageWithMachine: row["Transporting Image With Machine"] || "",
         paymentType: row["Payment Type"] || "",
         howMuch: row["How Much"] || "",
+        amount: row["Amount"] || "",
       }));
 
       setTasks(formattedTasks);
@@ -255,9 +256,6 @@ const SentMachine = () => {
     setVendorForms((prev) => {
       const newForms = [...prev];
       newForms[index] = { ...newForms[index], [field]: value };
-      if (field === "paymentType" && (value || "").toLowerCase() !== "advance") {
-        newForms[index].advancePayment = "";
-      }
       return newForms;
     });
   };
@@ -281,8 +279,12 @@ const SentMachine = () => {
       return;
     }
 
-    if ((selectedVendor.paymentType || "").toLowerCase() === "advance" && !selectedVendor.advancePayment) {
-      toast.error("Please enter advance payment amount");
+    if (!selectedVendor.advancePayment) {
+      toast.error(
+        (selectedVendor.paymentType || "").toLowerCase() === "advance"
+          ? "Please enter advance payment amount"
+          : "Please enter amount"
+      );
       return;
     }
 
@@ -325,6 +327,7 @@ const SentMachine = () => {
           (selectedVendor.paymentType || "").toLowerCase() === "advance"
             ? selectedVendor.advancePayment
             : "",
+        "Amount": selectedVendor.advancePayment || "",
         "Approved Vendor Name": selectedVendor.vendorName,
         "Approved Payment Term": selectedVendor.paymentType || "",
         ThreePartyStatus: "Approved",
@@ -586,7 +589,7 @@ const SentMachine = () => {
                 <TableHead className="min-w-[130px]">Weighment Slip</TableHead>
                 <TableHead className="min-w-[130px]">Machine Image</TableHead>
                 <TableHead className="min-w-[120px]">Payment Type</TableHead>
-                <TableHead className="min-w-[120px]">Advance Amount</TableHead>
+                <TableHead className="min-w-[120px]">Payment Amount</TableHead>
               </TableHeader>
               <TableBody>
                 {loadingTasks ? (
@@ -647,7 +650,9 @@ const SentMachine = () => {
                       </TableCell>
                       <TableCell>{task.paymentType || "-"}</TableCell>
                       <TableCell>
-                        {task.howMuch ? `₹${Number(task.howMuch).toLocaleString()}` : "-"}
+                        {task.amount || task.howMuch
+                          ? `₹${Number(task.amount || task.howMuch).toLocaleString()}`
+                          : "-"}
                       </TableCell>
                     </TableRow>
                   ))
@@ -874,18 +879,24 @@ const SentMachine = () => {
                       </div>
                     </div>
 
-                    {/* Conditionally render Advance Payment Amount * */}
-                    {(currentVendor.paymentType || "").toLowerCase() === "advance" && (
+                    {/* Render Amount Input for all Payment Types */}
+                    {Boolean(currentVendor.paymentType) && (
                       <div>
                         <label className="block text-xs font-semibold text-gray-700 mb-1.5">
-                          Advance Payment Amount *
+                          {(currentVendor.paymentType || "").toLowerCase() === "advance"
+                            ? "Advance Payment Amount *"
+                            : "Amount *"}
                         </label>
                         <input
                           type="number"
                           value={currentVendor.advancePayment}
                           onChange={(e) => updateVendorForm(idx, "advancePayment", e.target.value)}
                           className="w-full h-10 px-3 py-2 text-xs bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none text-gray-800"
-                          placeholder="Enter advance payment amount"
+                          placeholder={
+                            (currentVendor.paymentType || "").toLowerCase() === "advance"
+                              ? "Enter advance payment amount"
+                              : "Enter amount"
+                          }
                         />
                       </div>
                     )}
