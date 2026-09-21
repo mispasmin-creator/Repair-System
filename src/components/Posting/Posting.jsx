@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Search, Filter, ClipboardCheck, Calendar, CheckCircle2, ExternalLink } from "lucide-react";
+import { Search, Filter, ClipboardCheck, Calendar, CheckCircle2, ExternalLink, Zap } from "lucide-react";
 import Button from "../ui/Button";
 import Modal from "../ui/Modal";
 import {
@@ -13,6 +13,7 @@ import {
 import { useAuth } from "../../context/AuthContext";
 import toast from "react-hot-toast";
 import { fetchRepairTasks as fetchRepairTasksSvc } from "../../services/repairService";
+import { fetchAdvancePayments, updateAdvancePayment, getTodayIST, getNowIST } from "../../services/advancePaymentService";
 
 const Posting = () => {
   const { user } = useAuth();
@@ -120,11 +121,12 @@ const Posting = () => {
     try {
       if (!isBackground) setLoadingTasks(true);
 
-      // Use shared service — returns objects keyed by sheet header names (Row 6)
+      // ── Normal (Non-Advance) tasks from Repair System sheet ──────────────
       const rawTasks = await fetchRepairTasksSvc(user?.firmName);
 
       const formattedTasks = rawTasks.map((row, index) => ({
         id: `posting-task-${index}`,
+        isAdvance: false,
         taskNo: row["Task No"] || "",
         firmName: row["Firm Name"] || "",
         serialNo: row["Serial No"] || "",
@@ -137,15 +139,13 @@ const Posting = () => {
         department: row["Department"] || "",
         location: row["Location"] || "",
         vendorName: row["Vendor Name"] || "",
-        // Previous steps
         actual1: row["Actual 1"] || "",
         actual2: row["Actual 2"] || "",
-        actual3: row["Actual 3"] || "",        // Store In done date
+        actual3: row["Actual 3"] || "",
         billNo: row["Bill No."] || "",
         typeOfBill: row["Type of Bill"] || "",
         totalBillAmount: row["Total Bill Amount"] || "",
         receivedQuantity: row["Received Quantity"] || "",
-        // Posting step
         plannedPosting: row["Planned Posting"] || "",
         actualPosting: row["Actual Posting"] || "",
         delayPosting: row["Delay Posting"] || "",
@@ -154,11 +154,32 @@ const Posting = () => {
 
       setTasks(formattedTasks);
 
-      // ✅ PENDING: Actual 3 bhari ho + Actual Posting KHALI ho
-      setPendingTasks(formattedTasks.filter((t) => t.actual3 && !t.actualPosting));
+      // Normal pending: Store In done (Actual 3) + Posting not done
+      const normalPending = formattedTasks.filter((t) => t.actual3 && !t.actualPosting);
+      const normalHistory = formattedTasks.filter((t) => t.actual3 && t.actualPosting);
 
-      // ✅ HISTORY: Actual 3 bhari ho + Actual Posting bhari ho
-      setHistoryTasks(formattedTasks.filter((t) => t.actual3 && t.actualPosting));
+      // ── Advance tasks from Repair FMS Advance Payment sheet ──────────────
+      // Step 2 for Advance: Management Approval Date filled + Actual Posting empty
+      let advPending = [];
+      let advHistory = [];
+      try {
+        const advanceTasks = await fetchAdvancePayments();
+        // Filter by firm if user is not all-firm
+        const userFirm = (user?.firmName || "").toLowerCase();
+        const isAllFirm = !userFirm || userFirm === "all";
+        const firmFiltered = isAllFirm
+          ? advanceTasks
+          : advanceTasks.filter((t) => (t.firmName || "").toLowerCase() === userFirm);
+
+        advPending = firmFiltered.filter((t) => t.managementApprovalDate && !t.actualPosting);
+        advHistory = firmFiltered.filter((t) => t.managementApprovalDate && t.actualPosting);
+      } catch (advErr) {
+        console.warn("Could not fetch advance tasks for posting:", advErr);
+      }
+
+      // Merge both lists
+      setPendingTasks([...normalPending, ...advPending]);
+      setHistoryTasks([...normalHistory, ...advHistory]);
 
     } catch (err) {
       console.error("Error fetching tasks for posting:", err);
@@ -187,33 +208,44 @@ const Posting = () => {
 
     try {
       setSubmitLoading(true);
+      const todayIST = getTodayIST();
 
-      const todayIST = new Date().toLocaleDateString("en-GB", { timeZone: "Asia/Kolkata" });
-      const payload = {
-        action: "update1",
-        sheetName: "Repair System",
-        taskNo: selectedTask.taskNo,
-        "Actual Posting": todayIST,
-        "Process Remark": formData.remark.trim(),
-        "Remark": formData.remark.trim(),
-      };
-
-      const response = await fetch(SCRIPT_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        body: new URLSearchParams(payload).toString(),
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        toast.success("✅ Processed for payment successfully");
-        setIsModalOpen(false);
-        await fetchAllTasks(true);
+      if (selectedTask.isAdvance) {
+        // ── ADVANCE: Update "Repair FMS Advance Payment" sheet ─────────────
+        const result = await updateAdvancePayment(selectedTask.taskNo, {
+          "Actual Posting": todayIST,
+          "Process Remark": formData.remark.trim(),
+        });
+        if (result.success) {
+          toast.success("✅ Advance posting processed successfully");
+          setIsModalOpen(false);
+          await fetchAllTasks(true);
+        } else {
+          toast.error("❌ Failed: " + (result.message || "Unknown error"));
+        }
       } else {
-        toast.error("❌ Failed to process: " + (result.message || "Unknown error"));
+        // ── NORMAL: Update "Repair System" sheet ────────────────────────────
+        const payload = {
+          action: "update1",
+          sheetName: "Repair System",
+          taskNo: selectedTask.taskNo,
+          "Actual Posting": todayIST,
+          "Process Remark": formData.remark.trim(),
+          "Remark": formData.remark.trim(),
+        };
+        const response = await fetch(SCRIPT_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams(payload).toString(),
+        });
+        const result = await response.json();
+        if (result.success) {
+          toast.success("✅ Processed for payment successfully");
+          setIsModalOpen(false);
+          await fetchAllTasks(true);
+        } else {
+          toast.error("❌ Failed to process: " + (result.message || "Unknown error"));
+        }
       }
     } catch (error) {
       console.error("Submit error:", error);
@@ -346,14 +378,14 @@ const Posting = () => {
             <Table containerClassName="max-h-[calc(100vh-260px)] overflow-y-auto">
               <TableHeader className="sticky top-0 z-10 bg-gray-50">
                 <TableHead className="min-w-[170px] text-center whitespace-nowrap">Action</TableHead>
+                <TableHead className="min-w-[100px] whitespace-nowrap">Type</TableHead>
                 <TableHead className="min-w-[120px] whitespace-nowrap">Task Number</TableHead>
                 <TableHead className="min-w-[150px] whitespace-nowrap">Machine Name</TableHead>
                 <TableHead className="min-w-[130px] whitespace-nowrap">Serial No</TableHead>
                 <TableHead className="min-w-[130px] whitespace-nowrap">Firm Name</TableHead>
                 <TableHead className="min-w-[130px] whitespace-nowrap">Department</TableHead>
                 <TableHead className="min-w-[140px] whitespace-nowrap">Vendor Name</TableHead>
-                <TableHead className="min-w-[120px] whitespace-nowrap">Bill No</TableHead>
-                <TableHead className="min-w-[130px] whitespace-nowrap">Bill Amount</TableHead>
+                <TableHead className="min-w-[120px] whitespace-nowrap">Bill No / Advance Amt</TableHead>
                 <TableHead className="min-w-[140px] whitespace-nowrap">Planned Posting</TableHead>
               </TableHeader>
               <TableBody>
@@ -374,7 +406,7 @@ const Posting = () => {
                   </TableRow>
                 ) : (
                   filteredPendingTasks.map((task) => (
-                    <TableRow key={task.id || task.taskNo} className="hover:bg-gray-50 transition-colors">
+                    <TableRow key={task.id || task.taskNo} className={`hover:bg-gray-50 transition-colors ${task.isAdvance ? "bg-orange-50/40" : ""}`}>
                       <TableCell className="text-center whitespace-nowrap">
                         <Button
                           size="sm"
@@ -384,6 +416,17 @@ const Posting = () => {
                           <ClipboardCheck className="w-3.5 h-3.5 mr-1" />
                           Process
                         </Button>
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        {task.isAdvance ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-bold rounded-full bg-orange-100 text-orange-700 border border-orange-200">
+                            <Zap className="w-3 h-3" /> ADVANCE
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center px-2 py-0.5 text-[11px] font-semibold rounded-full bg-blue-100 text-blue-700">
+                            NORMAL
+                          </span>
+                        )}
                       </TableCell>
                       <TableCell className="font-medium text-blue-600 whitespace-nowrap">
                         {task.taskNo || "-"}
@@ -395,8 +438,11 @@ const Posting = () => {
                       <TableCell className="whitespace-nowrap">{task.firmName || "-"}</TableCell>
                       <TableCell className="whitespace-nowrap">{task.department || "-"}</TableCell>
                       <TableCell className="whitespace-nowrap">{task.vendorName || "-"}</TableCell>
-                      <TableCell className="whitespace-nowrap">{task.billNo || "-"}</TableCell>
-                      <TableCell className="whitespace-nowrap">{formatCurrency(task.totalBillAmount)}</TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        {task.isAdvance
+                          ? (task.toBePaidAmount ? `₹${Number(task.toBePaidAmount).toLocaleString()}` : "-")
+                          : (task.billNo || "-")}
+                      </TableCell>
                       <TableCell className="whitespace-nowrap">
                         <span className="inline-flex items-center gap-1.5 text-gray-700">
                           <Calendar className="w-3.5 h-3.5 text-gray-400" />

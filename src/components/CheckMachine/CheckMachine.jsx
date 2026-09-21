@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Search, Filter, CheckCircle, Loader2Icon, Layers, X, Check } from "lucide-react";
+import { Search, Filter, CheckCircle, Loader2Icon, Layers, X, Check, Zap } from "lucide-react";
 import Button from "../ui/Button";
 import Modal from "../ui/Modal";
 import {
@@ -15,6 +15,7 @@ import { useAuth } from "../../context/AuthContext";
 import useDataStore from "../../store/dataStore";
 import toast from "react-hot-toast";
 import { fetchRepairTasks as fetchRepairTasksSvc } from "../../services/repairService";
+import { fetchAdvancePayments, updateAdvancePayment, getTodayIST } from "../../services/advancePaymentService";
 
 const CheckMachine = () => {
   const { user } = useAuth();
@@ -182,11 +183,29 @@ const CheckMachine = () => {
 
       setRepairTasks(formattedTasks);
 
-      // ✅ PENDING: Management Approval Date bhari ho + Actual 2 KHALI ho
-      setPendingRepairTasks(formattedTasks.filter((t) => t.managementApprovalDate && !t.actual1));
+      // Normal pending: Management Approval Date filled + Actual 2 empty
+      const normalPending = formattedTasks.filter((t) => t.managementApprovalDate && !t.actual1);
+      const normalHistory = formattedTasks.filter((t) => t.managementApprovalDate && t.actual1);
 
-      // ✅ HISTORY: Management Approval Date bhari ho + Actual 2 bhari ho
-      setHistoryRepairTasks(formattedTasks.filter((t) => t.managementApprovalDate && t.actual1));
+      // Advance Step 4 pending: Actual Payment Date filled + Actual Check Machine Date empty
+      let advPending = [];
+      let advHistory = [];
+      try {
+        const advanceTasks = await fetchAdvancePayments();
+        const userFirm = (user?.firmName || "").toLowerCase();
+        const isAllFirm = !userFirm || userFirm === "all";
+        const firmFiltered = isAllFirm
+          ? advanceTasks
+          : advanceTasks.filter((t) => (t.firmName || "").toLowerCase() === userFirm);
+
+        advPending = firmFiltered.filter((t) => t.actualPaymentDate && !t.actualCheckMachineDate);
+        advHistory = firmFiltered.filter((t) => t.actualPaymentDate && t.actualCheckMachineDate);
+      } catch (advErr) {
+        console.warn("Could not fetch advance tasks for CheckMachine:", advErr);
+      }
+
+      setPendingRepairTasks([...normalPending, ...advPending]);
+      setHistoryRepairTasks([...normalHistory, ...advHistory]);
 
     } catch (err) {
       console.error("Error fetching tasks:", err);
@@ -299,12 +318,29 @@ const CheckMachine = () => {
         billImageUrl = await uploadFileToDrive(formData.billImage);
       }
 
-      const nowFormatted = new Date().toLocaleDateString("en-GB", {
-        timeZone: "Asia/Kolkata",
-      });
-
+      const nowFormatted = getTodayIST();
       const commonTasksStr = selectedCommonTasks.join(", ");
 
+      if (selectedTask.isAdvance) {
+        // ── ADVANCE TASK: Update "Repair FMS Advance Payment" sheet (Step 4) ──
+        const result = await updateAdvancePayment(selectedTask.taskNo, {
+          "Actual Check Machine Date": nowFormatted,
+          "Bill Date": nowFormatted,
+          "Bill Image Link": billImageUrl || "",
+          "Checked By": user?.name || "",
+        });
+
+        if (result.success) {
+          toast.success("✅ Advance machine check submitted successfully!");
+          setIsModalOpen(false);
+          fetchAllTasks(true);
+        } else {
+          toast.error("❌ Failed: " + (result.message || "Unknown error"));
+        }
+        return;
+      }
+
+      // ── NORMAL TASK: Update Repair System sheet ──
       const payload = {
         action: "update1",
         sheetName: "Repair System",
@@ -333,6 +369,7 @@ const CheckMachine = () => {
       const result = await response.json();
 
       if (result.success) {
+
         // Also update all linked child tasks for common bill
         if (selectedCommonTasks && selectedCommonTasks.length > 0) {
           for (const childTaskNo of selectedCommonTasks) {

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from "react";
-import { Search, Filter, Package, ExternalLink } from "lucide-react";
+import { Search, Filter, Package, ExternalLink, Zap } from "lucide-react";
 import Button from "../ui/Button";
 import Modal from "../ui/Modal";
 import {
@@ -14,6 +14,7 @@ import { useAuth } from "../../context/AuthContext";
 import useDataStore from "../../store/dataStore";
 import toast from "react-hot-toast";
 import { fetchRepairTasks as fetchRepairTasksSvc } from "../../services/repairService";
+import { fetchAdvancePayments, updateAdvancePayment, getTodayIST, getNowIST } from "../../services/advancePaymentService";
 
 // Google Form URLs mapped by firm name
 const FIRM_FORM_URLS = {
@@ -155,6 +156,7 @@ const MakePayment = () => {
     totalBillAmount: "",
     paymentType: "",
     toBePaidAmount: "",
+    utrChequeNo: "",
   });
 
   // const filteredTasks = tasks.filter(
@@ -171,9 +173,10 @@ const MakePayment = () => {
   const handleMaterialClick = (task) => {
     setSelectedTask(task);
     setFormData({
-      totalBillAmount: task.totalBillAmount?.toString() || "",
+      totalBillAmount: task.totalBillAmount?.toString() || task.toBePaidAmount?.toString() || "",
       paymentType: task.paymentType || "",
       toBePaidAmount: task.toBePaidAmount?.toString() || "",
+      utrChequeNo: "",
     });
     setIsModalOpen(true);
   };
@@ -186,11 +189,11 @@ const MakePayment = () => {
     try {
       if (!isBackground) setLoadingTasks(true);
 
-      // Use shared service — returns objects keyed by sheet header names (Row 6)
       const rawTasks = await fetchRepairTasksSvc(user?.firmName);
 
       const formattedTasks = rawTasks.map((row, index) => ({
         id: `payment-task-${index}`,
+        isAdvance: false,
         taskNo: row["Task No"] || "",
         firmName: row["Firm Name"] || "",
         serialNo: row["Serial No"] || "",
@@ -208,27 +211,38 @@ const MakePayment = () => {
         typeOfBill: row["Type of Bill"] || "",
         totalBillAmount: row["Total Bill Amount"] || "",
         toBePaidAmount: row["To Be Paid Amount"] || "",
-        // Posting step
         actualPosting: row["Actual Posting"] || "",
-        // Make Payment step
         planned4: row["Planned 4"] || "",
         actual4: row["Actual 4"] || "",
       }));
 
       setRepairTasks(formattedTasks);
 
-      // ✅ PENDING: Actual Posting bhari ho + Actual 4 KHALI ho
-      const pendingTasks = formattedTasks.filter(
+      // Normal pending: Actual Posting filled + Actual 4 empty (non-advance)
+      const normalPending = formattedTasks.filter(
         (task) => task.actualPosting && !task.actual4
       );
-      setPendingRepairPayments(pendingTasks);
+      const normalHistory = formattedTasks.filter((task) => task.actual4);
 
-      // ✅ HISTORY: Actual 4 bhari ho (payment ho chuka)
-      //    Same Repair System sheet se — NO separate Advance Payment sheet needed
-      const historyTasks = formattedTasks.filter(
-        (task) => task.actual4
-      );
-      setHistoryRepairPayments(historyTasks);
+      // Advance Step 3 pending: Actual Posting filled + Actual Payment Date empty
+      let advPending = [];
+      let advHistory = [];
+      try {
+        const advanceTasks = await fetchAdvancePayments();
+        const userFirm = (user?.firmName || "").toLowerCase();
+        const isAllFirm = !userFirm || userFirm === "all";
+        const firmFiltered = isAllFirm
+          ? advanceTasks
+          : advanceTasks.filter((t) => (t.firmName || "").toLowerCase() === userFirm);
+
+        advPending = firmFiltered.filter((t) => t.actualPosting && !t.actualPaymentDate);
+        advHistory = firmFiltered.filter((t) => t.actualPosting && t.actualPaymentDate);
+      } catch (advErr) {
+        console.warn("Could not fetch advance tasks for MakePayment:", advErr);
+      }
+
+      setPendingRepairPayments([...normalPending, ...advPending]);
+      setHistoryRepairPayments([...normalHistory, ...advHistory]);
 
     } catch (err) {
       console.error("Error fetching tasks:", err);
@@ -293,86 +307,106 @@ const MakePayment = () => {
 
  const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (!selectedTask) return;
+
+    if (!formData.paymentType) {
+      toast.error("Please select a payment type");
+      return;
+    }
+    if (!formData.toBePaidAmount) {
+      toast.error("Please enter the amount to be paid");
+      return;
+    }
 
     try {
       setSubmitLoading(true);
-      const now = new Date();
-      const formattedDate = `${now.getDate()}/${now.getMonth() + 1}/${now.getFullYear()}, ${now.getHours()}:${now.getMinutes()}:${now.getSeconds()}`;
+      const nowIST = getNowIST();
+      const todayIST = getTodayIST();
 
-      // Generate payment number
-      const lastPaymentNo = repairPayments
-        .filter(payment => payment.paymentNo?.startsWith("PN-"))
-        .map(payment => parseInt(payment.paymentNo.replace("PN-", ""), 10))
-        .filter(num => !isNaN(num))
-        .sort((a, b) => b - a)[0] || 0;
+      if (selectedTask.isAdvance) {
+        // ── ADVANCE TASK: Update "Repair FMS Advance Payment" sheet (Step 3) ──
+        const result = await updateAdvancePayment(selectedTask.taskNo, {
+          "Actual Payment Date": todayIST,
+          "Advance Payment UTR / Cheque No": formData.utrChequeNo || "",
+          "Advance Amount Paid": formData.toBePaidAmount || "",
+          "Payment Done By": user?.name || "",
+        });
 
-      const nextPaymentNo = `PN-${String(lastPaymentNo + 1).padStart(3, "0")}`;
-    
-            const newPayment = {
-        timestamp: formattedDate,
-        paymentNo: nextPaymentNo,
-        repairTaskNo: selectedTask.taskNo,
-        serialNo: selectedTask.serialNo,
-        machineName: selectedTask.machineName,
-        vendorName: selectedTask.vendorName,
-        billNo: selectedTask.billNo,
-        totalBillAmount: selectedTask.totalBillAmount,
-        paymentType: formData.paymentType,
-        toBePaidAmount: formData.toBePaidAmount,
-        billMatch: "No" // Default to not matched
-      };
-
- addRepairPayment(newPayment);
-      setHistoryRepairPayments([...historyRepairPayments, newPayment]);
-
-    // Prepare the payload for Google Sheets
-    const payload = {
-      action: "insert1",  // Using "insert1" action which adds to row 6
-      sheetName: "Repair FMS Advance Payment", // Correct sheet name from screenshot
-      
-      // Map form fields to sheet columns (adjust according to your actual sheet headers)
-      "Timestamp":formattedDate,
-      "Repair Task No": selectedTask.taskNo,
-      "Serial No": selectedTask.serialNo,
-      "Machine Name": selectedTask.machineName,
-      "Vendor Name ": selectedTask?.vendorName ,
-      "Bill No.": selectedTask.billNo,
-      "Total Bill Amount":selectedTask.totalBillAmount,
-      "Payment Type": formData.paymentType, // Current timestamp
-      "To Be Paid Amount": formData.toBePaidAmount,
-      // Add any other required fields from your sheet
-    };
-
-    // Send the data to your Google Apps Script
-     const response = await fetch(SCRIPT_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        body: new URLSearchParams(payload).toString(),
-      });
-
-      const result = await response.json();
-      
-      if (result.success) {
-        toast.success("Payment details submitted successfully!");
-        setIsModalOpen(false);
-        // Refresh data from server to ensure sync
-        fetchPayments();
+        if (result.success) {
+          toast.success("✅ Advance payment released successfully!");
+          setIsModalOpen(false);
+          await fetchAllTasks(true);
+          await fetchPayments(true);
+        } else {
+          toast.error("❌ Failed: " + (result.message || "Unknown error"));
+        }
       } else {
-        toast.error("Failed to submit payment details: " + (result.message || result.error));
-        // Rollback local state if submission fails
-        setHistoryRepairPayments(historyRepairPayments.filter(p => p.paymentNo !== nextPaymentNo));
+        // ── NORMAL TASK: Insert into Repair FMS Advance Payment + update Repair System ──
+        const lastPaymentNo = repairPayments
+          .filter((p) => p.paymentNo?.startsWith("PN-"))
+          .map((p) => parseInt(p.paymentNo.replace("PN-", ""), 10))
+          .filter((n) => !isNaN(n))
+          .sort((a, b) => b - a)[0] || 0;
+        const nextPaymentNo = `PN-${String(lastPaymentNo + 1).padStart(3, "0")}`;
+
+        // Step 1: Insert into Repair FMS Advance Payment sheet
+        const insertPayload = {
+          action: "insert1",
+          sheetName: "Repair FMS Advance Payment",
+          Timestamp: nowIST,
+          "Repair Task No": selectedTask.taskNo,
+          "Serial No": selectedTask.serialNo || "",
+          "Machine Name": selectedTask.machineName || "",
+          "Vendor Name ": selectedTask.vendorName || "",
+          "Bill No.": selectedTask.billNo || "",
+          "Total Bill Amount": selectedTask.totalBillAmount || "",
+          "Payment Type": formData.paymentType,
+          "To Be Paid Amount": formData.toBePaidAmount,
+        };
+        const insertResp = await fetch(SCRIPT_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams(insertPayload).toString(),
+        });
+        const insertResult = await insertResp.json();
+
+        if (!insertResult.success) {
+          toast.error("❌ Failed to record payment: " + (insertResult.message || "Unknown error"));
+          return;
+        }
+
+        // Step 2: Update Actual 4 in Repair System sheet
+        const updatePayload = {
+          action: "update1",
+          sheetName: "Repair System",
+          taskNo: selectedTask.taskNo,
+          "Actual 4": todayIST,
+        };
+        const updateResp = await fetch(SCRIPT_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams(updatePayload).toString(),
+        });
+        const updateResult = await updateResp.json();
+
+        if (updateResult.success) {
+          toast.success("✅ Payment submitted successfully!");
+          setIsModalOpen(false);
+          await fetchAllTasks(true);
+          await fetchPayments(true);
+        } else {
+          toast.error("❌ Payment recorded but Repair System not updated.");
+        }
       }
     } catch (error) {
       console.error("Submit error:", error);
-      toast.error("An error occurred while submitting payment details");
+      toast.error("❌ Network error while submitting payment");
     } finally {
       setSubmitLoading(false);
     }
   };
+
 
   // const handleSubmit = async (e) => {
   //   e.preventDefault();

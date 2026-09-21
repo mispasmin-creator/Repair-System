@@ -206,6 +206,45 @@ function doGet(e) {
       }
     }
 
+    // Handle Advance Payments sheet data (row 6 is header row)
+    if (e.parameter.action === 'getAdvancePayments') {
+      try {
+        var sheetId = e.parameter.sheetId;
+        var ss = sheetId ? SpreadsheetApp.openById(sheetId) : SpreadsheetApp.getActiveSpreadsheet();
+        var sheet = ss.getSheetByName('Repair FMS Advance Payment');
+        if (!sheet) {
+          return ContentService.createTextOutput(JSON.stringify({ success: false, error: 'Repair FMS Advance Payment sheet not found' }))
+            .setMimeType(ContentService.MimeType.JSON);
+        }
+        var allData = sheet.getDataRange().getValues();
+        var headers = allData[5]; // Row 6 (0-indexed as 5) = actual headers
+        var dataRows = allData.slice(6); // Data starts from row 7
+
+        var result = dataRows
+          .filter(function(row) { return row.some(function(cell) { return cell !== '' && cell !== null; }); })
+          .map(function(row) {
+            var obj = {};
+            headers.forEach(function(header, idx) {
+              if (header) {
+                var val = row[idx];
+                if (val instanceof Date) {
+                  obj[header] = Utilities.formatDate(val, Session.getScriptTimeZone(), 'dd/MM/yyyy HH:mm:ss');
+                } else {
+                  obj[header] = val !== null && val !== undefined ? val.toString() : '';
+                }
+              }
+            });
+            return obj;
+          });
+
+        return ContentService.createTextOutput(JSON.stringify({ success: true, data: result }))
+          .setMimeType(ContentService.MimeType.JSON);
+      } catch (err) {
+        return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.toString() }))
+          .setMimeType(ContentService.MimeType.JSON);
+      }
+    }
+
     // Existing sheet data retrieval logic
     var sheetName = e.parameter.sheet;
     var sheetId = e.parameter.sheetId;

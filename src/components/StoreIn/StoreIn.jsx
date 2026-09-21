@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Search, Filter, Package, Loader2Icon } from "lucide-react";
+import { Search, Filter, Package, Loader2Icon, Zap } from "lucide-react";
 import Button from "../ui/Button";
 import Modal from "../ui/Modal";
 import {
@@ -14,6 +14,7 @@ import { useAuth } from "../../context/AuthContext";
 import useDataStore from "../../store/dataStore";
 import toast from "react-hot-toast";
 import { fetchRepairTasks as fetchRepairTasksSvc } from "../../services/repairService";
+import { fetchAdvancePayments, updateAdvancePayment, getTodayIST } from "../../services/advancePaymentService";
 
 const StoreIn = () => {
   const { user } = useAuth();
@@ -129,11 +130,29 @@ const StoreIn = () => {
 
       setRepairTasks(formattedTasks);
 
-      // ✅ PENDING: Actual 2 bhari ho + Actual 3 KHALI ho
-      setPendingRepairTasks(formattedTasks.filter((t) => t.actual1 && !t.actual2));
+      // Normal pending: Actual 2 (Check Machine) filled + Actual 3 empty
+      const normalPending = formattedTasks.filter((t) => t.actual1 && !t.actual2);
+      const normalHistory = formattedTasks.filter((t) => t.actual1 && t.actual2);
 
-      // ✅ HISTORY: Dono bhari hoon
-      setHistoryRepairTasks(formattedTasks.filter((t) => t.actual1 && t.actual2));
+      // Advance Step 5 pending: Actual Check Machine Date filled + Actual Store In Date empty
+      let advPending = [];
+      let advHistory = [];
+      try {
+        const advanceTasks = await fetchAdvancePayments();
+        const userFirm = (user?.firmName || "").toLowerCase();
+        const isAllFirm = !userFirm || userFirm === "all";
+        const firmFiltered = isAllFirm
+          ? advanceTasks
+          : advanceTasks.filter((t) => (t.firmName || "").toLowerCase() === userFirm);
+
+        advPending = firmFiltered.filter((t) => t.actualCheckMachineDate && !t.actualStoreInDate);
+        advHistory = firmFiltered.filter((t) => t.actualCheckMachineDate && t.actualStoreInDate);
+      } catch (advErr) {
+        console.warn("Could not fetch advance tasks for StoreIn:", advErr);
+      }
+
+      setPendingRepairTasks([...normalPending, ...advPending]);
+      setHistoryRepairTasks([...normalHistory, ...advHistory]);
 
     } catch (err) {
       console.error("Error fetching tasks:", err);
@@ -203,13 +222,32 @@ const StoreIn = () => {
         billImageUrl = await uploadFileToDrive(formData.productImage);
       }
 
+      const todayIST = getTodayIST();
+
+      if (selectedTask.isAdvance) {
+        // ── ADVANCE TASK: Update "Repair FMS Advance Payment" sheet (Step 5) ──
+        const result = await updateAdvancePayment(selectedTask.taskNo, {
+          "Actual Store In Date": todayIST,
+          "Received Quantity": formData.receivedQuantity || "",
+          "Store In Done By": user?.name || "",
+        });
+
+        if (result.success) {
+          toast.success("✅ Advance Store In submitted successfully!");
+          setIsModalOpen(false);
+          fetchAllTasks(true);
+        } else {
+          toast.error("❌ Failed: " + (result.message || "Unknown error"));
+        }
+        return;
+      }
+
+      // ── NORMAL TASK: Update Repair System sheet (Actual 3) ──
       const payload = {
         action: "update1",
         sheetName: "Repair System",
         taskNo: selectedTask.taskNo,
-        "Actual 3": new Date().toLocaleDateString("en-GB", {
-          timeZone: "Asia/Kolkata",
-        }),
+        "Actual 3": todayIST,
         "Received Quantity": formData.receivedQuantity,
         "Bill Match": formData.billMatch ? "Yes" : "No",
         "Bill Image": billImageUrl,
