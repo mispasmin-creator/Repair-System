@@ -25,60 +25,63 @@ export const fetchAdvancePayments = async () => {
   return raw
     .filter((row) => Object.values(row).some((v) => v !== "" && v !== null && v !== undefined))
     .map((row) => ({
-      isAdvance: true,
-      taskNo: row["Repair Task No"] || "",
-      repairTaskNo: row["Repair Task No"] || "",
-      firmName: row["Firm Name"] || "",
-      serialNo: row["Serial No"] || "",
-      machineName: row["Machine Name"] || row["Machine Name "] || "",
-      machinePartName: row["Machine Part Name"] || "",
-      department: row["Department"] || "",
-      vendorName: row["Vendor Name"] || row["Vendor Name "] || "",
-      paymentType: row["Payment Type"] || "Advance",
-      toBePaidAmount: row["To Be Paid Amount"] || "",
+        isAdvance: true,
+        taskNo: row["Repair Task No"] || "",
+        repairTaskNo: row["Repair Task No"] || "",
+        firmName: row["Firm Name"] || "",
+        serialNo: row["Serial No"] || "",
+        machineName: row["Machine Name"] || row["Machine Name "] || "",
+        machinePartName: row["Machine Part Name"] || "",
+        department: row["Department"] || "",
+        vendorName: row["Vendor Name"] || row["Vendor Name "] || "",
+        paymentType: row["Payment Type"] || "Advance",
+        toBePaidAmount: row["To Be Paid Amount"] || "",
+        billNo: row["Bill No."] || "",
+        typeOfBill: row["Type of Bill"] || "",
+        totalBillAmount: row["Total Bill Amount"] || "",
 
-      // Management Approval
-      managementApprovalDate: row["Management Approval Date"] || "",
-      managementRemark: row["Management Remark"] || "",
+        // Management Approval
+        managementApprovalDate: row["Management Approval Date"] || "",
+        managementRemark: row["Management Remark"] || "",
 
-      // Step 2: Posting
-      plannedPosting: row["Planned Posting"] || "",
-      actualPosting: row["Actual Posting"] || "",
-      postingVoucherNo: row["Posting Voucher No"] || "",
-      postingDoneBy: row["Posting Done By"] || "",
+        // Step 2: Posting
+        plannedPosting: row["Planned Posting"] || "",
+        actualPosting: row["Actual Posting"] || "",
+        postingVoucherNo: row["Posting Voucher No"] || "",
+        postingDoneBy: row["Posting Done By"] || "",
 
-      // Step 3: Make Payment (Advance Release)
-      plannedPayment: row["Planned Payment"] || "",
-      actualPaymentDate: row["Actual Payment Date"] || "",
-      advancePaymentUTR: row["Advance Payment UTR / Cheque No"] || "",
-      advanceAmountPaid: row["Advance Amount Paid"] || "",
-      paymentDoneBy: row["Payment Done By"] || "",
+        // Step 3: Make Payment (Advance Release)
+        plannedPayment: row["Planned Payment"] || "",
+        actualPaymentDate: row["Actual Payment Date"] || "",
+        advancePaymentUTR: row["Advance Payment UTR / Cheque No"] || "",
+        advanceAmountPaid: row["Advance Amount Paid"] || "",
+        paymentDoneBy: row["Payment Done By"] || "",
 
-      // Step 4: Check Machine
-      plannedCheckMachine: row["Planned Check Machine"] || "",
-      actualCheckMachineDate: row["Actual Check Machine Date"] || "",
-      billDate: row["Bill Date"] || "",
-      billImageLink: row["Bill Image Link"] || "",
-      checkedBy: row["Checked By"] || "",
+        // Step 4: Check Machine
+        plannedCheckMachine: row["Planned Check Machine"] || "",
+        actualCheckMachineDate: row["Actual Check Machine Date"] || "",
+        billDate: row["Bill Date"] || "",
+        billImageLink: row["Bill Image Link"] || "",
+        checkedBy: row["Checked By"] || "",
 
-      // Step 5: Store In
-      plannedStoreIn: row["Planned Store In"] || "",
-      actualStoreInDate: row["Actual Store In Date"] || "",
-      receivedQuantity: row["Received Quantity"] || "",
-      storeInDoneBy: row["Store In Done By"] || "",
+        // Step 5: Store In
+        plannedStoreIn: row["Planned Store In"] || "",
+        actualStoreInDate: row["Actual Store In Date"] || "",
+        receivedQuantity: row["Received Quantity"] || "",
+        storeInDoneBy: row["Store In Done By"] || "",
 
-      // Step 6: Full Billing
-      plannedFullBilling: row["Planned Full Billing"] || "",
-      actualFullBillingDate: row["Actual Full Billing Date"] || "",
-      balanceAmountToPay: row["Balance Amount To Pay"] || "",
-      balancePaymentUTR: row["Balance Payment UTR / Cheque No"] || "",
-      billingStatus: row["Billing Status"] || "",
+        // Step 6: Full Billing
+        plannedFullBilling: row["Planned Full Billing"] || "",
+        actualFullBillingDate: row["Actual Full Billing Date"] || "",
+        balanceAmountToPay: row["Balance Amount To Pay"] || "",
+        balancePaymentUTR: row["Balance Payment UTR / Cheque No"] || "",
+        billingStatus: row["Billing Status"] || "",
 
-      // Step 7: Accounts
-      plannedAccounts: row["Planned Accounts"] || "",
-      actualAccountsDate: row["Actual Accounts Date"] || "",
-      accountsStatus: row["Accounts Status"] || "",
-      accountsRemark: row["Accounts Remark"] || "",
+        // Step 7: Accounts
+        plannedAccounts: row["Planned Accounts"] || "",
+        actualAccountsDate: row["Actual Accounts Date"] || "",
+        accountsStatus: row["Accounts Status"] || "",
+        accountsRemark: row["Accounts Remark"] || "",
     }));
 };
 

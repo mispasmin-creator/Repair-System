@@ -29,7 +29,7 @@ const CheckMachine = () => {
     updateRepairTask,
     transporters
   } = useDataStore();
-  
+
   const [activeTab, setActiveTab] = useState("pending");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
@@ -125,8 +125,8 @@ const CheckMachine = () => {
             commonLinked = Array.isArray(rawCommon)
               ? rawCommon
               : rawCommon.startsWith("[")
-              ? JSON.parse(rawCommon)
-              : rawCommon.split(",").map((s) => s.trim()).filter(Boolean);
+                ? JSON.parse(rawCommon)
+                : rawCommon.split(",").map((s) => s.trim()).filter(Boolean);
           } catch (_) {
             commonLinked = rawCommon.split(",").map((s) => s.trim()).filter(Boolean);
           }
@@ -183,13 +183,38 @@ const CheckMachine = () => {
 
       setRepairTasks(formattedTasks);
 
+      // DEBUG: log common task linking data
+      console.log("[CheckMachine] commonTasksLinked debug:");
+      formattedTasks.forEach(t => {
+        if (t.commonTasksLinked?.length > 0 || t.commonParentTask) {
+          console.log(`  Task: "${t.taskNo}" | linked: ${JSON.stringify(t.commonTasksLinked)} | parent: "${t.commonParentTask}"`);
+        }
+      });
+
+      // Helper: check if a taskNo is listed as a child in any other task's commonTasksLinked
+      const isChildTask = (taskNo) => {
+        const normalized = (taskNo || "").trim().toLowerCase();
+        return formattedTasks.some((other) =>
+          other.commonTasksLinked?.some(
+            (childNo) => (childNo || "").trim().toLowerCase() === normalized
+          )
+        );
+      };
+
       // Normal pending: Management Approval Date filled + Actual 2 empty
-      const normalPending = formattedTasks.filter((t) => t.managementApprovalDate && !t.actual1);
-      const normalHistory = formattedTasks.filter((t) => t.managementApprovalDate && t.actual1);
+      // Tasks that are children of another (listed in someTask.commonTasksLinked) are hidden
+      const normalPending = formattedTasks.filter(
+        (t) => t.managementApprovalDate && !t.actual1 && !isChildTask(t.taskNo)
+      );
+      // Normal history: Actual 2 filled — child tasks also hidden (shown under parent)
+      const normalHistory = formattedTasks.filter(
+        (t) => t.managementApprovalDate && t.actual1 && !isChildTask(t.taskNo)
+      );
 
       // Advance Step 4 pending: Actual Payment Date filled + Actual Check Machine Date empty
       let advPending = [];
       let advHistory = [];
+      let advWithParentFlag = [];
       try {
         const advanceTasks = await fetchAdvancePayments();
         const userFirm = (user?.firmName || "").toLowerCase();
@@ -198,14 +223,42 @@ const CheckMachine = () => {
           ? advanceTasks
           : advanceTasks.filter((t) => (t.firmName || "").toLowerCase() === userFirm);
 
-        advPending = firmFiltered.filter((t) => t.actualPaymentDate && !t.actualCheckMachineDate);
-        advHistory = firmFiltered.filter((t) => t.actualPaymentDate && t.actualCheckMachineDate);
+        // Mark child tasks for advance payments too (same Bill No. based grouping as Normal)
+        advWithParentFlag = firmFiltered.map((task) => {
+          if (!task.billNo || task.billNo === "-") {
+            return { ...task, isChildTask: false, commonTasksLinked: [] };
+          }
+          const siblings = firmFiltered.filter(
+            (other) => other.billNo === task.billNo && other.taskNo !== task.taskNo
+          );
+          if (siblings.length === 0) {
+            return { ...task, isChildTask: false, commonTasksLinked: [] };
+          }
+          const group = firmFiltered.filter((other) => other.billNo === task.billNo);
+          const isChildAdv = group[0]?.taskNo !== task.taskNo;
+          return {
+            ...task,
+            isChildTask: isChildAdv,
+            commonTasksLinked: isChildAdv ? [] : siblings.map((t) => t.taskNo),
+          };
+        });
+
+        advPending = advWithParentFlag.filter(
+          (t) => t.actualPaymentDate && !t.actualCheckMachineDate && !t.isChildTask
+        );
+        advHistory = advWithParentFlag.filter(
+          (t) => t.actualPaymentDate && t.actualCheckMachineDate && !t.isChildTask
+        );
       } catch (advErr) {
         console.warn("Could not fetch advance tasks for CheckMachine:", advErr);
       }
 
       setPendingRepairTasks([...normalPending, ...advPending]);
       setHistoryRepairTasks([...normalHistory, ...advHistory]);
+
+      // Also merge advance tasks into `repairTasks` so the modal's common-task lookup
+      // can resolve linked advance child tasks' machine names.
+      setRepairTasks([...formattedTasks, ...advWithParentFlag]);
 
     } catch (err) {
       console.error("Error fetching tasks:", err);
@@ -263,7 +316,7 @@ const CheckMachine = () => {
     fetchBillTypes();
   }, []);
 
- const uploadFileToDrive = async (file) => {
+  const uploadFileToDrive = async (file) => {
     const reader = new FileReader();
 
     return new Promise((resolve, reject) => {
@@ -328,6 +381,8 @@ const CheckMachine = () => {
           "Bill Date": nowFormatted,
           "Bill Image Link": billImageUrl || "",
           "Checked By": user?.name || "",
+          "Bill No.": formData.billNo || "",
+          "Type of Bill": formData.typeOfBill || "",
         });
 
         if (result.success) {
@@ -431,7 +486,7 @@ const CheckMachine = () => {
             commonParentTask: selectedTask.taskNo,
           });
         }
-        
+
         toast.success(
           selectedCommonTasks.length > 0
             ? `✅ Task ${selectedTask.taskNo} and ${selectedCommonTasks.length} common task(s) updated successfully`
@@ -466,7 +521,7 @@ const CheckMachine = () => {
     setCommonDetailModalOpen(true);
   };
 
- 
+
 
   return (
     <div className="space-y-6">
@@ -479,21 +534,19 @@ const CheckMachine = () => {
           <nav className="flex space-x-8 px-6">
             <button
               onClick={() => setActiveTab("pending")}
-              className={`py-4 px-1 text-sm font-medium border-b-2 transition-colors duration-200 ${
-                activeTab === "pending"
+              className={`py-4 px-1 text-sm font-medium border-b-2 transition-colors duration-200 ${activeTab === "pending"
                   ? "border-blue-500 text-blue-600"
                   : "border-transparent text-gray-500 hover:text-gray-700"
-              }`}
+                }`}
             >
               Pending ({displayedPendingTasks.length})
             </button>
             <button
               onClick={() => setActiveTab("history")}
-              className={`py-4 px-1 text-sm font-medium border-b-2 transition-colors duration-200 ${
-                activeTab === "history"
+              className={`py-4 px-1 text-sm font-medium border-b-2 transition-colors duration-200 ${activeTab === "history"
                   ? "border-blue-500 text-blue-600"
                   : "border-transparent text-gray-500 hover:text-gray-700"
-              }`}
+                }`}
             >
               History ({displayedHistoryTasks.length})
             </button>
@@ -512,8 +565,8 @@ const CheckMachine = () => {
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
-            <Button 
-              variant={showFilters ? "primary" : "secondary"} 
+            <Button
+              variant={showFilters ? "primary" : "secondary"}
               size="sm"
               onClick={() => setShowFilters(!showFilters)}
             >
@@ -602,7 +655,15 @@ const CheckMachine = () => {
                         </Button>
                       </TableCell>
                       <TableCell className="font-medium text-blue-600">
-                        {task.taskNo}
+                        <div className="flex flex-col gap-1">
+                          <span>{task.taskNo}</span>
+                          {task.commonTasksLinked?.length > 0 && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full bg-green-100 text-green-700 border border-green-300 w-fit">
+                              <Layers className="w-3 h-3" />
+                              {task.commonTasksLinked.length} Common
+                            </span>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell>{task.firmName || "-"}</TableCell>
                       <TableCell className="font-medium text-gray-900">{task.machineName}</TableCell>
@@ -695,13 +756,12 @@ const CheckMachine = () => {
                       </TableCell>
                       <TableCell>{task.billNo || "-"}</TableCell>
                       <TableCell>
-                        <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${
-                          (task.typeOfBill || "").toLowerCase() === "common"
+                        <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${(task.typeOfBill || "").toLowerCase() === "common"
                             ? "bg-purple-100 text-purple-800"
                             : (task.typeOfBill || "").toLowerCase() === "independent"
-                            ? "bg-blue-100 text-blue-800"
-                            : "bg-gray-100 text-gray-800"
-                        }`}>
+                              ? "bg-blue-100 text-blue-800"
+                              : "bg-gray-100 text-gray-800"
+                          }`}>
                           {task.typeOfBill || "-"}
                         </span>
                         {task.commonParentTask && (
@@ -748,6 +808,43 @@ const CheckMachine = () => {
         size="lg"
       >
         <form onSubmit={handleSubmit} className="space-y-6">
+
+          {/* Linked Common Tasks Info Panel */}
+          {selectedTask?.commonTasksLinked?.length > 0 && (
+            <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Layers className="w-4 h-4 text-blue-600" />
+                <span className="text-sm font-semibold text-blue-800">
+                  This task has {selectedTask.commonTasksLinked.length} linked common task(s) — all will be processed together
+                </span>
+              </div>
+              <div className="space-y-2">
+                {/* Main (parent) task row */}
+                <div className="flex items-center gap-3 bg-white rounded-md border border-blue-200 px-3 py-2">
+                  <span className="inline-flex items-center px-2 py-0.5 text-[11px] font-bold rounded-full bg-blue-600 text-white"></span>
+                  <span className="font-semibold text-blue-700 text-sm">{selectedTask.taskNo}</span>
+                  <span className="text-gray-500 text-sm">—</span>
+                  <span className="text-gray-700 text-sm">{selectedTask.machineName || "-"}</span>
+                </div>
+                {/* Child task rows */}
+                {selectedTask.commonTasksLinked.map((childNo) => {
+                  const childTask = repairTasks.find((t) => t.taskNo === childNo);
+                  return (
+                    <div key={childNo} className="flex items-center gap-3 bg-white rounded-md border border-green-200 px-3 py-2">
+                      <span className="inline-flex items-center px-2 py-0.5 text-[11px] font-bold rounded-full bg-green-100 text-green-700 border border-green-300">COMMON</span>
+                      <span className="font-semibold text-green-700 text-sm">{childNo}</span>
+                      <span className="text-gray-500 text-sm">—</span>
+                      <span className="text-gray-700 text-sm">{childTask?.machineName || "-"}</span>
+                      {childTask?.department && (
+                        <span className="text-xs text-gray-400 ml-auto">{childTask.department}</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -949,15 +1046,14 @@ const CheckMachine = () => {
                                   : [...prev, t.taskNo]
                               );
                             }}
-                            className={`flex items-center justify-between p-2.5 cursor-pointer text-xs transition-colors ${
-                              isChecked ? "bg-indigo-50/80 font-medium" : "hover:bg-gray-50"
-                            }`}
+                            className={`flex items-center justify-between p-2.5 cursor-pointer text-xs transition-colors ${isChecked ? "bg-indigo-50/80 font-medium" : "hover:bg-gray-50"
+                              }`}
                           >
                             <div className="flex items-center space-x-2.5 min-w-0">
                               <input
                                 type="checkbox"
                                 checked={isChecked}
-                                onChange={() => {}} // handled by parent div onClick
+                                onChange={() => { }} // handled by parent div onClick
                                 className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500 cursor-pointer"
                               />
                               <div className="min-w-0">
@@ -1058,24 +1154,24 @@ const CheckMachine = () => {
               </select>
             </div> */}
 
-      {formData.totalBillAmount && (
-  <div className="mt-4">
-    <label className="block text-sm font-medium text-gray-700 mb-2">
-      To Be Paid Amount
-    </label>
-    <input
-      type="number"
-      value={
-        selectedTask?.howMuch != null &&
-        formData.totalBillAmount - selectedTask.howMuch >= 0
-          ? formData.totalBillAmount - selectedTask.howMuch
-          : ""
-      }
-      readOnly
-      className="w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-md focus:outline-none"
-    />
-  </div>
-)}
+            {formData.totalBillAmount && (
+              <div className="mt-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  To Be Paid Amount
+                </label>
+                <input
+                  type="number"
+                  value={
+                    selectedTask?.howMuch != null &&
+                      formData.totalBillAmount - selectedTask.howMuch >= 0
+                      ? formData.totalBillAmount - selectedTask.howMuch
+                      : ""
+                  }
+                  readOnly
+                  className="w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-md focus:outline-none"
+                />
+              </div>
+            )}
 
           </div>
 

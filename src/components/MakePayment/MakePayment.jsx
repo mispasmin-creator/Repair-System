@@ -143,6 +143,62 @@ const MakePayment = () => {
   const displayedPending = filterPending(pendingRepairPayments);
   const displayedHistory = filterHistory(historyWithFirm);
 
+  // Group by Bill No. - show only parent task (first task with that Bill No.)
+  const groupedPending = useMemo(() => {
+    const billGroups = {};
+    const siblingsMap = {}; // Track siblings for each Bill No.
+
+    // First pass: group by Bill No. OR by firm+amount for advance tasks
+    displayedPending.forEach((task) => {
+      let billKey;
+      if (task.billNo && task.billNo !== "-") {
+        billKey = task.billNo;
+      } else if (task.isAdvance) {
+        // For advance tasks without bill no, group by firm + totalBillAmount
+        billKey = `ADV-${(task.firmName || "").toLowerCase()}-${task.totalBillAmount}`;
+      } else {
+        billKey = `NO-BILL-${task.taskNo}`;
+      }
+
+      if (!billGroups[billKey]) {
+        billGroups[billKey] = task;
+        siblingsMap[billKey] = [];
+      } else {
+        siblingsMap[billKey].push(task.taskNo);
+      }
+    });
+
+    // Second pass: add sibling count to parent tasks
+    const result = Object.values(billGroups).map((task) => {
+      let billKey;
+      if (task.billNo && task.billNo !== "-") {
+        billKey = task.billNo;
+      } else if (task.isAdvance) {
+        billKey = `ADV-${(task.firmName || "").toLowerCase()}-${task.totalBillAmount}`;
+      } else {
+        billKey = `NO-BILL-${task.taskNo}`;
+      }
+      return {
+        ...task,
+        commonTasksLinked: siblingsMap[billKey] || []
+      };
+    });
+
+    console.log("Grouped Pending:", result);
+    return result;
+  }, [displayedPending]);
+
+  const groupedHistory = useMemo(() => {
+    const billGroups = {};
+    displayedHistory.forEach((task) => {
+      const billKey = task.billNo || `NO-BILL-${task.repairTaskNo}`;
+      if (!billGroups[billKey]) {
+        billGroups[billKey] = task; // Keep first task as parent
+      }
+    });
+    return Object.values(billGroups);
+  }, [displayedHistory]);
+
   const totalBillAmountSum = useMemo(() => {
     const currentList = activeTab === "pending" ? displayedPending : displayedHistory;
     return currentList.reduce((sum, task) => {
@@ -191,42 +247,81 @@ const MakePayment = () => {
 
       const rawTasks = await fetchRepairTasksSvc(user?.firmName);
 
-      const formattedTasks = rawTasks.map((row, index) => ({
-        id: `payment-task-${index}`,
-        isAdvance: false,
-        taskNo: row["Task No"] || "",
-        firmName: row["Firm Name"] || "",
-        serialNo: row["Serial No"] || "",
-        machineName: row["Machine Name"] || "",
-        machinePartName: row["Machine Part Name"] || "",
-        doerName: row["Doer Name"] || "",
-        problem: row["Problem"] || "",
-        priority: row["Priority"] || "",
-        department: row["Department"] || "",
-        vendorName: row["Vendor Name"] || "",
-        paymentType: row["Payment Type"] || "",
-        howMuch: row["How Much"] || "",
-        billImage: row["Bill Image"] || "",
-        billNo: row["Bill No."] || "",
-        typeOfBill: row["Type of Bill"] || "",
-        totalBillAmount: row["Total Bill Amount"] || "",
-        toBePaidAmount: row["To Be Paid Amount"] || "",
-        actualPosting: row["Actual Posting"] || "",
-        planned4: row["Planned 4"] || "",
-        actual4: row["Actual 4"] || "",
-      }));
+      const formattedTasks = rawTasks.map((row, index) => {
+        return {
+          id: `payment-task-${index}`,
+          isAdvance: false,
+          taskNo: row["Task No"] || "",
+          firmName: row["Firm Name"] || "",
+          serialNo: row["Serial No"] || "",
+          machineName: row["Machine Name"] || "",
+          machinePartName: row["Machine Part Name"] || "",
+          doerName: row["Doer Name"] || "",
+          problem: row["Problem"] || "",
+          priority: row["Priority"] || "",
+          department: row["Department"] || "",
+          vendorName: row["Vendor Name"] || "",
+          paymentType: row["Payment Type"] || "",
+          howMuch: row["How Much"] || "",
+          billImage: row["Bill Image"] || "",
+          billNo: row["Bill No."] || "",
+          typeOfBill: row["Type of Bill"] || "",
+          totalBillAmount: row["Total Bill Amount"] || "",
+          toBePaidAmount: row["To Be Paid Amount"] || "",
+          actualPosting: row["Actual Posting"] || "",
+          planned4: row["Planned 4"] || "",
+          actual4: row["Actual 4"] || "",
+        };
+      });
 
-      setRepairTasks(formattedTasks);
+      // Calculate common bills based on Bill No - tasks with same bill no are common
+      const tasksWithCommonBills = formattedTasks.map((task) => {
+        if (!task.billNo || task.billNo === "-") {
+          return { ...task, commonTasksLinked: [], isChildTask: false };
+        }
+        const siblingTasks = formattedTasks.filter(
+          (other) => other.billNo === task.billNo && other.taskNo !== task.taskNo
+        );
+        return {
+          ...task,
+          commonTasksLinked: siblingTasks.map((t) => t.taskNo),
+        };
+      });
 
-      // Normal pending: Actual Posting filled + Actual 4 empty (non-advance)
-      const normalPending = formattedTasks.filter(
-        (task) => task.actualPosting && !task.actual4
-      );
-      const normalHistory = formattedTasks.filter((task) => task.actual4);
+      // Mark child tasks - only first task with each Bill No is parent, rest are children
+      const billNoGroups = {};
+      tasksWithCommonBills.forEach((task) => {
+        if (task.billNo && task.billNo !== "-") {
+          if (!billNoGroups[task.billNo]) {
+            billNoGroups[task.billNo] = [];
+          }
+          billNoGroups[task.billNo].push(task);
+        }
+      });
 
-      // Advance Step 3 pending: Actual Posting filled + Actual Payment Date empty
+      const tasksWithParentFlag = tasksWithCommonBills.map((task) => {
+        if (!task.billNo || task.billNo === "-" || task.commonTasksLinked.length === 0) {
+          return { ...task, isChildTask: false };
+        }
+        const group = billNoGroups[task.billNo] || [];
+        const isChild = group[0]?.taskNo !== task.taskNo;
+        return { ...task, isChildTask: isChild };
+      });
+
+      setRepairTasks(tasksWithParentFlag);
+
+      // Pending: Actual Posting filled + Actual 4 empty - hide child tasks (both NORMAL and ADVANCE)
+      const normalPending = tasksWithParentFlag
+        .filter((task) => task.actualPosting && !task.actual4 && !task.isChildTask)
+        .map((t) => ({ ...t, isAdvance: false }));
+      const normalHistory = tasksWithParentFlag
+        .filter((task) => task.actual4 && !task.isChildTask)
+        .map((t) => ({ ...t, isAdvance: false }));
+
+      // Advance Step 3 pending: Same logic - Actual Posting filled + Actual Payment Date empty
       let advPending = [];
       let advHistory = [];
+      let advWithParentFlag = [];
       try {
         const advanceTasks = await fetchAdvancePayments();
         const userFirm = (user?.firmName || "").toLowerCase();
@@ -235,14 +330,45 @@ const MakePayment = () => {
           ? advanceTasks
           : advanceTasks.filter((t) => (t.firmName || "").toLowerCase() === userFirm);
 
-        advPending = firmFiltered.filter((t) => t.actualPosting && !t.actualPaymentDate);
-        advHistory = firmFiltered.filter((t) => t.actualPosting && t.actualPaymentDate);
+        // Mark child tasks for advance payments too (same Bill No. based grouping as Normal)
+        advWithParentFlag = firmFiltered.map((task) => {
+          if (!task.billNo || task.billNo === "-") {
+            return { ...task, isChildTask: false, commonTasksLinked: [] };
+          }
+          const siblings = firmFiltered.filter(
+            (other) => other.billNo === task.billNo && other.taskNo !== task.taskNo
+          );
+          if (siblings.length === 0) {
+            return { ...task, isChildTask: false, commonTasksLinked: [] };
+          }
+          const group = firmFiltered.filter((other) => other.billNo === task.billNo);
+          const isChild = group[0]?.taskNo !== task.taskNo;
+          return {
+            ...task,
+            isChildTask: isChild,
+            commonTasksLinked: isChild ? [] : siblings.map((t) => t.taskNo),
+          };
+        });
+
+        // Same logic as NORMAL: Actual Posting filled + Actual Payment Date empty
+        // Add isAdvance flag to mark these as advance payment tasks
+        advPending = advWithParentFlag
+          .filter((t) => t.actualPosting && !t.actualPaymentDate && !t.isChildTask)
+          .map((t) => ({ ...t, isAdvance: true }));
+        advHistory = advWithParentFlag
+          .filter((t) => t.actualPosting && t.actualPaymentDate && !t.isChildTask)
+          .map((t) => ({ ...t, isAdvance: true }));
       } catch (advErr) {
         console.warn("Could not fetch advance tasks for MakePayment:", advErr);
       }
 
+      // Combine both NORMAL and ADVANCE pending/history with same logic
       setPendingRepairPayments([...normalPending, ...advPending]);
       setHistoryRepairPayments([...normalHistory, ...advHistory]);
+
+      // Also merge advance tasks into `repairTasks` so the modal's common-task lookup
+      // can resolve linked advance child tasks' machine names.
+      setRepairTasks([...tasksWithParentFlag, ...advWithParentFlag]);
 
     } catch (err) {
       console.error("Error fetching tasks:", err);
@@ -391,7 +517,12 @@ const MakePayment = () => {
         const updateResult = await updateResp.json();
 
         if (updateResult.success) {
-          toast.success("✅ Payment submitted successfully!");
+          const commonBillCount = selectedTask?.commonTasksLinked?.length || 0;
+          if (commonBillCount > 0) {
+            toast.success(`✅ Payment submitted! ${commonBillCount} common bill(s) also updated.`);
+          } else {
+            toast.success("✅ Payment submitted successfully!");
+          }
           setIsModalOpen(false);
           await fetchAllTasks(true);
           await fetchPayments(true);
@@ -479,7 +610,7 @@ const MakePayment = () => {
                   : "border-transparent text-gray-500 hover:text-gray-700"
               }`}
             >
-              Pending ({displayedPending.length})
+              Pending ({groupedPending.length})
             </button>
             <button
               onClick={() => setActiveTab("history")}
@@ -489,7 +620,7 @@ const MakePayment = () => {
                   : "border-transparent text-gray-500 hover:text-gray-700"
               }`}
             >
-              History ({displayedHistory.length})
+              History ({groupedHistory.length})
             </button>
           </nav>
         </div>
@@ -704,6 +835,7 @@ const MakePayment = () => {
                     <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[160px]">Transportation Amount</th>
                     <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[120px]">Bill Image</th>
                     <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[120px]">Bill No.</th>
+                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[150px]">Advance Amount Paid</th>
                     <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[130px]">Type of Bill</th>
                     <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[150px]">Total Bill Amount</th>
                     <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[150px]">To Be Paid Amount</th>
@@ -719,13 +851,13 @@ const MakePayment = () => {
                         </div>
                       </td>
                     </tr>
-                  ) : displayedPending.length === 0 ? (
+                  ) : groupedPending.length === 0 ? (
                     <tr>
                       <td colSpan={21} className="text-center py-12 text-gray-500">No pending payments found</td>
                     </tr>
                   ) : (
-                    displayedPending.map((task) => (
-                      <tr key={task.taskNo || Math.random()} className="hover:bg-blue-50/40 transition-colors duration-150">
+                    groupedPending.map((task) => (
+                      <tr key={task.taskNo || Math.random()} className={`hover:bg-blue-50/40 transition-colors duration-150 ${task.commonTasksLinked?.length > 0 ? 'bg-blue-50/20' : ''}`}>
                         <td className="px-4 py-3 text-sm whitespace-nowrap text-center">
                           <div className="flex items-center justify-center gap-2">
                             <Button size="sm" onClick={() => handleMaterialClick(task)} className="flex items-center">
@@ -744,7 +876,16 @@ const MakePayment = () => {
                             </Button>
                           </div>
                         </td>
-                        <td className="px-4 py-3 text-sm font-medium text-blue-600 whitespace-nowrap">{task.taskNo}</td>
+                        <td className="px-4 py-3 text-sm font-medium text-blue-600 whitespace-nowrap">
+                          <div className="flex flex-col gap-1">
+                            <span>{task.taskNo || "-"}</span>
+                            {task.commonTasksLinked?.length > 0 && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full bg-green-100 text-green-700 border border-green-300 w-fit">
+                                🔗 {task.commonTasksLinked.length} Common
+                              </span>
+                            )}
+                          </div>
+                        </td>
                         <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">{task.firmName || "-"}</td>
                         <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{task.serialNo || "-"}</td>
                         <td className="px-4 py-3 text-sm font-medium text-gray-900 whitespace-nowrap">{task.machineName}</td>
@@ -779,6 +920,9 @@ const MakePayment = () => {
                           ) : <span className="text-gray-400 text-xs">No Bill</span>}
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">{task.billNo || "-"}</td>
+                        <td className="px-4 py-3 text-sm font-medium text-gray-900 whitespace-nowrap">
+                          {task.advanceAmountPaid ? `₹${Number(task.advanceAmountPaid).toLocaleString()}` : "-"}
+                        </td>
                         <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">{task.typeOfBill || "-"}</td>
                         <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">
                           {task.totalBillAmount ? `₹${Number(task.totalBillAmount).toLocaleString()}` : "-"}
@@ -806,6 +950,7 @@ const MakePayment = () => {
                 <TableHead className="min-w-[150px]">Machine Name</TableHead>
                 <TableHead className="min-w-[140px]">Vendor Name</TableHead>
                 <TableHead className="min-w-[120px]">Bill No.</TableHead>
+                <TableHead className="min-w-[150px]">Advance Amount Paid</TableHead>
                 <TableHead className="min-w-[130px]">Total Bill Amount</TableHead>
                 <TableHead className="min-w-[120px]">Payment Type</TableHead>
                 <TableHead className="min-w-[130px]">To Be Paid Amount</TableHead>
@@ -822,14 +967,14 @@ const MakePayment = () => {
                       </div>
                     </TableCell>
                   </TableRow>
-                ) : displayedHistory.length === 0 ? (
+                ) : groupedHistory.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={12} className="text-center py-12 text-gray-500">
                       No payment history found
                     </TableCell>
                   </TableRow>
                 ) : (
-                  displayedHistory.map((task, index) => (
+                  groupedHistory.map((task, index) => (
                     <TableRow key={index}>
                       <TableCell className="font-medium text-blue-600">
                         {task.paymentNo || task.taskNo}
@@ -840,6 +985,9 @@ const MakePayment = () => {
                       <TableCell className="font-medium text-gray-900">{task.machineName}</TableCell>
                       <TableCell>{task.vendorName || "-"}</TableCell>
                       <TableCell>{task.billNo || "-"}</TableCell>
+                      <TableCell className="font-medium text-gray-900">
+                        {task.advanceAmountPaid ? `₹${Number(task.advanceAmountPaid).toLocaleString()}` : "-"}
+                      </TableCell>
                       <TableCell>
                         {task.totalBillAmount ? `₹${Number(task.totalBillAmount).toLocaleString()}` : "-"}
                       </TableCell>
@@ -887,7 +1035,35 @@ const MakePayment = () => {
         size="lg"
       >
         <form onSubmit={handleSubmit} className="space-y-6">
-          
+
+          {/* Linked Common Bills Panel */}
+          {selectedTask?.commonTasksLinked?.length > 0 && (
+            <div className="rounded-lg border border-green-200 bg-green-50 p-3">
+              <p className="text-xs font-semibold text-green-800 mb-2">
+                🔗 {selectedTask.commonTasksLinked.length} linked common bill(s) will also be updated:
+              </p>
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2 bg-white rounded border border-blue-200 px-2.5 py-1.5 text-xs">
+                  <span className="font-bold text-blue-700 px-1.5 py-0.5 bg-blue-100 rounded-full">MAIN</span>
+                  <span className="font-semibold text-blue-700">{selectedTask.taskNo}</span>
+                  <span className="text-gray-400">—</span>
+                  <span className="text-gray-600">{selectedTask.machineName}</span>
+                </div>
+                {selectedTask.commonTasksLinked.map((childNo) => {
+                  const childTask = repairTasks.find((t) => t.taskNo === childNo);
+                  return (
+                    <div key={childNo} className="flex items-center gap-2 bg-white rounded border border-green-200 px-2.5 py-1.5 text-xs">
+                      <span className="font-bold text-green-700 px-1.5 py-0.5 bg-green-100 rounded-full border border-green-300">COMMON</span>
+                      <span className="font-semibold text-green-700">{childNo}</span>
+                      <span className="text-gray-400">—</span>
+                      <span className="text-gray-600">{childTask?.machineName || "-"}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
  <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">

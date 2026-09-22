@@ -175,11 +175,25 @@ const Dashboard = ({ setActiveTab }) => {
       );
       if (result && result.table && result.table.rows) {
         const rows = result.table.rows;
+        const cols = result.table.cols || [];
+
+        // Resolve Vendor Name / Transporter Name columns by header text,
+        // falling back to the original fixed positions (0, 1) if not found.
+        const vendorColIdx = cols.findIndex(
+          (c) => (c.label || "").toLowerCase().replace(/[^a-z0-9]/g, "") === "vendorname"
+        );
+        const resolvedVendorIdx = vendorColIdx !== -1 ? vendorColIdx : 0;
+
+        const transporterColIdx = cols.findIndex(
+          (c) => (c.label || "").toLowerCase().replace(/[^a-z0-9]/g, "") === "transportername"
+        );
+        const resolvedTransporterIdx = transporterColIdx !== -1 ? transporterColIdx : 1;
+
         const loadedVendors = rows
-          .map((row) => row.c[0]?.v)
+          .map((row) => row.c[resolvedVendorIdx]?.v)
           .filter((v) => v !== null && v !== undefined && v.toString().trim() !== "");
         const loadedTransporters = rows
-          .map((row) => row.c[1]?.v)
+          .map((row) => row.c[resolvedTransporterIdx]?.v)
           .filter((v) => v !== null && v !== undefined && v.toString().trim() !== "");
 
         setVendors(loadedVendors);

@@ -76,10 +76,11 @@ function doGet(e) {
             .setMimeType(ContentService.MimeType.JSON);
         }
         var allData = sheet.getDataRange().getValues();
-        var headers = allData[5];
+        var headers = allData[5] || [];
         var dataRows = allData.slice(6);
+
         var result = dataRows
-          .filter(function(row) { return row.some(function(cell) { return cell !== '' && cell !== null; }); })
+          .filter(function(row) { return row.some(function(cell) { return cell !== '' && cell !== null && cell !== undefined; }); })
           .map(function(row) {
             var obj = {};
             headers.forEach(function(header, idx) {
@@ -305,9 +306,13 @@ function formatCellValue(value) {
 
 // Set CORS headers for all responses
 function setCorsHeaders(output) {
-  output.setHeader('Access-Control-Allow-Origin', '*');
-  output.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  output.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  try {
+    output.addHeader('Access-Control-Allow-Origin', '*');
+    output.addHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    output.addHeader('Access-Control-Allow-Headers', 'Content-Type');
+  } catch (e) {
+    // Headers may not be available in all contexts
+  }
   return output;
 }
 
@@ -598,7 +603,11 @@ function doPost(e) {
         throw new Error("Task not found with Task No: " + taskNo);
       }
 
-      // Update any provided field that matches a header in row 6
+      // Get Bill No for finding common bills (based on Bill No matching)
+      var billNoCol = headers.indexOf('Bill No.') !== -1 ? headers.indexOf('Bill No.') : headers.indexOf('Bill No');
+      var parentBillNo = billNoCol !== -1 ? data[rowIndex - 1][billNoCol] : "";
+
+      // Update parent task
       for (var key in params) {
         if (key === 'action' || key === 'sheetName' || key === 'taskNo') continue;
         var colIndex = headers.indexOf(key);
@@ -607,9 +616,31 @@ function doPost(e) {
         }
       }
 
+      // If Actual Posting or Actual 4 is filled AND Bill No exists, update all tasks with same Bill No
+      var commonBillsUpdated = 0;
+      if ((params['Actual Posting'] || params['Actual 4']) && parentBillNo && parentBillNo !== '-' && parentBillNo !== '') {
+        for (var j = 6; j < data.length; j++) {
+          var currentBillNo = billNoCol !== -1 ? data[j][billNoCol] : "";
+          var currentTaskNo = data[j][taskNoCol];
+
+          // Update tasks with same Bill No (except the current one)
+          if (currentBillNo === parentBillNo && currentTaskNo !== taskNo && currentBillNo !== '') {
+            commonBillsUpdated++;
+            for (var ckey in params) {
+              if (ckey === 'action' || ckey === 'sheetName' || ckey === 'taskNo') continue;
+              var ccolIndex = headers.indexOf(ckey);
+              if (ccolIndex !== -1) {
+                sheet.getRange(j + 1, ccolIndex + 1).setValue(params[ckey]);
+              }
+            }
+          }
+        }
+      }
+
       return ContentService.createTextOutput(JSON.stringify({
         success: true,
-        message: "Task updated successfully"
+        message: "Task updated successfully",
+        commonBillsUpdated: commonBillsUpdated
       })).setMimeType(ContentService.MimeType.JSON);
     }
 
@@ -728,8 +759,8 @@ function handleLogin(username, password) {
       return { success: false, error: "Username and password are required" };
     }
 
-    const ss = SpreadsheetApp.openById("1Gi6EVJ6ATYOmVPJDm-flLM3tuZazsqt11f9dhwUqrVQ");
-    const sheet = ss.getSheetByName("Login Sheet");
+    const ss = SpreadsheetApp.openById("1x74bX62-1-plLYCkTv7nA4OdkQpM3IJTMs6HLLdt4lI");
+    const sheet = ss.getSheetByName("Repair Login");
     const data = sheet.getDataRange().getValues();
 
     for (let i = 1; i < data.length; i++) {
@@ -929,6 +960,30 @@ function addProcessRemarkColumn() {
   } else {
     Logger.log("'Process Remark' already exists in Row 6!");
   }
+}
+
+/**
+ * Run this function once in Google Apps Script Editor to automatically
+ * add "Common Bill Tasks" header in Row 6 of "Repair FMS Advance Payment" sheet.
+ */
+function addCommonBillTasksToAdvance() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName("Repair FMS Advance Payment");
+  if (!sheet) {
+    Logger.log("Repair FMS Advance Payment sheet not found");
+    return;
+  }
+
+  var headers = sheet.getRange(6, 1, 1, sheet.getLastColumn()).getValues()[0];
+  var existingIndex = headers.indexOf("Common Bill Tasks");
+  if (existingIndex !== -1) {
+    Logger.log("'Common Bill Tasks' already exists at column " + (existingIndex + 1));
+    return;
+  }
+
+  var nextCol = sheet.getLastColumn() + 1;
+  sheet.getRange(6, nextCol).setValue("Common Bill Tasks");
+  Logger.log("Successfully added 'Common Bill Tasks' header at Col " + nextCol + " of Row 6 in Repair FMS Advance Payment!");
 }
 
 

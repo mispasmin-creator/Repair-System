@@ -90,53 +90,87 @@ const StoreIn = () => {
       // Use shared service — returns objects keyed by sheet header names (Row 6)
       const rawTasks = await fetchRepairTasksSvc(user?.firmName);
 
-      const formattedTasks = rawTasks.map((row, index) => ({
-        id: `store-task-${index}`,
-        taskNo: row["Task No"] || "",
-        firmName: row["Firm Name"] || "",
-        serialNo: row["Serial No"] || "",
-        machineName: row["Machine Name"] || "",
-        machinePartName: row["Machine Part Name"] || "",
-        doerName: row["Indentor Name"] || row["Doer Name"] || row["Authorized Name"] || "",
-        nameOfIndenter: row["Indentor Name"] || row["Doer Name"] || row["Authorized Name"] || "",
-        problem: row["Problem With Machine"] || row["Problem"] || "",
-        priority: row["Priority"] || "",
-        department: row["Department"] || "",
-        location: row["Location"] || "",
-        // Sent Machine step
-        planned: row["Planned 1"] || "",
-        actual: row["Actual 1"] || "",
-        vendorName: row["Vendor Name"] || "",
-        leadTimeToDeliverDays: row["Lead Time To Deliver ( In No. Of Days)"] || "",
-        transporterName: row["(Transporter Name)"] || "",
-        transportationCharges: row["Transportation Charges"] || "",
-        paymentType: row["Payment Type"] || "",
-        howMuch: row["How Much"] || "",
-        // Check Machine step
-        planned1: row["Planned 2"] || "",
-        actual1: row["Actual 2"] || "",
-        billImage: row["Bill Image"] || "",
-        billNo: row["Bill No."] || "",
-        typeOfBill: row["Type of Bill"] || "",
-        totalBillAmount: row["Total Bill Amount"] || "",
-        toBePaidAmount: row["To Be Paid Amount"] || "",
-        // Store In step (Actual 3)
-        planned2: row["Planned 3"] || "",
-        actual2: row["Actual 3"] || "",        // Local name actual2 maps to sheet 'Actual 3'
-        receivedQuantity: row["Received Quantity"] || "",
-        billMatch: row["Bill Match"] || "",
-        productImage: row["Product Image"] || "",
-      }));
+      const formattedTasks = rawTasks.map((row, index) => {
+        // Parse Common Bill Tasks
+        let commonLinked = [];
+        const rawCommon = row["Common Bill Tasks"] || "";
+        if (rawCommon) {
+          try {
+            commonLinked = Array.isArray(rawCommon)
+              ? rawCommon
+              : rawCommon.startsWith("[")
+              ? JSON.parse(rawCommon)
+              : rawCommon.split(",").map((s) => s.trim()).filter(Boolean);
+          } catch (_) {
+            commonLinked = rawCommon.split(",").map((s) => s.trim()).filter(Boolean);
+          }
+        } else if (row["Remark"] && row["Remark"].includes("Common Bill with:")) {
+          const after = row["Remark"].split("Common Bill with:")[1] || "";
+          commonLinked = after.split(",").map((s) => s.trim()).filter(Boolean);
+        }
+
+        return {
+          id: `store-task-${index}`,
+          taskNo: row["Task No"] || "",
+          firmName: row["Firm Name"] || "",
+          serialNo: row["Serial No"] || "",
+          machineName: row["Machine Name"] || "",
+          machinePartName: row["Machine Part Name"] || "",
+          doerName: row["Indentor Name"] || row["Doer Name"] || row["Authorized Name"] || "",
+          nameOfIndenter: row["Indentor Name"] || row["Doer Name"] || row["Authorized Name"] || "",
+          problem: row["Problem With Machine"] || row["Problem"] || "",
+          priority: row["Priority"] || "",
+          department: row["Department"] || "",
+          location: row["Location"] || "",
+          planned: row["Planned 1"] || "",
+          actual: row["Actual 1"] || "",
+          vendorName: row["Vendor Name"] || "",
+          leadTimeToDeliverDays: row["Lead Time To Deliver ( In No. Of Days)"] || "",
+          transporterName: row["(Transporter Name)"] || "",
+          transportationCharges: row["Transportation Charges"] || "",
+          paymentType: row["Payment Type"] || "",
+          howMuch: row["How Much"] || "",
+          planned1: row["Planned 2"] || "",
+          actual1: row["Actual 2"] || "",
+          billImage: row["Bill Image"] || "",
+          billNo: row["Bill No."] || "",
+          typeOfBill: row["Type of Bill"] || "",
+          totalBillAmount: row["Total Bill Amount"] || "",
+          toBePaidAmount: row["To Be Paid Amount"] || "",
+          planned2: row["Planned 3"] || "",
+          actual2: row["Actual 3"] || "",
+          receivedQuantity: row["Received Quantity"] || "",
+          billMatch: row["Bill Match"] || "",
+          productImage: row["Product Image"] || "",
+          commonTasksLinked: commonLinked,
+        };
+      });
 
       setRepairTasks(formattedTasks);
 
-      // Normal pending: Actual 2 (Check Machine) filled + Actual 3 empty
-      const normalPending = formattedTasks.filter((t) => t.actual1 && !t.actual2);
-      const normalHistory = formattedTasks.filter((t) => t.actual1 && t.actual2);
+      // Helper: check if taskNo is a child of any other task
+      const isChildTask = (taskNo) => {
+        const normalized = (taskNo || "").trim().toLowerCase();
+        return formattedTasks.some((other) =>
+          other.commonTasksLinked?.some(
+            (childNo) => (childNo || "").trim().toLowerCase() === normalized
+          )
+        );
+      };
+
+      // Normal pending: Actual 2 filled + Actual 3 empty — child tasks hidden
+      const normalPending = formattedTasks.filter(
+        (t) => t.actual1 && !t.actual2 && !isChildTask(t.taskNo)
+      );
+      // Normal history: Actual 3 filled — child tasks hidden
+      const normalHistory = formattedTasks.filter(
+        (t) => t.actual1 && t.actual2 && !isChildTask(t.taskNo)
+      );
 
       // Advance Step 5 pending: Actual Check Machine Date filled + Actual Store In Date empty
       let advPending = [];
       let advHistory = [];
+      let advWithParentFlag = [];
       try {
         const advanceTasks = await fetchAdvancePayments();
         const userFirm = (user?.firmName || "").toLowerCase();
@@ -145,14 +179,42 @@ const StoreIn = () => {
           ? advanceTasks
           : advanceTasks.filter((t) => (t.firmName || "").toLowerCase() === userFirm);
 
-        advPending = firmFiltered.filter((t) => t.actualCheckMachineDate && !t.actualStoreInDate);
-        advHistory = firmFiltered.filter((t) => t.actualCheckMachineDate && t.actualStoreInDate);
+        // Mark child tasks for advance payments too (same Bill No. based grouping as Normal)
+        advWithParentFlag = firmFiltered.map((task) => {
+          if (!task.billNo || task.billNo === "-") {
+            return { ...task, isChildTask: false, commonTasksLinked: [] };
+          }
+          const siblings = firmFiltered.filter(
+            (other) => other.billNo === task.billNo && other.taskNo !== task.taskNo
+          );
+          if (siblings.length === 0) {
+            return { ...task, isChildTask: false, commonTasksLinked: [] };
+          }
+          const group = firmFiltered.filter((other) => other.billNo === task.billNo);
+          const isChildAdv = group[0]?.taskNo !== task.taskNo;
+          return {
+            ...task,
+            isChildTask: isChildAdv,
+            commonTasksLinked: isChildAdv ? [] : siblings.map((t) => t.taskNo),
+          };
+        });
+
+        advPending = advWithParentFlag.filter(
+          (t) => t.actualCheckMachineDate && !t.actualStoreInDate && !t.isChildTask
+        );
+        advHistory = advWithParentFlag.filter(
+          (t) => t.actualCheckMachineDate && t.actualStoreInDate && !t.isChildTask
+        );
       } catch (advErr) {
         console.warn("Could not fetch advance tasks for StoreIn:", advErr);
       }
 
       setPendingRepairTasks([...normalPending, ...advPending]);
       setHistoryRepairTasks([...normalHistory, ...advHistory]);
+
+      // Also merge advance tasks into `repairTasks` so any common-task lookup
+      // can resolve linked advance child tasks' details.
+      setRepairTasks([...formattedTasks, ...advWithParentFlag]);
 
     } catch (err) {
       console.error("Error fetching tasks:", err);

@@ -124,44 +124,86 @@ const Posting = () => {
       // ── Normal (Non-Advance) tasks from Repair System sheet ──────────────
       const rawTasks = await fetchRepairTasksSvc(user?.firmName);
 
-      const formattedTasks = rawTasks.map((row, index) => ({
-        id: `posting-task-${index}`,
-        isAdvance: false,
-        taskNo: row["Task No"] || "",
-        firmName: row["Firm Name"] || "",
-        serialNo: row["Serial No"] || "",
-        machineName: row["Machine Name"] || "",
-        machinePartName: row["Machine Part Name"] || "",
-        doerName: row["Indentor Name"] || row["Doer Name"] || row["Authorized Name"] || "",
-        nameOfIndenter: row["Indentor Name"] || row["Doer Name"] || row["Authorized Name"] || "",
-        problem: row["Problem With Machine"] || row["Problem"] || "",
-        priority: row["Priority"] || "",
-        department: row["Department"] || "",
-        location: row["Location"] || "",
-        vendorName: row["Vendor Name"] || "",
-        actual1: row["Actual 1"] || "",
-        actual2: row["Actual 2"] || "",
-        actual3: row["Actual 3"] || "",
-        billNo: row["Bill No."] || "",
-        typeOfBill: row["Type of Bill"] || "",
-        totalBillAmount: row["Total Bill Amount"] || "",
-        receivedQuantity: row["Received Quantity"] || "",
-        plannedPosting: row["Planned Posting"] || "",
-        actualPosting: row["Actual Posting"] || "",
-        delayPosting: row["Delay Posting"] || "",
-        processRemark: row["Process Remark"] || row["Remark"] || "",
-      }));
+      const formattedTasks = rawTasks.map((row, index) => {
+        return {
+          id: `posting-task-${index}`,
+          isAdvance: false,
+          taskNo: row["Task No"] || "",
+          firmName: row["Firm Name"] || "",
+          serialNo: row["Serial No"] || "",
+          machineName: row["Machine Name"] || "",
+          machinePartName: row["Machine Part Name"] || "",
+          doerName: row["Indentor Name"] || row["Doer Name"] || row["Authorized Name"] || "",
+          nameOfIndenter: row["Indentor Name"] || row["Doer Name"] || row["Authorized Name"] || "",
+          problem: row["Problem With Machine"] || row["Problem"] || "",
+          priority: row["Priority"] || "",
+          department: row["Department"] || "",
+          location: row["Location"] || "",
+          vendorName: row["Vendor Name"] || "",
+          actual1: row["Actual 1"] || "",
+          actual2: row["Actual 2"] || "",
+          actual3: row["Actual 3"] || "",
+          billNo: row["Bill No."] || "",
+          typeOfBill: row["Type of Bill"] || "",
+          totalBillAmount: row["Total Bill Amount"] || "",
+          receivedQuantity: row["Received Quantity"] || "",
+          plannedPosting: row["Planned Posting"] || "",
+          actualPosting: row["Actual Posting"] || "",
+          delayPosting: row["Delay Posting"] || "",
+          processRemark: row["Process Remark"] || row["Remark"] || "",
+        };
+      });
 
-      setTasks(formattedTasks);
+      // Calculate common bills based on Bill No - tasks with same bill no are common
+      const tasksWithCommonBills = formattedTasks.map((task) => {
+        if (!task.billNo || task.billNo === "-") {
+          return { ...task, commonTasksLinked: [], isChildTask: false };
+        }
+        const siblingTasks = formattedTasks.filter(
+          (other) => other.billNo === task.billNo && other.taskNo !== task.taskNo
+        );
+        return {
+          ...task,
+          commonTasksLinked: siblingTasks.map((t) => t.taskNo),
+        };
+      });
 
-      // Normal pending: Store In done (Actual 3) + Posting not done
-      const normalPending = formattedTasks.filter((t) => t.actual3 && !t.actualPosting);
-      const normalHistory = formattedTasks.filter((t) => t.actual3 && t.actualPosting);
+      // Mark child tasks - only first task with each Bill No is parent, rest are children
+      const billNoGroups = {};
+      tasksWithCommonBills.forEach((task) => {
+        if (task.billNo && task.billNo !== "-") {
+          if (!billNoGroups[task.billNo]) {
+            billNoGroups[task.billNo] = [];
+          }
+          billNoGroups[task.billNo].push(task);
+        }
+      });
+
+      const tasksWithParentFlag = tasksWithCommonBills.map((task) => {
+        if (!task.billNo || task.billNo === "-" || task.commonTasksLinked.length === 0) {
+          return { ...task, isChildTask: false };
+        }
+        const group = billNoGroups[task.billNo] || [];
+        const isChild = group[0]?.taskNo !== task.taskNo;
+        return { ...task, isChildTask: isChild };
+      });
+
+      setTasks(tasksWithParentFlag);
+
+      // Normal pending: Actual 3 filled + Posting not done - hide child tasks
+      const normalPending = tasksWithParentFlag.filter(
+        (t) => t.actual3 && !t.actualPosting && !t.isChildTask
+      );
+      // Normal history: Posting done - hide child tasks
+      const normalHistory = tasksWithParentFlag.filter(
+        (t) => t.actual3 && t.actualPosting && !t.isChildTask
+      );
 
       // ── Advance tasks from Repair FMS Advance Payment sheet ──────────────
       // Step 2 for Advance: Management Approval Date filled + Actual Posting empty
       let advPending = [];
       let advHistory = [];
+      let advWithParentFlag = [];
       try {
         const advanceTasks = await fetchAdvancePayments();
         // Filter by firm if user is not all-firm
@@ -171,15 +213,44 @@ const Posting = () => {
           ? advanceTasks
           : advanceTasks.filter((t) => (t.firmName || "").toLowerCase() === userFirm);
 
-        advPending = firmFiltered.filter((t) => t.managementApprovalDate && !t.actualPosting);
-        advHistory = firmFiltered.filter((t) => t.managementApprovalDate && t.actualPosting);
+        // Mark child tasks for advance payments too (same logic as Normal tasks)
+        advWithParentFlag = firmFiltered.map((task) => {
+          if (!task.billNo || task.billNo === "-") {
+            return { ...task, isChildTask: false, commonTasksLinked: [] };
+          }
+          const siblings = firmFiltered.filter(
+            (other) => other.billNo === task.billNo && other.taskNo !== task.taskNo
+          );
+          if (siblings.length === 0) {
+            return { ...task, isChildTask: false, commonTasksLinked: [] };
+          }
+          const group = firmFiltered.filter((other) => other.billNo === task.billNo);
+          const isChild = group[0]?.taskNo !== task.taskNo;
+          return {
+            ...task,
+            isChildTask: isChild,
+            commonTasksLinked: isChild ? [] : siblings.map((t) => t.taskNo),
+          };
+        });
+
+        advPending = advWithParentFlag.filter(
+          (t) => t.managementApprovalDate && !t.actualPosting && !t.isChildTask
+        );
+        advHistory = advWithParentFlag.filter(
+          (t) => t.managementApprovalDate && t.actualPosting && !t.isChildTask
+        );
       } catch (advErr) {
         console.warn("Could not fetch advance tasks for posting:", advErr);
       }
 
+
       // Merge both lists
       setPendingTasks([...normalPending, ...advPending]);
       setHistoryTasks([...normalHistory, ...advHistory]);
+
+      // Also merge advance tasks into `tasks` so the modal's common-task lookup
+      // (tasks.find) can resolve linked advance child tasks' machine names.
+      setTasks([...tasksWithParentFlag, ...advWithParentFlag]);
 
     } catch (err) {
       console.error("Error fetching tasks for posting:", err);
@@ -274,21 +345,19 @@ const Posting = () => {
           <nav className="flex space-x-8 px-6">
             <button
               onClick={() => setActiveTab("pending")}
-              className={`py-4 px-1 text-sm font-medium border-b-2 transition-colors duration-200 ${
-                activeTab === "pending"
+              className={`py-4 px-1 text-sm font-medium border-b-2 transition-colors duration-200 ${activeTab === "pending"
                   ? "border-blue-500 text-blue-600"
                   : "border-transparent text-gray-500 hover:text-gray-700"
-              }`}
+                }`}
             >
               Pending ({filteredPendingTasks.length})
             </button>
             <button
               onClick={() => setActiveTab("history")}
-              className={`py-4 px-1 text-sm font-medium border-b-2 transition-colors duration-200 ${
-                activeTab === "history"
+              className={`py-4 px-1 text-sm font-medium border-b-2 transition-colors duration-200 ${activeTab === "history"
                   ? "border-blue-500 text-blue-600"
                   : "border-transparent text-gray-500 hover:text-gray-700"
-              }`}
+                }`}
             >
               History ({filteredHistoryTasks.length})
             </button>
@@ -429,7 +498,14 @@ const Posting = () => {
                         )}
                       </TableCell>
                       <TableCell className="font-medium text-blue-600 whitespace-nowrap">
-                        {task.taskNo || "-"}
+                        <div className="flex flex-col gap-1">
+                          <span>{task.taskNo || "-"}</span>
+                          {task.commonTasksLinked?.length > 0 && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full bg-green-100 text-green-700 border border-green-300 w-fit">
+                              🔗 {task.commonTasksLinked.length} Common
+                            </span>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell className="font-medium text-gray-900 whitespace-nowrap">
                         {task.machineName || "-"}
@@ -520,11 +596,10 @@ const Posting = () => {
                       </TableCell>
                       <TableCell className="text-center whitespace-nowrap">
                         <span
-                          className={`text-xs px-2.5 py-1 rounded-full font-medium ${
-                            task.delayPosting && parseInt(task.delayPosting) > 0
+                          className={`text-xs px-2.5 py-1 rounded-full font-medium ${task.delayPosting && parseInt(task.delayPosting) > 0
                               ? "bg-red-100 text-red-700"
                               : "bg-emerald-100 text-emerald-700"
-                          }`}
+                            }`}
                         >
                           {task.delayPosting || "0"}
                         </span>
@@ -555,6 +630,34 @@ const Posting = () => {
             <p><strong className="text-gray-700">Total Amount:</strong> {formatCurrency(selectedTask?.totalBillAmount)}</p>
             <p><strong className="text-gray-700">Planned Posting Date:</strong> {formatDate(selectedTask?.plannedPosting)}</p>
           </div>
+
+          {/* Linked Common Tasks Panel */}
+          {selectedTask?.commonTasksLinked?.length > 0 && (
+            <div className="rounded-lg border border-green-200 bg-green-50 p-3">
+              <p className="text-xs font-semibold text-green-800 mb-2">
+                🔗 {selectedTask.commonTasksLinked.length} linked task(s) will also be processed:
+              </p>
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2 bg-white rounded border border-blue-200 px-2.5 py-1.5 text-xs">
+                  <span className="font-bold text-blue-700 px-1.5 py-0.5 bg-blue-100 rounded-full">INDEPENDENT</span>
+                  <span className="font-semibold text-blue-700">{selectedTask.taskNo}</span>
+                  <span className="text-gray-400">—</span>
+                  <span className="text-gray-600">{selectedTask.machineName}</span>
+                </div>
+                {selectedTask.commonTasksLinked.map((childNo) => {
+                  const childTask = tasks.find((t) => t.taskNo === childNo);
+                  return (
+                    <div key={childNo} className="flex items-center gap-2 bg-white rounded border border-green-200 px-2.5 py-1.5 text-xs">
+                      <span className="font-bold text-green-700 px-1.5 py-0.5 bg-green-100 rounded-full border border-green-300">COMMON</span>
+                      <span className="font-semibold text-green-700">{childNo}</span>
+                      <span className="text-gray-400">—</span>
+                      <span className="text-gray-600">{childTask?.machineName || "-"}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
