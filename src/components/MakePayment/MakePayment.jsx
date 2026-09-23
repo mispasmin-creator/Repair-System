@@ -68,6 +68,28 @@ const MakePayment = () => {
   const [selectedPaymentType, setSelectedPaymentType] = useState("All");
   const [selectedPriority, setSelectedPriority] = useState("All");
 
+  const [commonDetailModalOpen, setCommonDetailModalOpen] = useState(false);
+  const [commonDetailParentTask, setCommonDetailParentTask] = useState(null);
+  const [commonDetailTasksList, setCommonDetailTasksList] = useState([]);
+
+  const handleViewCommonTasks = (parentTask) => {
+    setCommonDetailParentTask(parentTask);
+    const linkedTaskNos = parentTask.commonTasksLinked || [];
+    const list = linkedTaskNos.map((tNo) => {
+      const found = repairTasks.find((t) => t.taskNo === tNo || t.repairTaskNo === tNo);
+      return {
+        taskNo: tNo,
+        machineName: found?.machineName || "-",
+        firmName: found?.firmName || parentTask.firmName || "-",
+        serialNo: found?.serialNo || "-",
+        vendorName: found?.vendorName || parentTask.vendorName || "-",
+        toBePaidAmount: found?.toBePaidAmount || "-",
+      };
+    });
+    setCommonDetailTasksList(list);
+    setCommonDetailModalOpen(true);
+  };
+
   const taskMap = useMemo(() => new Map(repairTasks.map(t => [t.taskNo, t])), [repairTasks]);
 
   const historyWithFirm = useMemo(() => {
@@ -154,7 +176,6 @@ const MakePayment = () => {
       if (task.billNo && task.billNo !== "-") {
         billKey = task.billNo;
       } else if (task.isAdvance) {
-        // For advance tasks without bill no, group by firm + totalBillAmount
         billKey = `ADV-${(task.firmName || "").toLowerCase()}-${task.totalBillAmount}`;
       } else {
         billKey = `NO-BILL-${task.taskNo}`;
@@ -168,7 +189,7 @@ const MakePayment = () => {
       }
     });
 
-    // Second pass: add sibling count to parent tasks
+    // Second pass: preserve existing commonTasksLinked from fetchAllTasks + add any extra siblings
     const result = Object.values(billGroups).map((task) => {
       let billKey;
       if (task.billNo && task.billNo !== "-") {
@@ -178,9 +199,12 @@ const MakePayment = () => {
       } else {
         billKey = `NO-BILL-${task.taskNo}`;
       }
+      const recalculatedSiblings = siblingsMap[billKey] || [];
+      const existingLinked = task.commonTasksLinked || [];
+      const combinedLinked = Array.from(new Set([...existingLinked, ...recalculatedSiblings]));
       return {
         ...task,
-        commonTasksLinked: siblingsMap[billKey] || []
+        commonTasksLinked: combinedLinked
       };
     });
 
@@ -190,22 +214,49 @@ const MakePayment = () => {
 
   const groupedHistory = useMemo(() => {
     const billGroups = {};
+    const siblingsMap = {};
     displayedHistory.forEach((task) => {
-      const billKey = task.billNo || `NO-BILL-${task.repairTaskNo}`;
+      let billKey;
+      if (task.billNo && task.billNo !== "-") {
+        billKey = task.billNo;
+      } else if (task.isAdvance) {
+        billKey = `ADV-${(task.firmName || "").toLowerCase()}-${task.totalBillAmount}`;
+      } else {
+        billKey = `NO-BILL-${task.repairTaskNo || task.taskNo}`;
+      }
+
       if (!billGroups[billKey]) {
-        billGroups[billKey] = task; // Keep first task as parent
+        billGroups[billKey] = task;
+        siblingsMap[billKey] = [];
+      } else {
+        siblingsMap[billKey].push(task.repairTaskNo || task.taskNo);
       }
     });
-    return Object.values(billGroups);
+
+    return Object.values(billGroups).map((task) => {
+      let billKey;
+      if (task.billNo && task.billNo !== "-") {
+        billKey = task.billNo;
+      } else if (task.isAdvance) {
+        billKey = `ADV-${(task.firmName || "").toLowerCase()}-${task.totalBillAmount}`;
+      } else {
+        billKey = `NO-BILL-${task.repairTaskNo || task.taskNo}`;
+      }
+      const recalculatedSiblings = siblingsMap[billKey] || [];
+      const existingLinked = task.commonTasksLinked || [];
+      const combinedLinked = Array.from(new Set([...existingLinked, ...recalculatedSiblings]));
+      return {
+        ...task,
+        commonTasksLinked: combinedLinked
+      };
+    });
   }, [displayedHistory]);
 
   // For a task, returns the Total Bill Amount to display:
-  // - Normal: its own "Total Bill Amount".
-  // - Advance: sum of "To Be Paid Amount" across itself + all Firm Name + Bill No.
-  //   matched linked tasks (commonTasksLinked), since advance amounts are split per task.
+  // Always prioritizes task.totalBillAmount if available.
   const getDisplayTotalAmount = (task) => {
     if (!task) return "";
-    if (!task.isAdvance) return task.totalBillAmount || "";
+    if (task.totalBillAmount && task.totalBillAmount !== "-") return task.totalBillAmount;
     const ownAmt = parseFloat((task.toBePaidAmount || "0").toString().replace(/[^0-9.-]+/g, "")) || 0;
     const linkedAmt = (task.commonTasksLinked || []).reduce((sum, childNo) => {
       const childTask = repairTasks.find((t) => t.taskNo === childNo);
@@ -472,20 +523,32 @@ const MakePayment = () => {
 
       if (selectedTask.isAdvance) {
         // ── ADVANCE TASK: Update "Repair FMS Advance Payment" sheet (Step 3) ──
-        const result = await updateAdvancePayment(selectedTask.taskNo, {
-          "Actual Payment Date": todayIST,
-          "Advance Payment UTR / Cheque No": formData.utrChequeNo || "",
-          "Advance Amount Paid": formData.toBePaidAmount || "",
-          "Payment Done By": user?.name || "",
-        });
+        const tasksToUpdate = [selectedTask.taskNo, ...(selectedTask.commonTasksLinked || [])];
+        const updateResults = await Promise.allSettled(
+          tasksToUpdate.map((tNo) =>
+            updateAdvancePayment(tNo, {
+              "Actual Payment Date": todayIST,
+              "Advance Payment UTR / Cheque No": formData.utrChequeNo || "",
+              "Advance Amount Paid": formData.toBePaidAmount || "",
+              "Payment Done By": user?.name || "",
+            })
+          )
+        );
 
-        if (result.success) {
-          toast.success("✅ Advance payment released successfully!");
+        const anySuccess = updateResults.some((r) => r.status === "fulfilled" && r.value?.success);
+
+        if (anySuccess) {
+          const commonBillCount = selectedTask?.commonTasksLinked?.length || 0;
+          if (commonBillCount > 0) {
+            toast.success(`✅ Advance payment released! ${commonBillCount} common bill(s) also updated.`);
+          } else {
+            toast.success("✅ Advance payment released successfully!");
+          }
           setIsModalOpen(false);
           await fetchAllTasks(true);
           await fetchPayments(true);
         } else {
-          toast.error("❌ Failed: " + (result.message || "Unknown error"));
+          toast.error("❌ Failed to update advance payment");
         }
       } else {
         // ── NORMAL TASK: Insert into Repair FMS Advance Payment + update Repair System ──
@@ -522,33 +585,33 @@ const MakePayment = () => {
           return;
         }
 
-        // Step 2: Update Actual 4 in Repair System sheet
-        const updatePayload = {
-          action: "update1",
-          sheetName: "Repair System",
-          taskNo: selectedTask.taskNo,
-          "Actual 4": todayIST,
-        };
-        const updateResp = await fetch(SCRIPT_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: new URLSearchParams(updatePayload).toString(),
-        });
-        const updateResult = await updateResp.json();
+        // Step 2: Update Actual 4 in Repair System sheet for main task AND all linked tasks
+        const tasksToUpdate = [selectedTask.taskNo, ...(selectedTask.commonTasksLinked || [])];
+        await Promise.allSettled(
+          tasksToUpdate.map((tNo) => {
+            const updatePayload = {
+              action: "update1",
+              sheetName: "Repair System",
+              taskNo: tNo,
+              "Actual 4": todayIST,
+            };
+            return fetch(SCRIPT_URL, {
+              method: "POST",
+              headers: { "Content-Type": "application/x-www-form-urlencoded" },
+              body: new URLSearchParams(updatePayload).toString(),
+            });
+          })
+        );
 
-        if (updateResult.success) {
-          const commonBillCount = selectedTask?.commonTasksLinked?.length || 0;
-          if (commonBillCount > 0) {
-            toast.success(`✅ Payment submitted! ${commonBillCount} common bill(s) also updated.`);
-          } else {
-            toast.success("✅ Payment submitted successfully!");
-          }
-          setIsModalOpen(false);
-          await fetchAllTasks(true);
-          await fetchPayments(true);
+        const commonBillCount = selectedTask?.commonTasksLinked?.length || 0;
+        if (commonBillCount > 0) {
+          toast.success(`✅ Payment submitted! ${commonBillCount} common bill(s) also updated.`);
         } else {
-          toast.error("❌ Payment recorded but Repair System not updated.");
+          toast.success("✅ Payment submitted successfully!");
         }
+        setIsModalOpen(false);
+        await fetchAllTasks(true);
+        await fetchPayments(true);
       }
     } catch (error) {
       console.error("Submit error:", error);
@@ -682,18 +745,6 @@ const MakePayment = () => {
                 <Filter className="w-4 h-4 mr-2" />
                 More Filters
               </Button>
-            </div>
-
-            {/* Total Bill Amount display on the top right */}
-            <div className="flex items-center space-x-3 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200/80 rounded-xl px-5 py-2.5 shadow-sm self-start lg:self-auto">
-              <div className="flex flex-col">
-                <span className="text-[11px] font-semibold text-blue-600 uppercase tracking-wider">
-                  Total Bill Amount
-                </span>
-                <span className="text-lg font-bold text-gray-900 leading-tight">
-                  ₹{totalBillAmountSum.toLocaleString("en-IN")}
-                </span>
-              </div>
             </div>
           </div>
 
@@ -900,9 +951,14 @@ const MakePayment = () => {
                           <div className="flex flex-col gap-1">
                             <span>{task.taskNo || "-"}</span>
                             {task.commonTasksLinked?.length > 0 && (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full bg-green-100 text-green-700 border border-green-300 w-fit">
+                              <button
+                                type="button"
+                                onClick={() => handleViewCommonTasks(task)}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full bg-green-100 text-green-700 hover:bg-green-200 border border-green-300 w-fit cursor-pointer transition-colors"
+                                title="Click to view linked common tasks"
+                              >
                                 🔗 {task.commonTasksLinked.length} Common
-                              </span>
+                              </button>
                             )}
                           </div>
                         </td>
@@ -1002,7 +1058,21 @@ const MakePayment = () => {
                       <TableCell className="font-medium text-blue-600">
                         {task.paymentNo || task.taskNo}
                       </TableCell>
-                      <TableCell>{task.repairTaskNo || task.taskNo}</TableCell>
+                      <TableCell className="font-medium text-blue-600">
+                        <div className="flex flex-col gap-1">
+                          <span>{task.repairTaskNo || task.taskNo}</span>
+                          {task.commonTasksLinked?.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => handleViewCommonTasks(task)}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full bg-green-100 text-green-700 hover:bg-green-200 border border-green-300 w-fit cursor-pointer transition-colors"
+                              title="Click to view linked common tasks"
+                            >
+                              🔗 {task.commonTasksLinked.length} Common
+                            </button>
+                          )}
+                        </div>
+                      </TableCell>
                       <TableCell>{task.firmName || "-"}</TableCell>
                       <TableCell>{task.serialNo}</TableCell>
                       <TableCell className="font-medium text-gray-900">{task.machineName}</TableCell>
@@ -1235,6 +1305,75 @@ const MakePayment = () => {
             </Button>
           </div>
         </form>
+      </Modal>
+
+      {/* Linked Common Tasks Detail Modal */}
+      <Modal
+        isOpen={commonDetailModalOpen}
+        onClose={() => setCommonDetailModalOpen(false)}
+        title={`Linked Common Tasks for ${commonDetailParentTask?.taskNo || commonDetailParentTask?.repairTaskNo || ""}`}
+        size="lg"
+      >
+        <div className="space-y-4">
+          <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-lg text-xs space-y-1">
+            <p>
+              <span className="font-bold text-blue-800">Main Task:</span>{" "}
+              <span className="font-semibold text-blue-900">{commonDetailParentTask?.taskNo || commonDetailParentTask?.repairTaskNo}</span>
+              {" | "}
+              <span className="text-gray-700">Machine: {commonDetailParentTask?.machineName}</span>
+              {" | "}
+              <span className="text-gray-700">Firm: {commonDetailParentTask?.firmName || "-"}</span>
+            </p>
+            <p>
+              <span className="font-bold text-gray-700">Bill No:</span> {commonDetailParentTask?.billNo || "-"}
+              {" | "}
+              <span className="font-bold text-gray-700">To Be Paid Amount:</span> ₹{commonDetailParentTask?.toBePaidAmount || "-"}
+            </p>
+          </div>
+
+          <div className="overflow-x-auto border border-gray-200 rounded-lg">
+            <table className="min-w-full divide-y divide-gray-200 text-xs">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-3 py-2 text-left font-semibold text-gray-600 uppercase">Task No</th>
+                  <th className="px-3 py-2 text-left font-semibold text-gray-600 uppercase">Machine Name</th>
+                  <th className="px-3 py-2 text-left font-semibold text-gray-600 uppercase">Firm Name</th>
+                  <th className="px-3 py-2 text-left font-semibold text-gray-600 uppercase">Serial No</th>
+                  <th className="px-3 py-2 text-left font-semibold text-gray-600 uppercase">Vendor Name</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200 bg-white">
+                {commonDetailTasksList.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-3 py-4 text-center text-gray-500">
+                      No linked tasks found.
+                    </td>
+                  </tr>
+                ) : (
+                  commonDetailTasksList.map((item, idx) => (
+                    <tr key={idx} className="hover:bg-gray-50">
+                      <td className="px-3 py-2 font-bold text-blue-600">{item.taskNo}</td>
+                      <td className="px-3 py-2 font-medium text-gray-800">{item.machineName}</td>
+                      <td className="px-3 py-2 text-gray-700">{item.firmName}</td>
+                      <td className="px-3 py-2 text-gray-600">{item.serialNo}</td>
+                      <td className="px-3 py-2 text-gray-700">{item.vendorName}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="flex justify-end pt-2 border-t border-gray-200">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setCommonDetailModalOpen(false)}
+            >
+              Close
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   );

@@ -363,12 +363,10 @@ const StoreIn = () => {
   };
 
   // For a task, returns the Total Bill Amount to display:
-  // - Normal: its own "Total Bill Amount".
-  // - Advance: sum of "To Be Paid Amount" across itself + all Firm Name + Bill No.
-  //   matched linked tasks (commonTasksLinked), since advance amounts are split per task.
+  // Always prioritizes task.totalBillAmount if available.
   const getDisplayTotalAmount = (task) => {
     if (!task) return "";
-    if (!task.isAdvance) return task.totalBillAmount || "";
+    if (task.totalBillAmount && task.totalBillAmount !== "-") return task.totalBillAmount;
     const ownAmt = parseFloat((task.toBePaidAmount || "0").toString().replace(/[^0-9.-]+/g, "")) || 0;
     const linkedAmt = (task.commonTasksLinked || []).reduce((sum, childNo) => {
       const childTask = repairTasks.find((t) => t.taskNo === childNo);

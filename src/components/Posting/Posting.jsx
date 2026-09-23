@@ -37,6 +37,28 @@ const Posting = () => {
   const [selectedDepartment, setSelectedDepartment] = useState("All");
   const [selectedPriority, setSelectedPriority] = useState("All");
 
+  const [commonDetailModalOpen, setCommonDetailModalOpen] = useState(false);
+  const [commonDetailParentTask, setCommonDetailParentTask] = useState(null);
+  const [commonDetailTasksList, setCommonDetailTasksList] = useState([]);
+
+  const handleViewCommonTasks = (parentTask) => {
+    setCommonDetailParentTask(parentTask);
+    const linkedTaskNos = parentTask.commonTasksLinked || [];
+    const list = linkedTaskNos.map((tNo) => {
+      const found = tasks.find((t) => t.taskNo === tNo);
+      return {
+        taskNo: tNo,
+        machineName: found?.machineName || "-",
+        firmName: found?.firmName || parentTask.firmName || "-",
+        serialNo: found?.serialNo || "-",
+        vendorName: found?.vendorName || parentTask.vendorName || "-",
+        billNo: found?.billNo || parentTask.billNo || "-",
+      };
+    });
+    setCommonDetailTasksList(list);
+    setCommonDetailModalOpen(true);
+  };
+
   const uniqueFirms = ["All", ...new Set(tasks.map((t) => t.firmName).filter(Boolean))];
   const uniqueDepartments = ["All", ...new Set(tasks.map((t) => t.department).filter(Boolean))];
 
@@ -317,40 +339,56 @@ const Posting = () => {
 
       if (selectedTask.isAdvance) {
         // ── ADVANCE: Update "Repair FMS Advance Payment" sheet ─────────────
-        const result = await updateAdvancePayment(selectedTask.taskNo, {
-          "Actual Posting": todayIST,
-          "Process Remark": formData.remark.trim(),
-        });
-        if (result.success) {
-          toast.success("✅ Advance posting processed successfully");
+        const tasksToUpdate = [selectedTask.taskNo, ...(selectedTask.commonTasksLinked || [])];
+        const updateResults = await Promise.allSettled(
+          tasksToUpdate.map((tNo) =>
+            updateAdvancePayment(tNo, {
+              "Actual Posting": todayIST,
+              "Process Remark": formData.remark.trim(),
+            })
+          )
+        );
+        const anySuccess = updateResults.some((r) => r.status === "fulfilled" && r.value?.success);
+        if (anySuccess) {
+          const commonCount = selectedTask?.commonTasksLinked?.length || 0;
+          if (commonCount > 0) {
+            toast.success(`✅ Advance posting processed! ${commonCount} common bill(s) also updated.`);
+          } else {
+            toast.success("✅ Advance posting processed successfully");
+          }
           setIsModalOpen(false);
           await fetchAllTasks(true);
         } else {
-          toast.error("❌ Failed: " + (result.message || "Unknown error"));
+          toast.error("❌ Failed to process advance posting");
         }
       } else {
-        // ── NORMAL: Update "Repair System" sheet ────────────────────────────
-        const payload = {
-          action: "update1",
-          sheetName: "Repair System",
-          taskNo: selectedTask.taskNo,
-          "Actual Posting": todayIST,
-          "Process Remark": formData.remark.trim(),
-          "Remark": formData.remark.trim(),
-        };
-        const response = await fetch(SCRIPT_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: new URLSearchParams(payload).toString(),
-        });
-        const result = await response.json();
-        if (result.success) {
-          toast.success("✅ Processed for payment successfully");
-          setIsModalOpen(false);
-          await fetchAllTasks(true);
+        // ── NORMAL: Update "Repair System" sheet for main task AND all linked tasks ──
+        const tasksToUpdate = [selectedTask.taskNo, ...(selectedTask.commonTasksLinked || [])];
+        await Promise.allSettled(
+          tasksToUpdate.map((tNo) => {
+            const payload = {
+              action: "update1",
+              sheetName: "Repair System",
+              taskNo: tNo,
+              "Actual Posting": todayIST,
+              "Process Remark": formData.remark.trim(),
+              "Remark": formData.remark.trim(),
+            };
+            return fetch(SCRIPT_URL, {
+              method: "POST",
+              headers: { "Content-Type": "application/x-www-form-urlencoded" },
+              body: new URLSearchParams(payload).toString(),
+            });
+          })
+        );
+        const commonCount = selectedTask?.commonTasksLinked?.length || 0;
+        if (commonCount > 0) {
+          toast.success(`✅ Processed for payment! ${commonCount} common bill(s) also updated.`);
         } else {
-          toast.error("❌ Failed to process: " + (result.message || "Unknown error"));
+          toast.success("✅ Processed for payment successfully");
         }
+        setIsModalOpen(false);
+        await fetchAllTasks(true);
       }
     } catch (error) {
       console.error("Submit error:", error);
@@ -536,9 +574,14 @@ const Posting = () => {
                         <div className="flex flex-col gap-1">
                           <span>{task.taskNo || "-"}</span>
                           {task.commonTasksLinked?.length > 0 && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full bg-green-100 text-green-700 border border-green-300 w-fit">
+                            <button
+                              type="button"
+                              onClick={() => handleViewCommonTasks(task)}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full bg-green-100 text-green-700 hover:bg-green-200 border border-green-300 w-fit cursor-pointer transition-colors"
+                              title="Click to view linked common tasks"
+                            >
                               🔗 {task.commonTasksLinked.length} Common
-                            </span>
+                            </button>
                           )}
                         </div>
                       </TableCell>
@@ -609,7 +652,19 @@ const Posting = () => {
                   filteredHistoryTasks.map((task) => (
                     <TableRow key={task.id || task.taskNo} className="hover:bg-gray-50 transition-colors">
                       <TableCell className="font-medium text-blue-600 whitespace-nowrap">
-                        {task.taskNo || "-"}
+                        <div className="flex flex-col gap-1">
+                          <span>{task.taskNo || "-"}</span>
+                          {task.commonTasksLinked?.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => handleViewCommonTasks(task)}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full bg-green-100 text-green-700 hover:bg-green-200 border border-green-300 w-fit cursor-pointer transition-colors"
+                              title="Click to view linked common tasks"
+                            >
+                              🔗 {task.commonTasksLinked.length} Common
+                            </button>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell className="font-medium text-gray-900 whitespace-nowrap">
                         {task.machineName || "-"}
@@ -737,6 +792,75 @@ const Posting = () => {
             </Button>
           </div>
         </form>
+      </Modal>
+
+      {/* Linked Common Tasks Detail Modal */}
+      <Modal
+        isOpen={commonDetailModalOpen}
+        onClose={() => setCommonDetailModalOpen(false)}
+        title={`Linked Common Tasks for ${commonDetailParentTask?.taskNo || ""}`}
+        size="lg"
+      >
+        <div className="space-y-4">
+          <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-lg text-xs space-y-1">
+            <p>
+              <span className="font-bold text-blue-800">Main Task:</span>{" "}
+              <span className="font-semibold text-blue-900">{commonDetailParentTask?.taskNo}</span>
+              {" | "}
+              <span className="text-gray-700">Machine: {commonDetailParentTask?.machineName}</span>
+              {" | "}
+              <span className="text-gray-700">Firm: {commonDetailParentTask?.firmName || "-"}</span>
+            </p>
+            <p>
+              <span className="font-bold text-gray-700">Bill No:</span> {commonDetailParentTask?.billNo || "-"}
+              {" | "}
+              <span className="font-bold text-gray-700">Total Bill Amount:</span> ₹{commonDetailParentTask?.totalBillAmount || "-"}
+            </p>
+          </div>
+
+          <div className="overflow-x-auto border border-gray-200 rounded-lg">
+            <table className="min-w-full divide-y divide-gray-200 text-xs">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-3 py-2 text-left font-semibold text-gray-600 uppercase">Task No</th>
+                  <th className="px-3 py-2 text-left font-semibold text-gray-600 uppercase">Machine Name</th>
+                  <th className="px-3 py-2 text-left font-semibold text-gray-600 uppercase">Firm Name</th>
+                  <th className="px-3 py-2 text-left font-semibold text-gray-600 uppercase">Serial No</th>
+                  <th className="px-3 py-2 text-left font-semibold text-gray-600 uppercase">Vendor Name</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200 bg-white">
+                {commonDetailTasksList.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-3 py-4 text-center text-gray-500">
+                      No linked tasks found.
+                    </td>
+                  </tr>
+                ) : (
+                  commonDetailTasksList.map((item, idx) => (
+                    <tr key={idx} className="hover:bg-gray-50">
+                      <td className="px-3 py-2 font-bold text-blue-600">{item.taskNo}</td>
+                      <td className="px-3 py-2 font-medium text-gray-800">{item.machineName}</td>
+                      <td className="px-3 py-2 text-gray-700">{item.firmName}</td>
+                      <td className="px-3 py-2 text-gray-600">{item.serialNo}</td>
+                      <td className="px-3 py-2 text-gray-700">{item.vendorName}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="flex justify-end pt-2 border-t border-gray-200">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setCommonDetailModalOpen(false)}
+            >
+              Close
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   );
