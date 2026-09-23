@@ -199,6 +199,23 @@ const MakePayment = () => {
     return Object.values(billGroups);
   }, [displayedHistory]);
 
+  // For a task, returns the Total Bill Amount to display:
+  // - Normal: its own "Total Bill Amount".
+  // - Advance: sum of "To Be Paid Amount" across itself + all Firm Name + Bill No.
+  //   matched linked tasks (commonTasksLinked), since advance amounts are split per task.
+  const getDisplayTotalAmount = (task) => {
+    if (!task) return "";
+    if (!task.isAdvance) return task.totalBillAmount || "";
+    const ownAmt = parseFloat((task.toBePaidAmount || "0").toString().replace(/[^0-9.-]+/g, "")) || 0;
+    const linkedAmt = (task.commonTasksLinked || []).reduce((sum, childNo) => {
+      const childTask = repairTasks.find((t) => t.taskNo === childNo);
+      const amt = parseFloat((childTask?.toBePaidAmount || "0").toString().replace(/[^0-9.-]+/g, "")) || 0;
+      return sum + amt;
+    }, 0);
+    const combined = ownAmt + linkedAmt;
+    return combined > 0 ? combined : "";
+  };
+
   const totalBillAmountSum = useMemo(() => {
     const currentList = activeTab === "pending" ? displayedPending : displayedHistory;
     return currentList.reduce((sum, task) => {
@@ -330,18 +347,21 @@ const MakePayment = () => {
           ? advanceTasks
           : advanceTasks.filter((t) => (t.firmName || "").toLowerCase() === userFirm);
 
-        // Mark child tasks for advance payments too (same Bill No. based grouping as Normal)
+        // Mark child tasks for advance payments too (Firm Name + Bill No. based grouping as Normal)
         advWithParentFlag = firmFiltered.map((task) => {
           if (!task.billNo || task.billNo === "-") {
             return { ...task, isChildTask: false, commonTasksLinked: [] };
           }
+          const sameGroup = (other) =>
+            other.billNo === task.billNo &&
+            (other.firmName || "").toLowerCase().trim() === (task.firmName || "").toLowerCase().trim();
           const siblings = firmFiltered.filter(
-            (other) => other.billNo === task.billNo && other.taskNo !== task.taskNo
+            (other) => sameGroup(other) && other.taskNo !== task.taskNo
           );
           if (siblings.length === 0) {
             return { ...task, isChildTask: false, commonTasksLinked: [] };
           }
-          const group = firmFiltered.filter((other) => other.billNo === task.billNo);
+          const group = firmFiltered.filter(sameGroup);
           const isChild = group[0]?.taskNo !== task.taskNo;
           return {
             ...task,
@@ -925,7 +945,10 @@ const MakePayment = () => {
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">{task.typeOfBill || "-"}</td>
                         <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">
-                          {task.totalBillAmount ? `₹${Number(task.totalBillAmount).toLocaleString()}` : "-"}
+                          {(() => {
+                            const amt = getDisplayTotalAmount(task);
+                            return amt ? `₹${Number(amt).toLocaleString()}` : "-";
+                          })()}
                         </td>
                         <td className="px-4 py-3 text-sm font-medium text-gray-900 whitespace-nowrap">
                           {task.toBePaidAmount ? `₹${Number(task.toBePaidAmount).toLocaleString()}` : "-"}
@@ -989,7 +1012,10 @@ const MakePayment = () => {
                         {task.advanceAmountPaid ? `₹${Number(task.advanceAmountPaid).toLocaleString()}` : "-"}
                       </TableCell>
                       <TableCell>
-                        {task.totalBillAmount ? `₹${Number(task.totalBillAmount).toLocaleString()}` : "-"}
+                        {(() => {
+                          const amt = getDisplayTotalAmount(task);
+                          return amt ? `₹${Number(amt).toLocaleString()}` : "-";
+                        })()}
                       </TableCell>
                       <TableCell>{task.paymentType || "-"}</TableCell>
                       <TableCell className="font-medium text-gray-900">

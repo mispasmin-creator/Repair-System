@@ -87,6 +87,35 @@ const Posting = () => {
     return isNaN(num) ? amount : `₹${num.toLocaleString("en-IN")}`;
   };
 
+  // For a task, returns the Total Bill Amount to display:
+  // - Normal: its own "Total Bill Amount".
+  // - Advance: sum of "To Be Paid Amount" across itself + all Firm Name + Bill No.
+  //   matched linked tasks (commonTasksLinked), since advance amounts are split per task.
+  const getDisplayTotalAmount = (task) => {
+    if (!task) return null;
+    if (!task.isAdvance) return task.totalBillAmount;
+
+    // Check if totalBillAmount is populated for advance task
+    const totalAmt = parseFloat((task.totalBillAmount || "0").toString().replace(/[^0-9.-]+/g, "")) || 0;
+    const linkedTotal = (task.commonTasksLinked || []).reduce((sum, childNo) => {
+      const childTask = tasks.find((t) => t.taskNo === childNo);
+      const amt = parseFloat((childTask?.totalBillAmount || childTask?.toBePaidAmount || "0").toString().replace(/[^0-9.-]+/g, "")) || 0;
+      return sum + amt;
+    }, 0);
+    const combinedTotal = totalAmt + linkedTotal;
+    if (combinedTotal > 0) return combinedTotal;
+
+    // Fallback to toBePaidAmount if totalBillAmount is not set
+    const ownAmt = parseFloat((task.toBePaidAmount || "0").toString().replace(/[^0-9.-]+/g, "")) || 0;
+    const linkedAmt = (task.commonTasksLinked || []).reduce((sum, childNo) => {
+      const childTask = tasks.find((t) => t.taskNo === childNo);
+      const amt = parseFloat((childTask?.toBePaidAmount || "0").toString().replace(/[^0-9.-]+/g, "")) || 0;
+      return sum + amt;
+    }, 0);
+    const combined = ownAmt + linkedAmt;
+    return combined > 0 ? combined : "";
+  };
+
   const safeFetchJson = async (url, retries = 2, delayMs = 800) => {
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
@@ -214,17 +243,22 @@ const Posting = () => {
           : advanceTasks.filter((t) => (t.firmName || "").toLowerCase() === userFirm);
 
         // Mark child tasks for advance payments too (same logic as Normal tasks)
+        // Grouped by Firm Name + Bill No. together so different firms with a
+        // coincidentally-same Bill No. never get mixed into one group.
         advWithParentFlag = firmFiltered.map((task) => {
           if (!task.billNo || task.billNo === "-") {
             return { ...task, isChildTask: false, commonTasksLinked: [] };
           }
+          const sameGroup = (other) =>
+            other.billNo === task.billNo &&
+            (other.firmName || "").toLowerCase().trim() === (task.firmName || "").toLowerCase().trim();
           const siblings = firmFiltered.filter(
-            (other) => other.billNo === task.billNo && other.taskNo !== task.taskNo
+            (other) => sameGroup(other) && other.taskNo !== task.taskNo
           );
           if (siblings.length === 0) {
             return { ...task, isChildTask: false, commonTasksLinked: [] };
           }
-          const group = firmFiltered.filter((other) => other.billNo === task.billNo);
+          const group = firmFiltered.filter(sameGroup);
           const isChild = group[0]?.taskNo !== task.taskNo;
           return {
             ...task,
@@ -455,12 +489,13 @@ const Posting = () => {
                 <TableHead className="min-w-[130px] whitespace-nowrap">Department</TableHead>
                 <TableHead className="min-w-[140px] whitespace-nowrap">Vendor Name</TableHead>
                 <TableHead className="min-w-[120px] whitespace-nowrap">Bill No / Advance Amt</TableHead>
+                <TableHead className="min-w-[140px] whitespace-nowrap">Total Bill Amount</TableHead>
                 <TableHead className="min-w-[140px] whitespace-nowrap">Planned Posting</TableHead>
               </TableHeader>
               <TableBody>
                 {loadingTasks ? (
                   <TableRow>
-                    <TableCell colSpan={10} className="text-center py-12">
+                    <TableCell colSpan={11} className="text-center py-12">
                       <div className="flex flex-col items-center justify-center">
                         <div className="w-9 h-9 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                         <p className="mt-3 text-sm text-gray-500 font-medium">Loading tasks...</p>
@@ -469,7 +504,7 @@ const Posting = () => {
                   </TableRow>
                 ) : filteredPendingTasks.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={10} className="text-center py-12 text-gray-500">
+                    <TableCell colSpan={11} className="text-center py-12 text-gray-500">
                       No pending posting tasks found
                     </TableCell>
                   </TableRow>
@@ -519,6 +554,9 @@ const Posting = () => {
                           ? (task.toBePaidAmount ? `₹${Number(task.toBePaidAmount).toLocaleString()}` : "-")
                           : (task.billNo || "-")}
                       </TableCell>
+                      <TableCell className="whitespace-nowrap font-medium text-gray-900">
+                        {formatCurrency(getDisplayTotalAmount(task))}
+                      </TableCell>
                       <TableCell className="whitespace-nowrap">
                         <span className="inline-flex items-center gap-1.5 text-gray-700">
                           <Calendar className="w-3.5 h-3.5 text-gray-400" />
@@ -545,7 +583,7 @@ const Posting = () => {
                 <TableHead className="min-w-[130px] whitespace-nowrap">Department</TableHead>
                 <TableHead className="min-w-[140px] whitespace-nowrap">Vendor Name</TableHead>
                 <TableHead className="min-w-[120px] whitespace-nowrap">Bill No</TableHead>
-                <TableHead className="min-w-[130px] whitespace-nowrap">Bill Amount</TableHead>
+                <TableHead className="min-w-[130px] whitespace-nowrap">Total Bill Amount</TableHead>
                 <TableHead className="min-w-[140px] whitespace-nowrap">Planned Posting</TableHead>
                 <TableHead className="min-w-[140px] whitespace-nowrap">Actual Posting</TableHead>
                 <TableHead className="min-w-[100px] text-center whitespace-nowrap">Delay</TableHead>
@@ -581,7 +619,9 @@ const Posting = () => {
                       <TableCell className="whitespace-nowrap">{task.department || "-"}</TableCell>
                       <TableCell className="whitespace-nowrap">{task.vendorName || "-"}</TableCell>
                       <TableCell className="whitespace-nowrap">{task.billNo || "-"}</TableCell>
-                      <TableCell className="whitespace-nowrap">{formatCurrency(task.totalBillAmount)}</TableCell>
+                      <TableCell className="whitespace-nowrap font-medium text-gray-900">
+                        {formatCurrency(getDisplayTotalAmount(task))}
+                      </TableCell>
                       <TableCell className="whitespace-nowrap">
                         <span className="inline-flex items-center gap-1.5 text-gray-700">
                           <Calendar className="w-3.5 h-3.5 text-gray-400" />
@@ -627,7 +667,13 @@ const Posting = () => {
             <p><strong className="text-gray-700">Machine:</strong> {selectedTask?.machineName} ({selectedTask?.serialNo})</p>
             <p><strong className="text-gray-700">Vendor:</strong> {selectedTask?.vendorName || "-"}</p>
             <p><strong className="text-gray-700">Bill No:</strong> {selectedTask?.billNo || "-"}</p>
-            <p><strong className="text-gray-700">Total Amount:</strong> {formatCurrency(selectedTask?.totalBillAmount)}</p>
+            <p>
+              <strong className="text-gray-700">Total Amount:</strong>{" "}
+              {formatCurrency(getDisplayTotalAmount(selectedTask))}
+              {selectedTask?.commonTasksLinked?.length > 0 && (
+                <span className="text-gray-500 font-normal"> (combined for {selectedTask.commonTasksLinked.length + 1} linked task(s))</span>
+              )}
+            </p>
             <p><strong className="text-gray-700">Planned Posting Date:</strong> {formatDate(selectedTask?.plannedPosting)}</p>
           </div>
 

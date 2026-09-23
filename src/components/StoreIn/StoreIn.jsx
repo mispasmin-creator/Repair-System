@@ -179,18 +179,21 @@ const StoreIn = () => {
           ? advanceTasks
           : advanceTasks.filter((t) => (t.firmName || "").toLowerCase() === userFirm);
 
-        // Mark child tasks for advance payments too (same Bill No. based grouping as Normal)
+        // Mark child tasks for advance payments too (Firm Name + Bill No. based grouping as Normal)
         advWithParentFlag = firmFiltered.map((task) => {
           if (!task.billNo || task.billNo === "-") {
             return { ...task, isChildTask: false, commonTasksLinked: [] };
           }
+          const sameGroup = (other) =>
+            other.billNo === task.billNo &&
+            (other.firmName || "").toLowerCase().trim() === (task.firmName || "").toLowerCase().trim();
           const siblings = firmFiltered.filter(
-            (other) => other.billNo === task.billNo && other.taskNo !== task.taskNo
+            (other) => sameGroup(other) && other.taskNo !== task.taskNo
           );
           if (siblings.length === 0) {
             return { ...task, isChildTask: false, commonTasksLinked: [] };
           }
-          const group = firmFiltered.filter((other) => other.billNo === task.billNo);
+          const group = firmFiltered.filter(sameGroup);
           const isChildAdv = group[0]?.taskNo !== task.taskNo;
           return {
             ...task,
@@ -357,6 +360,23 @@ const StoreIn = () => {
   const formatCurrency = (amount) => {
     if (!amount || isNaN(Number(amount))) return "-";
     return `₹${Number(amount).toLocaleString()}`;
+  };
+
+  // For a task, returns the Total Bill Amount to display:
+  // - Normal: its own "Total Bill Amount".
+  // - Advance: sum of "To Be Paid Amount" across itself + all Firm Name + Bill No.
+  //   matched linked tasks (commonTasksLinked), since advance amounts are split per task.
+  const getDisplayTotalAmount = (task) => {
+    if (!task) return "";
+    if (!task.isAdvance) return task.totalBillAmount || "";
+    const ownAmt = parseFloat((task.toBePaidAmount || "0").toString().replace(/[^0-9.-]+/g, "")) || 0;
+    const linkedAmt = (task.commonTasksLinked || []).reduce((sum, childNo) => {
+      const childTask = repairTasks.find((t) => t.taskNo === childNo);
+      const amt = parseFloat((childTask?.toBePaidAmount || "0").toString().replace(/[^0-9.-]+/g, "")) || 0;
+      return sum + amt;
+    }, 0);
+    const combined = ownAmt + linkedAmt;
+    return combined > 0 ? combined : "";
   };
 
   return (
@@ -541,7 +561,7 @@ const StoreIn = () => {
                         )}
                       </TableCell>
                       <TableCell>{task.billNo || "-"}</TableCell>
-                      <TableCell>{formatCurrency(task.totalBillAmount)}</TableCell>
+                      <TableCell>{formatCurrency(getDisplayTotalAmount(task))}</TableCell>
                       <TableCell className="font-medium text-gray-900">{formatCurrency(task.toBePaidAmount)}</TableCell>
                     </TableRow>
                   ))
@@ -608,7 +628,7 @@ const StoreIn = () => {
                           <span className="text-gray-400 text-xs">No Bill</span>
                         )}
                       </TableCell>
-                      <TableCell>{formatCurrency(task.totalBillAmount)}</TableCell>
+                      <TableCell>{formatCurrency(getDisplayTotalAmount(task))}</TableCell>
                       <TableCell className="font-medium text-gray-900">{formatCurrency(task.toBePaidAmount)}</TableCell>
                       <TableCell>
                         <span

@@ -223,18 +223,21 @@ const CheckMachine = () => {
           ? advanceTasks
           : advanceTasks.filter((t) => (t.firmName || "").toLowerCase() === userFirm);
 
-        // Mark child tasks for advance payments too (same Bill No. based grouping as Normal)
+        // Mark child tasks for advance payments too (Firm Name + Bill No. based grouping as Normal)
         advWithParentFlag = firmFiltered.map((task) => {
           if (!task.billNo || task.billNo === "-") {
             return { ...task, isChildTask: false, commonTasksLinked: [] };
           }
+          const sameGroup = (other) =>
+            other.billNo === task.billNo &&
+            (other.firmName || "").toLowerCase().trim() === (task.firmName || "").toLowerCase().trim();
           const siblings = firmFiltered.filter(
-            (other) => other.billNo === task.billNo && other.taskNo !== task.taskNo
+            (other) => sameGroup(other) && other.taskNo !== task.taskNo
           );
           if (siblings.length === 0) {
             return { ...task, isChildTask: false, commonTasksLinked: [] };
           }
-          const group = firmFiltered.filter((other) => other.billNo === task.billNo);
+          const group = firmFiltered.filter(sameGroup);
           const isChildAdv = group[0]?.taskNo !== task.taskNo;
           return {
             ...task,

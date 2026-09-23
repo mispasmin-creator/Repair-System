@@ -304,6 +304,7 @@ const ManagementApproval = () => {
               "Vendor Name ": chosenVendor.vendorName || "",
               "Payment Type": chosenVendor.paymentType || "Advance",
               "To Be Paid Amount": chosenVendor.advancePayment || "",
+              "Total Bill Amount": selectedTask.totalBillAmount || chosenVendor.totalBillAmount || chosenVendor.totalAmount || "",
               "Management Approval Date": approvalDate,
               "Management Remark": remark,
             };

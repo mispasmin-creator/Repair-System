@@ -351,6 +351,7 @@ const FullKitting = () => {
                 <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[130px]">Vendor</th>
                 <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[130px]">Payment Date</th>
                 <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[120px]">Bill Image</th>
+                <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[130px]">Total Bill Amount</th>
                 <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[130px]">Kitting Date</th>
                 <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[150px]">Kitting Done By</th>
                 <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[180px]">Remark</th>
@@ -359,7 +360,7 @@ const FullKitting = () => {
             <tbody className="divide-y divide-gray-200 bg-white">
               {displayedHistory.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="text-center py-16 text-gray-400">
+                  <td colSpan={13} className="text-center py-16 text-gray-400">
                     <Package className="w-10 h-10 mx-auto mb-2 opacity-30" />
                     No kitting history found
                   </td>
@@ -387,6 +388,9 @@ const FullKitting = () => {
                       ) : (
                         <span className="text-gray-400 text-xs">No Bill</span>
                       )}
+                    </td>
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900 whitespace-nowrap">
+                      {task.totalBillAmount ? `₹${Number(task.totalBillAmount).toLocaleString("en-IN")}` : "-"}
                     </td>
                     <td className="px-4 py-3 text-sm whitespace-nowrap">
                       <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full text-xs font-semibold">
