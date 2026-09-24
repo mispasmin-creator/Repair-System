@@ -1,3 +1,22 @@
+// ── Read cache (speeds up repeated loads of the same sheet data) ─────────────
+// Entries expire after DATA_CACHE_SECONDS and every doPost bumps the version,
+// so data written through the app is never served stale.
+var DATA_CACHE_SECONDS = 60;
+
+function getDataCacheKey_(name, sheetId) {
+  var cache = CacheService.getScriptCache();
+  var ver = cache.get('dataVersion');
+  if (!ver) {
+    ver = '1';
+    cache.put('dataVersion', ver, 21600);
+  }
+  return name + '_' + (sheetId || '') + '_' + ver;
+}
+
+function invalidateDataCache_() {
+  CacheService.getScriptCache().put('dataVersion', String(new Date().getTime()), 21600);
+}
+
 function doGet(e) {
   try {
     // Handle login requests
@@ -69,6 +88,12 @@ function doGet(e) {
     if (e.parameter.action === 'getRepairTasks') {
       try {
         var sheetId = e.parameter.sheetId;
+        var cacheKey = getDataCacheKey_('getRepairTasks', sheetId);
+        var cachedJson = CacheService.getScriptCache().get(cacheKey);
+        if (cachedJson) {
+          return ContentService.createTextOutput(cachedJson)
+            .setMimeType(ContentService.MimeType.JSON);
+        }
         var ss = sheetId ? SpreadsheetApp.openById(sheetId) : SpreadsheetApp.getActiveSpreadsheet();
         var sheet = ss.getSheetByName('Repair System');
         if (!sheet) {
@@ -95,7 +120,14 @@ function doGet(e) {
             });
             return obj;
           });
-        return ContentService.createTextOutput(JSON.stringify({ success: true, data: result }))
+        var resultJson = JSON.stringify({ success: true, data: result });
+        try {
+          // CacheService values are limited to ~100KB
+          if (resultJson.length < 90000) {
+            CacheService.getScriptCache().put(cacheKey, resultJson, DATA_CACHE_SECONDS);
+          }
+        } catch (cacheErr) { }
+        return ContentService.createTextOutput(resultJson)
           .setMimeType(ContentService.MimeType.JSON);
       } catch (err) {
         return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.toString() }))
@@ -211,6 +243,12 @@ function doGet(e) {
     if (e.parameter.action === 'getAdvancePayments') {
       try {
         var sheetId = e.parameter.sheetId;
+        var cacheKey = getDataCacheKey_('getAdvancePayments', sheetId);
+        var cachedJson = CacheService.getScriptCache().get(cacheKey);
+        if (cachedJson) {
+          return ContentService.createTextOutput(cachedJson)
+            .setMimeType(ContentService.MimeType.JSON);
+        }
         var ss = sheetId ? SpreadsheetApp.openById(sheetId) : SpreadsheetApp.getActiveSpreadsheet();
         var sheet = ss.getSheetByName('Repair FMS Advance Payment');
         if (!sheet) {
@@ -238,7 +276,14 @@ function doGet(e) {
             return obj;
           });
 
-        return ContentService.createTextOutput(JSON.stringify({ success: true, data: result }))
+        var resultJson = JSON.stringify({ success: true, data: result });
+        try {
+          // CacheService values are limited to ~100KB
+          if (resultJson.length < 90000) {
+            CacheService.getScriptCache().put(cacheKey, resultJson, DATA_CACHE_SECONDS);
+          }
+        } catch (cacheErr) { }
+        return ContentService.createTextOutput(resultJson)
           .setMimeType(ContentService.MimeType.JSON);
       } catch (err) {
         return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.toString() }))
@@ -376,6 +421,9 @@ function getNextTaskNumber(sheet) {
 function doPost(e) {
   try {
     var params = e.parameter;
+
+    // Any write may change sheet data, so drop cached reads
+    invalidateDataCache_();
 
     // Check if this is a file upload action
     if (params.action === 'uploadFile') {

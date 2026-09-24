@@ -13,7 +13,7 @@ import {
 import { useAuth } from "../../context/AuthContext";
 import toast from "react-hot-toast";
 import { fetchRepairTasks as fetchRepairTasksSvc } from "../../services/repairService";
-import { fetchAdvancePayments, updateAdvancePayment, getTodayIST, getNowIST } from "../../services/advancePaymentService";
+import { fetchAdvancePayments, updateAdvancePayment, getTodayIST, getNowIST, isAdvanceRow } from "../../services/advancePaymentService";
 
 const Posting = () => {
   const { user } = useAuth();
@@ -172,6 +172,10 @@ const Posting = () => {
     try {
       if (!isBackground) setLoadingTasks(true);
 
+      // Start the Advance sheet request in parallel with the Repair System one
+      const advancePromise = fetchAdvancePayments();
+      advancePromise.catch(() => {});
+
       // ── Normal (Non-Advance) tasks from Repair System sheet ──────────────
       const rawTasks = await fetchRepairTasksSvc(user?.firmName);
 
@@ -191,6 +195,7 @@ const Posting = () => {
           department: row["Department"] || "",
           location: row["Location"] || "",
           vendorName: row["Vendor Name"] || "",
+          isAdvancePayment: isAdvanceRow(row),
           actual1: row["Actual 1"] || "",
           actual2: row["Actual 2"] || "",
           actual3: row["Actual 3"] || "",
@@ -256,7 +261,7 @@ const Posting = () => {
       let advHistory = [];
       let advWithParentFlag = [];
       try {
-        const advanceTasks = await fetchAdvancePayments();
+        const advanceTasks = await advancePromise;
         // Filter by firm if user is not all-firm
         const userFirm = (user?.firmName || "").toLowerCase();
         const isAllFirm = !userFirm || userFirm === "all";
@@ -301,8 +306,13 @@ const Posting = () => {
 
 
       // Merge both lists
-      setPendingTasks([...normalPending, ...advPending]);
-      setHistoryTasks([...normalHistory, ...advHistory]);
+      // Advance tasks already moved to the Advance sheet continue from there,
+      // so hide them from the normal (Repair System) lists.
+      const advTaskNos = new Set(advWithParentFlag.map((t) => (t.taskNo || "").trim()));
+      const inNormalFlow = (t) => !(t.isAdvancePayment && advTaskNos.has((t.taskNo || "").trim()));
+
+      setPendingTasks([...normalPending.filter(inNormalFlow), ...advPending]);
+      setHistoryTasks([...normalHistory.filter(inNormalFlow), ...advHistory]);
 
       // Also merge advance tasks into `tasks` so the modal's common-task lookup
       // (tasks.find) can resolve linked advance child tasks' machine names.

@@ -14,7 +14,7 @@ import { useAuth } from "../../context/AuthContext";
 import useDataStore from "../../store/dataStore";
 import toast from "react-hot-toast";
 import { fetchRepairTasks as fetchRepairTasksSvc } from "../../services/repairService";
-import { fetchAdvancePayments, updateAdvancePayment, getTodayIST, getNowIST } from "../../services/advancePaymentService";
+import { fetchAdvancePayments, updateAdvancePayment, getTodayIST, getNowIST, isAdvanceRow } from "../../services/advancePaymentService";
 
 // Google Form URLs mapped by firm name
 const FIRM_FORM_URLS = {
@@ -313,6 +313,10 @@ const MakePayment = () => {
     try {
       if (!isBackground) setLoadingTasks(true);
 
+      // Start the Advance sheet request in parallel with the Repair System one
+      const advancePromise = fetchAdvancePayments();
+      advancePromise.catch(() => {});
+
       const rawTasks = await fetchRepairTasksSvc(user?.firmName);
 
       const formattedTasks = rawTasks.map((row, index) => {
@@ -330,6 +334,7 @@ const MakePayment = () => {
           department: row["Department"] || "",
           vendorName: row["Vendor Name"] || "",
           paymentType: row["Payment Type"] || "",
+          isAdvancePayment: isAdvanceRow(row),
           howMuch: row["How Much"] || "",
           billImage: row["Bill Image"] || "",
           billNo: row["Bill No."] || "",
@@ -391,7 +396,7 @@ const MakePayment = () => {
       let advHistory = [];
       let advWithParentFlag = [];
       try {
-        const advanceTasks = await fetchAdvancePayments();
+        const advanceTasks = await advancePromise;
         const userFirm = (user?.firmName || "").toLowerCase();
         const isAllFirm = !userFirm || userFirm === "all";
         const firmFiltered = isAllFirm
@@ -434,8 +439,13 @@ const MakePayment = () => {
       }
 
       // Combine both NORMAL and ADVANCE pending/history with same logic
-      setPendingRepairPayments([...normalPending, ...advPending]);
-      setHistoryRepairPayments([...normalHistory, ...advHistory]);
+      // Advance tasks already moved to the Advance sheet continue from there,
+      // so hide them from the normal (Repair System) lists.
+      const advTaskNos = new Set(advWithParentFlag.map((t) => (t.taskNo || "").trim()));
+      const inNormalFlow = (t) => !(t.isAdvancePayment && advTaskNos.has((t.taskNo || "").trim()));
+
+      setPendingRepairPayments([...normalPending.filter(inNormalFlow), ...advPending]);
+      setHistoryRepairPayments([...normalHistory.filter(inNormalFlow), ...advHistory]);
 
       // Also merge advance tasks into `repairTasks` so the modal's common-task lookup
       // can resolve linked advance child tasks' machine names.

@@ -12,7 +12,19 @@ const ADVANCE_SHEET_NAME = "Repair FMS Advance Payment";
  * Fetches all rows from "Repair FMS Advance Payment" sheet.
  * Returns objects keyed by Row 6 header names, with isAdvance: true flag.
  */
-export const fetchAdvancePayments = async () => {
+// Concurrent callers share one network request (the Apps Script call is slow).
+let inFlightAdvancePayments = null;
+
+export const fetchAdvancePayments = () => {
+  if (!inFlightAdvancePayments) {
+    inFlightAdvancePayments = fetchAdvancePaymentsRaw().finally(() => {
+      inFlightAdvancePayments = null;
+    });
+  }
+  return inFlightAdvancePayments;
+};
+
+const fetchAdvancePaymentsRaw = async () => {
   const res = await fetch(
     `${SCRIPT_URL}?action=getAdvancePayments&sheetId=${SHEET_ID}`
   );
@@ -107,6 +119,17 @@ export const updateAdvancePayment = async (repairTaskNo, fields) => {
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return await res.json();
 };
+
+/**
+ * True when a "Repair System" sheet row is an Advance payment task
+ * ("Payment Type" or "Payment type 2" is Advance). Such tasks continue
+ * from the "Repair FMS Advance Payment" sheet after Management Approval,
+ * so they must be excluded from the normal (Repair System) flow.
+ */
+export const isAdvanceRow = (row) =>
+  ["Payment Type", "Payment type 2"].some(
+    (key) => (row?.[key] || "").toString().trim().toLowerCase() === "advance"
+  );
 
 /** Returns current date-time in Indian format (DD/MM/YYYY, HH:MM:SS). */
 export const getNowIST = () =>

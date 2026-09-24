@@ -14,7 +14,10 @@ const SHEET_ID = import.meta.env.VITE_SHEET_ID;
  * @param {string} userFirmName - Filter by firm. Pass "" or "all" to get all firms.
  * @returns {Promise<Array>} Array of task objects with header-name keys
  */
-export const fetchRepairTasks = async (userFirmName = "") => {
+// Concurrent callers share one network request (the Apps Script call is slow).
+let inFlightRepairTasks = null;
+
+const fetchRepairTasksRaw = async () => {
   const res = await fetch(
     `${SCRIPT_URL}?action=getRepairTasks&sheetId=${SHEET_ID}`
   );
@@ -25,9 +28,18 @@ export const fetchRepairTasks = async (userFirmName = "") => {
   if (!result.success) throw new Error(result.error || "Failed to fetch tasks");
 
   // Filter out completely empty rows
-  const tasks = (result.data || []).filter((row) =>
+  return (result.data || []).filter((row) =>
     Object.values(row).some((v) => v !== "" && v !== null && v !== undefined)
   );
+};
+
+export const fetchRepairTasks = async (userFirmName = "") => {
+  if (!inFlightRepairTasks) {
+    inFlightRepairTasks = fetchRepairTasksRaw().finally(() => {
+      inFlightRepairTasks = null;
+    });
+  }
+  const tasks = await inFlightRepairTasks;
 
   // Filter by firm — support multiple firms (comma-separated, e.g. "Rkl, Pmmpl")
   const isAllFirm = !userFirmName || userFirmName.toLowerCase() === "all";
