@@ -17,6 +17,19 @@ const SHEET_ID = import.meta.env.VITE_SHEET_ID;
 // Concurrent callers share one network request (the Apps Script call is slow).
 let inFlightRepairTasks = null;
 
+// Short-lived client cache: every page mount was re-hitting the network even
+// when another page had just fetched the same data seconds earlier (the
+// Apps Script round-trip is the slow part, not just the sheet read). A small
+// TTL lets fast page-to-page navigation reuse the in-memory copy instead of
+// re-fetching. Any write goes through updateRepairTask(), which clears this
+// cache so the very next fetch always sees the just-submitted change.
+const CACHE_TTL_MS = 15000;
+let tasksCache = { data: null, ts: 0 };
+
+export const invalidateRepairTasksCache = () => {
+  tasksCache = { data: null, ts: 0 };
+};
+
 const fetchRepairTasksRaw = async () => {
   const res = await fetch(
     `${SCRIPT_URL}?action=getRepairTasks&sheetId=${SHEET_ID}`
@@ -33,13 +46,25 @@ const fetchRepairTasksRaw = async () => {
   );
 };
 
-export const fetchRepairTasks = async (userFirmName = "") => {
+const getRepairTasksCached = async (force = false) => {
+  const isFresh = tasksCache.data && Date.now() - tasksCache.ts < CACHE_TTL_MS;
+  if (isFresh && !force) return tasksCache.data;
+
   if (!inFlightRepairTasks) {
-    inFlightRepairTasks = fetchRepairTasksRaw().finally(() => {
-      inFlightRepairTasks = null;
-    });
+    inFlightRepairTasks = fetchRepairTasksRaw()
+      .then((data) => {
+        tasksCache = { data, ts: Date.now() };
+        return data;
+      })
+      .finally(() => {
+        inFlightRepairTasks = null;
+      });
   }
-  const tasks = await inFlightRepairTasks;
+  return inFlightRepairTasks;
+};
+
+export const fetchRepairTasks = async (userFirmName = "", { force = false } = {}) => {
+  const tasks = await getRepairTasksCached(force);
 
   // Filter by firm — support multiple firms (comma-separated, e.g. "Rkl, Pmmpl")
   const isAllFirm = !userFirmName || userFirmName.toLowerCase() === "all";
@@ -81,7 +106,9 @@ export const updateRepairTask = async (sheetName, taskNo, fields) => {
   });
 
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return await res.json();
+  const result = await res.json();
+  invalidateRepairTasksCache();
+  return result;
 };
 
 /**

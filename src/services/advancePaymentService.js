@@ -15,11 +15,30 @@ const ADVANCE_SHEET_NAME = "Repair FMS Advance Payment";
 // Concurrent callers share one network request (the Apps Script call is slow).
 let inFlightAdvancePayments = null;
 
-export const fetchAdvancePayments = () => {
+// Short-lived client cache so quick page-to-page navigation doesn't re-hit
+// the network for data another page just fetched. Cleared on every write via
+// updateAdvancePayment() so a refresh right after a submit sees the change.
+const CACHE_TTL_MS = 15000;
+let advancePaymentsCache = { data: null, ts: 0 };
+
+export const invalidateAdvancePaymentsCache = () => {
+  advancePaymentsCache = { data: null, ts: 0 };
+};
+
+export const fetchAdvancePayments = (force = false) => {
+  const isFresh =
+    advancePaymentsCache.data && Date.now() - advancePaymentsCache.ts < CACHE_TTL_MS;
+  if (isFresh && !force) return Promise.resolve(advancePaymentsCache.data);
+
   if (!inFlightAdvancePayments) {
-    inFlightAdvancePayments = fetchAdvancePaymentsRaw().finally(() => {
-      inFlightAdvancePayments = null;
-    });
+    inFlightAdvancePayments = fetchAdvancePaymentsRaw()
+      .then((data) => {
+        advancePaymentsCache = { data, ts: Date.now() };
+        return data;
+      })
+      .finally(() => {
+        inFlightAdvancePayments = null;
+      });
   }
   return inFlightAdvancePayments;
 };
@@ -117,7 +136,9 @@ export const updateAdvancePayment = async (repairTaskNo, fields) => {
   });
 
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return await res.json();
+  const result = await res.json();
+  invalidateAdvancePaymentsCache();
+  return result;
 };
 
 /**

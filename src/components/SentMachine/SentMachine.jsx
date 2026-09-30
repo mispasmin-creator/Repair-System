@@ -267,6 +267,17 @@ const SentMachine = () => {
       const newForms = [...prev];
       const current = { ...newForms[index], [field]: value };
 
+      if (field === "paymentType") {
+        const isCredit =
+          (value || "").toLowerCase().trim() === "credit" ||
+          (value || "").toLowerCase().includes("credit");
+        if (isCredit) {
+          current.basicAmount = "";
+          current.gstPercent = "";
+          current.advancePayment = "";
+        }
+      }
+
       // Auto-calculate Total Amount when basicAmount or gstPercent changes
       if (field === "basicAmount" || field === "gstPercent") {
         const basic = parseFloat(field === "basicAmount" ? value : current.basicAmount);
@@ -307,7 +318,11 @@ const SentMachine = () => {
       return;
     }
 
-    if (!selectedVendor.advancePayment) {
+    const isCreditPayment =
+      (selectedVendor.paymentType || "").toLowerCase().trim() === "credit" ||
+      (selectedVendor.paymentType || "").toLowerCase().includes("credit");
+
+    if (!isCreditPayment && !selectedVendor.advancePayment) {
       toast.error(
         (selectedVendor.paymentType || "").toLowerCase() === "advance"
           ? "Please enter advance payment amount"
@@ -909,8 +924,10 @@ const SentMachine = () => {
                       </div>
                     </div>
 
-                    {/* Render Basic Amount, GST %, and Total Amount when Payment Type is selected */}
-                    {Boolean(currentVendor.paymentType) && (
+                    {/* Render Basic Amount, GST %, and Total Amount when Payment Type is selected (except Credit) */}
+                    {Boolean(currentVendor.paymentType) &&
+                      (currentVendor.paymentType || "").toLowerCase().trim() !== "credit" &&
+                      !(currentVendor.paymentType || "").toLowerCase().includes("credit") && (
                       <div className="p-3 bg-gray-50/80 rounded-xl border border-gray-200 space-y-3">
                         {/* Basic Amount */}
                         <div>
