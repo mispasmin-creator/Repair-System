@@ -202,6 +202,7 @@ const Posting = () => {
           billNo: row["Bill No."] || "",
           typeOfBill: row["Type of Bill"] || "",
           totalBillAmount: row["Total Bill Amount"] || "",
+          transportationCharges: row["Transportation Charges"] || "",
           receivedQuantity: row["Received Quantity"] || "",
           plannedPosting: row["Planned Posting"] || "",
           actualPosting: row["Actual Posting"] || "",
@@ -538,12 +539,13 @@ const Posting = () => {
                 <TableHead className="min-w-[140px] whitespace-nowrap">Vendor Name</TableHead>
                 <TableHead className="min-w-[120px] whitespace-nowrap">Bill No / Advance Amt</TableHead>
                 <TableHead className="min-w-[140px] whitespace-nowrap">Total Bill Amount</TableHead>
+                <TableHead className="min-w-[150px] whitespace-nowrap">Transportation Charges</TableHead>
                 <TableHead className="min-w-[140px] whitespace-nowrap">Planned Posting</TableHead>
               </TableHeader>
               <TableBody>
                 {loadingTasks ? (
                   <TableRow>
-                    <TableCell colSpan={11} className="text-center py-12">
+                    <TableCell colSpan={12} className="text-center py-12">
                       <div className="flex flex-col items-center justify-center">
                         <div className="w-9 h-9 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                         <p className="mt-3 text-sm text-gray-500 font-medium">Loading tasks...</p>
@@ -552,7 +554,7 @@ const Posting = () => {
                   </TableRow>
                 ) : filteredPendingTasks.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={11} className="text-center py-12 text-gray-500">
+                    <TableCell colSpan={12} className="text-center py-12 text-gray-500">
                       No pending posting tasks found
                     </TableCell>
                   </TableRow>
@@ -611,6 +613,11 @@ const Posting = () => {
                         {formatCurrency(getDisplayTotalAmount(task))}
                       </TableCell>
                       <TableCell className="whitespace-nowrap">
+                        {task.transportationCharges
+                          ? `₹${Number(task.transportationCharges).toLocaleString()}`
+                          : "-"}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">
                         <span className="inline-flex items-center gap-1.5 text-gray-700">
                           <Calendar className="w-3.5 h-3.5 text-gray-400" />
                           {formatDate(task.plannedPosting)}
@@ -637,6 +644,7 @@ const Posting = () => {
                 <TableHead className="min-w-[140px] whitespace-nowrap">Vendor Name</TableHead>
                 <TableHead className="min-w-[120px] whitespace-nowrap">Bill No</TableHead>
                 <TableHead className="min-w-[130px] whitespace-nowrap">Total Bill Amount</TableHead>
+                <TableHead className="min-w-[150px] whitespace-nowrap">Transportation Charges</TableHead>
                 <TableHead className="min-w-[140px] whitespace-nowrap">Planned Posting</TableHead>
                 <TableHead className="min-w-[140px] whitespace-nowrap">Actual Posting</TableHead>
                 <TableHead className="min-w-[100px] text-center whitespace-nowrap">Delay</TableHead>
@@ -645,7 +653,7 @@ const Posting = () => {
               <TableBody>
                 {loadingTasks ? (
                   <TableRow>
-                    <TableCell colSpan={12} className="text-center py-12">
+                    <TableCell colSpan={13} className="text-center py-12">
                       <div className="flex flex-col items-center justify-center">
                         <div className="w-9 h-9 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                         <p className="mt-3 text-sm text-gray-500 font-medium">Loading tasks...</p>
@@ -654,7 +662,7 @@ const Posting = () => {
                   </TableRow>
                 ) : filteredHistoryTasks.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={12} className="text-center py-12 text-gray-500">
+                    <TableCell colSpan={13} className="text-center py-12 text-gray-500">
                       No history posting tasks found
                     </TableCell>
                   </TableRow>
@@ -686,6 +694,11 @@ const Posting = () => {
                       <TableCell className="whitespace-nowrap">{task.billNo || "-"}</TableCell>
                       <TableCell className="whitespace-nowrap font-medium text-gray-900">
                         {formatCurrency(getDisplayTotalAmount(task))}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        {task.transportationCharges
+                          ? `₹${Number(task.transportationCharges).toLocaleString()}`
+                          : "-"}
                       </TableCell>
                       <TableCell className="whitespace-nowrap">
                         <span className="inline-flex items-center gap-1.5 text-gray-700">
@@ -738,6 +751,12 @@ const Posting = () => {
               {selectedTask?.commonTasksLinked?.length > 0 && (
                 <span className="text-gray-500 font-normal"> (combined for {selectedTask.commonTasksLinked.length + 1} linked task(s))</span>
               )}
+            </p>
+            <p>
+              <strong className="text-gray-700">Transportation Charges:</strong>{" "}
+              {selectedTask?.transportationCharges
+                ? `₹${Number(selectedTask.transportationCharges).toLocaleString()}`
+                : "-"}
             </p>
             <p><strong className="text-gray-700">Planned Posting Date:</strong> {formatDate(selectedTask?.plannedPosting)}</p>
           </div>

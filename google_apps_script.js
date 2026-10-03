@@ -2,6 +2,8 @@
 // Entries expire after DATA_CACHE_SECONDS and every doPost bumps the version,
 // so data written through the app is never served stale.
 var DATA_CACHE_SECONDS = 60;
+// CacheService caps each value at 100KB (bytes); 24k chars stays under that even for 4-byte UTF-8
+var CACHE_CHUNK_CHARS = 24000;
 
 function getDataCacheKey_(name, sheetId) {
   var cache = CacheService.getScriptCache();
@@ -15,6 +17,55 @@ function getDataCacheKey_(name, sheetId) {
 
 function invalidateDataCache_() {
   CacheService.getScriptCache().put('dataVersion', String(new Date().getTime()), 21600);
+}
+
+function cachePutLarge_(key, json) {
+  var count = Math.ceil(json.length / CACHE_CHUNK_CHARS);
+  var entries = {};
+  entries[key + '_n'] = String(count);
+  for (var i = 0; i < count; i++) {
+    entries[key + '_' + i] = json.substr(i * CACHE_CHUNK_CHARS, CACHE_CHUNK_CHARS);
+  }
+  CacheService.getScriptCache().putAll(entries, DATA_CACHE_SECONDS);
+}
+
+function cacheGetLarge_(key) {
+  var cache = CacheService.getScriptCache();
+  var n = cache.get(key + '_n');
+  if (!n) return null;
+  var keys = [];
+  for (var i = 0; i < Number(n); i++) keys.push(key + '_' + i);
+  var parts = cache.getAll(keys);
+  var out = '';
+  for (var j = 0; j < keys.length; j++) {
+    if (parts[keys[j]] === undefined) return null;
+    out += parts[keys[j]];
+  }
+  return out;
+}
+
+// Returns headers once plus rows as arrays (no repeated keys per row) — much smaller JSON
+function serializeSheet_(sheet, headerRow, dateFormat) {
+  var allData = sheet.getDataRange().getValues();
+  var tz = Session.getScriptTimeZone();
+  var headers = (allData[headerRow - 1] || []).map(function(h) {
+    return h === null || h === undefined ? '' : h.toString();
+  });
+  var rows = allData.slice(headerRow)
+    .filter(function(row) {
+      return row.some(function(cell) { return cell !== '' && cell !== null && cell !== undefined; });
+    })
+    .map(function(row) {
+      return row.map(function(val) {
+        if (val instanceof Date) return Utilities.formatDate(val, tz, dateFormat);
+        return val === null || val === undefined ? '' : val.toString();
+      });
+    });
+  return { headers: headers, rows: rows };
+}
+
+function jsonOutput_(json) {
+  return ContentService.createTextOutput(json).setMimeType(ContentService.MimeType.JSON);
 }
 
 function doGet(e) {
@@ -89,46 +140,18 @@ function doGet(e) {
       try {
         var sheetId = e.parameter.sheetId;
         var cacheKey = getDataCacheKey_('getRepairTasks', sheetId);
-        var cachedJson = CacheService.getScriptCache().get(cacheKey);
-        if (cachedJson) {
-          return ContentService.createTextOutput(cachedJson)
-            .setMimeType(ContentService.MimeType.JSON);
-        }
+        var cachedJson = cacheGetLarge_(cacheKey);
+        if (cachedJson) return jsonOutput_(cachedJson);
+
         var ss = sheetId ? SpreadsheetApp.openById(sheetId) : SpreadsheetApp.getActiveSpreadsheet();
         var sheet = ss.getSheetByName('Repair System');
         if (!sheet) {
-          return ContentService.createTextOutput(JSON.stringify({ success: false, error: 'Repair System sheet not found' }))
-            .setMimeType(ContentService.MimeType.JSON);
+          return jsonOutput_(JSON.stringify({ success: false, error: 'Repair System sheet not found' }));
         }
-        var allData = sheet.getDataRange().getValues();
-        var headers = allData[5] || [];
-        var dataRows = allData.slice(6);
-
-        var result = dataRows
-          .filter(function(row) { return row.some(function(cell) { return cell !== '' && cell !== null && cell !== undefined; }); })
-          .map(function(row) {
-            var obj = {};
-            headers.forEach(function(header, idx) {
-              if (header) {
-                var val = row[idx];
-                if (val instanceof Date) {
-                  obj[header] = Utilities.formatDate(val, Session.getScriptTimeZone(), 'dd/MM/yyyy HH:mm:ss');
-                } else {
-                  obj[header] = val !== null && val !== undefined ? val.toString() : '';
-                }
-              }
-            });
-            return obj;
-          });
-        var resultJson = JSON.stringify({ success: true, data: result });
-        try {
-          // CacheService values are limited to ~100KB
-          if (resultJson.length < 90000) {
-            CacheService.getScriptCache().put(cacheKey, resultJson, DATA_CACHE_SECONDS);
-          }
-        } catch (cacheErr) { }
-        return ContentService.createTextOutput(resultJson)
-          .setMimeType(ContentService.MimeType.JSON);
+        var table = serializeSheet_(sheet, 6, 'dd/MM/yyyy HH:mm:ss');
+        var resultJson = JSON.stringify({ success: true, headers: table.headers, rows: table.rows });
+        try { cachePutLarge_(cacheKey, resultJson); } catch (cacheErr) { }
+        return jsonOutput_(resultJson);
       } catch (err) {
         return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.toString() }))
           .setMimeType(ContentService.MimeType.JSON);
@@ -244,11 +267,8 @@ function doGet(e) {
       try {
         var sheetId = e.parameter.sheetId;
         var cacheKey = getDataCacheKey_('getAdvancePayments', sheetId);
-        var cachedJson = CacheService.getScriptCache().get(cacheKey);
-        if (cachedJson) {
-          return ContentService.createTextOutput(cachedJson)
-            .setMimeType(ContentService.MimeType.JSON);
-        }
+        var cachedJson = cacheGetLarge_(cacheKey);
+        if (cachedJson) return jsonOutput_(cachedJson);
         var ss = sheetId ? SpreadsheetApp.openById(sheetId) : SpreadsheetApp.getActiveSpreadsheet();
         var sheet = ss.getSheetByName('Repair FMS Advance Payment');
         if (!sheet) {
@@ -277,14 +297,8 @@ function doGet(e) {
           });
 
         var resultJson = JSON.stringify({ success: true, data: result });
-        try {
-          // CacheService values are limited to ~100KB
-          if (resultJson.length < 90000) {
-            CacheService.getScriptCache().put(cacheKey, resultJson, DATA_CACHE_SECONDS);
-          }
-        } catch (cacheErr) { }
-        return ContentService.createTextOutput(resultJson)
-          .setMimeType(ContentService.MimeType.JSON);
+        try { cachePutLarge_(cacheKey, resultJson); } catch (cacheErr) { }
+        return jsonOutput_(resultJson);
       } catch (err) {
         return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.toString() }))
           .setMimeType(ContentService.MimeType.JSON);
@@ -294,6 +308,10 @@ function doGet(e) {
     // Existing sheet data retrieval logic
     var sheetName = e.parameter.sheet;
     var sheetId = e.parameter.sheetId;
+    var legacyCacheKey = getDataCacheKey_('legacy_' + sheetName, sheetId);
+    var legacyCached = cacheGetLarge_(legacyCacheKey);
+    if (legacyCached) return jsonOutput_(legacyCached);
+
     var ss = SpreadsheetApp.openById(sheetId);
     var sheet = ss.getSheetByName(sheetName);
 
@@ -330,8 +348,9 @@ function doGet(e) {
       rowCount: rows.length
     };
 
-    return ContentService.createTextOutput(JSON.stringify(response))
-      .setMimeType(ContentService.MimeType.JSON);
+    var legacyJson = JSON.stringify(response);
+    try { cachePutLarge_(legacyCacheKey, legacyJson); } catch (cacheErr) { }
+    return jsonOutput_(legacyJson);
 
   } catch (error) {
     return ContentService.createTextOutput(JSON.stringify({
@@ -419,6 +438,15 @@ function getNextTaskNumber(sheet) {
 
 // Main function to handle POST requests
 function doPost(e) {
+  try {
+    return doPostInner_(e);
+  } finally {
+    // A read running during the write could re-cache pre-write data under the new version
+    invalidateDataCache_();
+  }
+}
+
+function doPostInner_(e) {
   try {
     var params = e.parameter;
 

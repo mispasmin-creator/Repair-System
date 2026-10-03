@@ -7,22 +7,12 @@
 const SCRIPT_URL = import.meta.env.VITE_SCRIPT_URL;
 const SHEET_ID = import.meta.env.VITE_SHEET_ID;
 
-/**
- * Fetches all repair tasks from the "Repair System" sheet.
- * Returns objects keyed by exact sheet header names (e.g., "Actual 1", "Planned 1", etc.)
- *
- * @param {string} userFirmName - Filter by firm. Pass "" or "all" to get all firms.
- * @returns {Promise<Array>} Array of task objects with header-name keys
- */
 // Concurrent callers share one network request (the Apps Script call is slow).
 let inFlightRepairTasks = null;
 
-// Short-lived client cache: every page mount was re-hitting the network even
-// when another page had just fetched the same data seconds earlier (the
-// Apps Script round-trip is the slow part, not just the sheet read). A small
-// TTL lets fast page-to-page navigation reuse the in-memory copy instead of
-// re-fetching. Any write goes through updateRepairTask(), which clears this
-// cache so the very next fetch always sees the just-submitted change.
+// Short-lived client cache: lets fast page-to-page navigation reuse data another
+// page just fetched. Any write goes through updateRepairTask(), which clears it,
+// so the next fetch always sees the just-submitted change.
 const CACHE_TTL_MS = 15000;
 let tasksCache = { data: null, ts: 0 };
 
@@ -30,7 +20,8 @@ export const invalidateRepairTasksCache = () => {
   tasksCache = { data: null, ts: 0 };
 };
 
-const fetchRepairTasksRaw = async () => {
+// Server sends headers once and rows as arrays (empty rows already removed).
+const fetchRepairSheetRaw = async () => {
   const res = await fetch(
     `${SCRIPT_URL}?action=getRepairTasks&sheetId=${SHEET_ID}`
   );
@@ -40,18 +31,24 @@ const fetchRepairTasksRaw = async () => {
   const result = await res.json();
   if (!result.success) throw new Error(result.error || "Failed to fetch tasks");
 
-  // Filter out completely empty rows
-  return (result.data || []).filter((row) =>
-    Object.values(row).some((v) => v !== "" && v !== null && v !== undefined)
-  );
+  const headers = result.headers || [];
+  const rows = result.rows || [];
+  const tasks = rows.map((row) => {
+    const obj = {};
+    headers.forEach((header, idx) => {
+      if (header) obj[header] = row[idx] ?? "";
+    });
+    return obj;
+  });
+  return { headers, rows, tasks };
 };
 
-const getRepairTasksCached = async (force = false) => {
+const getRepairSheetCached = async (force = false) => {
   const isFresh = tasksCache.data && Date.now() - tasksCache.ts < CACHE_TTL_MS;
   if (isFresh && !force) return tasksCache.data;
 
   if (!inFlightRepairTasks) {
-    inFlightRepairTasks = fetchRepairTasksRaw()
+    inFlightRepairTasks = fetchRepairSheetRaw()
       .then((data) => {
         tasksCache = { data, ts: Date.now() };
         return data;
@@ -63,12 +60,9 @@ const getRepairTasksCached = async (force = false) => {
   return inFlightRepairTasks;
 };
 
-export const fetchRepairTasks = async (userFirmName = "", { force = false } = {}) => {
-  const tasks = await getRepairTasksCached(force);
-
-  // Filter by firm — support multiple firms (comma-separated, e.g. "Rkl, Pmmpl")
+const matchesFirm = (firmValue, userFirmName) => {
   const isAllFirm = !userFirmName || userFirmName.toLowerCase() === "all";
-  if (isAllFirm) return tasks;
+  if (isAllFirm) return true;
 
   // Parse comma-separated firm names
   const allowedFirms = userFirmName
@@ -76,10 +70,28 @@ export const fetchRepairTasks = async (userFirmName = "", { force = false } = {}
     .map((f) => f.trim().toLowerCase())
     .filter(Boolean);
 
-  return tasks.filter((t) => {
-    const taskFirm = (t["Firm Name"] || "").toLowerCase().trim();
-    return allowedFirms.includes(taskFirm) || allowedFirms.includes("all");
-  });
+  const taskFirm = (firmValue || "").toLowerCase().trim();
+  return allowedFirms.includes(taskFirm) || allowedFirms.includes("all");
+};
+
+/**
+ * Returns { headers, rows, tasks } filtered by firm.
+ * rows: raw arrays (index = sheet column index), tasks: objects keyed by header.
+ */
+export const fetchRepairSheet = async (userFirmName = "", { force = false } = {}) => {
+  const { headers, rows, tasks } = await getRepairSheetCached(force);
+
+  const keep = tasks.map((t) => matchesFirm(t["Firm Name"], userFirmName));
+  return {
+    headers,
+    rows: rows.filter((_, i) => keep[i]),
+    tasks: tasks.filter((_, i) => keep[i]),
+  };
+};
+
+export const fetchRepairTasks = async (userFirmName = "", opts = {}) => {
+  const { tasks } = await fetchRepairSheet(userFirmName, opts);
+  return tasks;
 };
 
 /**

@@ -1,20 +1,20 @@
-import React, { useState } from "react";
+import React, { useState, Suspense, lazy } from "react";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import Sidebar from "./components/Layout/Sidebar";
-import Dashboard from "./components/Dashboard/Dashboard";
-import Indent from "./components/Indent/Indent";
-import SentMachine from "./components/SentMachine/SentMachine";
-import CheckMachine from "./components/CheckMachine/CheckMachine";
-import StoreIn from "./components/StoreIn/StoreIn";
-import Posting from "./components/Posting/Posting";
-import RepairAdvance from "./components/RepairAdvance/RepairAdvance";
-import MakePayment from "./components/MakePayment/MakePayment";
-import FullKitting from "./components/FullKitting/FullKitting";
-import ManagementApproval from "./components/ManagementApproval/ManagementApproval";
 import Login from "./components/Login/Login";
-import Users from "./components/Users/Users";
-import Accounts from "./components/Accounts/Accounts";
 import { MenuOutlined, CloseOutlined } from "@ant-design/icons";
+
+const Dashboard = lazy(() => import("./components/Dashboard/Dashboard"));
+const Indent = lazy(() => import("./components/Indent/Indent"));
+const SentMachine = lazy(() => import("./components/SentMachine/SentMachine"));
+const CheckMachine = lazy(() => import("./components/CheckMachine/CheckMachine"));
+const StoreIn = lazy(() => import("./components/StoreIn/StoreIn"));
+const Posting = lazy(() => import("./components/Posting/Posting"));
+const MakePayment = lazy(() => import("./components/MakePayment/MakePayment"));
+const FullKitting = lazy(() => import("./components/FullKitting/FullKitting"));
+const ManagementApproval = lazy(() => import("./components/ManagementApproval/ManagementApproval"));
+const Users = lazy(() => import("./components/Users/Users"));
+const Accounts = lazy(() => import("./components/Accounts/Accounts"));
 
 // function AppContent() {
 //   const { user } = useAuth();
@@ -186,7 +186,9 @@ function AppContent() {
 
         {/* Main Content */}
         <main className="flex-1 overflow-auto">
-          <div className="p-8 h-full">{renderContent()}</div>
+          <div className="p-8 h-full">
+            <Suspense fallback={null}>{renderContent()}</Suspense>
+          </div>
         </main>
       </div>
     </div>

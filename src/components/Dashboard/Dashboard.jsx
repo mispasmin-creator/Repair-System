@@ -20,6 +20,7 @@ import { mockDashboardMetrics } from "../../data/mockData";
 import { BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList } from 'recharts';
 import { useAuth } from "../../context/AuthContext";
 import useDataStore from "../../store/dataStore";
+import { fetchRepairSheet } from "../../services/repairService";
 import Button from "../ui/Button";
 import toast from "react-hot-toast";
 
@@ -63,10 +64,7 @@ const Dashboard = ({ setActiveTab }) => {
 
   const metrics = mockDashboardMetrics;
 
-  const [tasks, setTasks] = useState(() => {
-    const cachedTasks = useDataStore.getState().repairTasks;
-    return cachedTasks || [];
-  });
+  const [tasks, setTasks] = useState([]);
   const [pendingTasks, setPendingTasks] = useState([]);
   const [totalCompletedTask, setTotalCompletedTask] = useState([]);
   const [totalRepairBill, setTotalRepairBill] = useState(0);
@@ -74,10 +72,7 @@ const Dashboard = ({ setActiveTab }) => {
   const [paymentTypeDistribution, setPaymentTypeDistribution] = useState([]);
   const [vendorWiseRepairCosts, setVendorWiseRepairCosts] = useState([]);
 
-  const [loading, setLoading] = useState(() => {
-    const cachedTasks = useDataStore.getState().repairTasks;
-    return !cachedTasks || cachedTasks.length === 0;
-  });
+  const [loading, setLoading] = useState(true);
 
   const [loadingMaster, setLoadingMaster] = useState(() => {
     const state = useDataStore.getState();
@@ -124,38 +119,18 @@ const Dashboard = ({ setActiveTab }) => {
       if (!isBackground) {
         setLoading(true);
       }
-      const SHEET_NAME_TASK = "Repair System";
+      const { rows } = await fetchRepairSheet(user?.firmName || "");
 
-      const result = await safeFetchJson(
-        `${SCRIPT_URL}?sheetId=${SHEET_Id}&sheet=${SHEET_NAME_TASK}`
-      );
+      const formattedTasks = rows.map((cells) => ({
+        status: cells[47] || "",
+        totalBillRepair: cells[36] || "",
+        department: cells[14] || "",
+        paymentType: cells[26] || "",
+        vendorName: cells[20] || "",
+        firmName: cells[2] || "",
+      }));
 
-      const allRows = result?.table?.rows || [];
-      const taskRows = allRows.slice(5);
-
-      const formattedTasks = taskRows.map((row) => {
-        const cells = row.c;
-
-        return {
-          status: cells[47]?.v || "",
-          totalBillRepair: cells[36]?.v || "",
-          department: cells[14]?.v || "",
-          paymentType: cells[26]?.v || "",
-          vendorName: cells[20]?.v || "",
-          firmName: cells[2]?.v || "",
-        };
-      });
-
-      const userFirmName = user?.firmName || "";
-      const isAllFirm = !userFirmName || userFirmName.toLowerCase() === "all";
-
-      const filtered = formattedTasks.filter((task) => {
-        if (isAllFirm) return true;
-        return (task.firmName || "").toLowerCase() === userFirmName.toLowerCase();
-      });
-
-      setTasks(filtered);
-      useDataStore.setState({ repairTasks: filtered });
+      setTasks(formattedTasks);
 
     } catch (err) {
       console.error("Error fetching tasks:", err);
