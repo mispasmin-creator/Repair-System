@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo } from "react";
+import { cachedFetch } from "../../services/sheetCache";
 import { Search, Filter, Package, ExternalLink, Zap } from "lucide-react";
 import Button from "../ui/Button";
 import Modal from "../ui/Modal";
@@ -465,7 +466,7 @@ const MakePayment = () => {
     try {
       if (!isBackground) setLoadingTasks(true);
       const SHEET_NAME_PAYMENTS = "Repair FMS Advance Payment";
-      const res = await fetch(
+      const res = await cachedFetch(
         `${SCRIPT_URL}?sheetId=${SHEET_Id}&&sheet=${SHEET_NAME_PAYMENTS}`
       );
       const result = await res.json();

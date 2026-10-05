@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { cachedFetch } from "../../services/sheetCache";
 import {
   FileText,
   CheckCircle,
@@ -65,12 +66,19 @@ const Dashboard = ({ setActiveTab }) => {
   const metrics = mockDashboardMetrics;
 
   const [tasks, setTasks] = useState([]);
+  const [selectedFirm, setSelectedFirm] = useState("All");
   const [pendingTasks, setPendingTasks] = useState([]);
   const [totalCompletedTask, setTotalCompletedTask] = useState([]);
   const [totalRepairBill, setTotalRepairBill] = useState(0);
   const [repairStatusByDepartment, setRepairStatusByDepartment] = useState([]);
   const [paymentTypeDistribution, setPaymentTypeDistribution] = useState([]);
   const [vendorWiseRepairCosts, setVendorWiseRepairCosts] = useState([]);
+
+  const uniqueFirms = ["All", ...new Set(tasks.map((t) => t.firmName).filter(Boolean))];
+
+  const filteredTasks = selectedFirm === "All"
+    ? tasks
+    : tasks.filter((task) => (task.firmName || "").toLowerCase().trim() === selectedFirm.toLowerCase().trim());
 
   const [loading, setLoading] = useState(true);
 
@@ -87,7 +95,7 @@ const Dashboard = ({ setActiveTab }) => {
   const safeFetchJson = async (url, retries = 2, delayMs = 800) => {
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
-        const res = await fetch(url);
+        const res = await cachedFetch(url);
         if (!res.ok) {
           if (attempt < retries) {
             await new Promise((r) => setTimeout(r, delayMs));
@@ -235,19 +243,19 @@ const Dashboard = ({ setActiveTab }) => {
   };
 
   useEffect(() => {
-    if (tasks.length > 0) {
-      const pending = tasks.filter((task) => task.status === "Pending");
+    if (filteredTasks.length > 0 || tasks.length > 0) {
+      const pending = filteredTasks.filter((task) => task.status === "Pending");
       setPendingTasks(pending);
 
-      const compeletedTask = tasks.filter((task) => task.status === "Completed");
+      const compeletedTask = filteredTasks.filter((task) => task.status === "Completed");
       setTotalCompletedTask(compeletedTask);
 
-      const totalRepairBill = tasks.reduce((sum, item) => {
+      const totalRepairBill = filteredTasks.reduce((sum, item) => {
         return sum + Number(item.totalBillRepair || 0);
       }, 0);
       setTotalRepairBill(totalRepairBill);
 
-      const departmentCounts = tasks.reduce((acc, task) => {
+      const departmentCounts = filteredTasks.reduce((acc, task) => {
         const dept = task.department;
         if (dept) {
           acc[dept] = (acc[dept] || 0) + 1;
@@ -263,7 +271,7 @@ const Dashboard = ({ setActiveTab }) => {
       );
       setRepairStatusByDepartment(repairStatusByDepartment);
 
-      const paymentTypeTotals = tasks.reduce((acc, task) => {
+      const paymentTypeTotals = filteredTasks.reduce((acc, task) => {
         const type = task.paymentType === "undefined" ? "Unknown" : task.paymentType;
         if (!acc[type]) {
           acc[type] = 0;
@@ -280,7 +288,7 @@ const Dashboard = ({ setActiveTab }) => {
       );
       setPaymentTypeDistribution(paymentTypeDistribution);
 
-      const topRepairs = [...tasks]
+      const topRepairs = [...filteredTasks]
         .sort((a, b) => Number(b.totalBillRepair || 0) - Number(a.totalBillRepair || 0))
         .slice(0, 5)
         .map(task => ({
@@ -288,8 +296,15 @@ const Dashboard = ({ setActiveTab }) => {
           cost: Number(task.totalBillRepair || 0)
         }));
       setVendorWiseRepairCosts(topRepairs);
+    } else {
+      setPendingTasks([]);
+      setTotalCompletedTask([]);
+      setTotalRepairBill(0);
+      setRepairStatusByDepartment([]);
+      setPaymentTypeDistribution([]);
+      setVendorWiseRepairCosts([]);
     }
-  }, [tasks]);
+  }, [tasks, selectedFirm]);
 
   useEffect(() => {
     const cachedTasks = useDataStore.getState().repairTasks;
@@ -310,8 +325,31 @@ const Dashboard = ({ setActiveTab }) => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
+          {user?.firmName && (
+            <p className="text-xs text-gray-500 mt-0.5 font-medium">Logged Firm: <span className="text-blue-600 font-semibold">{user.firmName}</span></p>
+          )}
+        </div>
+
+        {uniqueFirms.length > 1 && (
+          <div className="flex items-center space-x-2 bg-white px-3.5 py-2 rounded-xl border border-gray-200 shadow-sm">
+            <Building className="w-4 h-4 text-blue-600" />
+            <span className="text-xs font-semibold text-gray-500 uppercase">Firm Filter:</span>
+            <select
+              value={selectedFirm}
+              onChange={(e) => setSelectedFirm(e.target.value)}
+              className="text-sm font-bold text-gray-800 bg-transparent border-none focus:outline-none cursor-pointer pr-1"
+            >
+              {uniqueFirms.map((firm) => (
+                <option key={firm} value={firm}>
+                  {firm === "All" ? "All Firms" : firm}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       {/* Metrics Cards */}
@@ -327,7 +365,7 @@ const Dashboard = ({ setActiveTab }) => {
           <>
             <MetricCard
               title="Total Indents"
-              value={tasks?.length}
+              value={filteredTasks?.length}
               icon={FileText}
               gradient="from-blue-600 via-indigo-600 to-violet-600"
               trend="All Registered Tasks"
@@ -337,21 +375,21 @@ const Dashboard = ({ setActiveTab }) => {
               value={totalCompletedTask?.length}
               icon={CheckCircle}
               gradient="from-emerald-400 via-teal-500 to-cyan-600"
-              trend={`${((totalCompletedTask?.length / Math.max(tasks?.length, 1)) * 100).toFixed(0)}% Completion Rate`}
+              trend={`${((totalCompletedTask?.length / Math.max(filteredTasks?.length, 1)) * 100).toFixed(0)}% Completion Rate`}
             />
             <MetricCard
               title="Pending Repairs"
               value={pendingTasks?.length}
               icon={Clock}
               gradient="from-violet-500 via-purple-500 to-pink-500"
-              trend={`${((pendingTasks?.length / Math.max(tasks?.length, 1)) * 100).toFixed(0)}% Active Queue`}
+              trend={`${((pendingTasks?.length / Math.max(filteredTasks?.length, 1)) * 100).toFixed(0)}% Active Queue`}
             />
             <MetricCard
               title="Total Repair Cost"
               value={`₹${totalRepairBill.toLocaleString()}`}
               icon={DollarSign}
               gradient="from-amber-500 via-orange-500 to-rose-500"
-              trend={`Average ₹${(totalRepairBill / Math.max(tasks?.length, 1)).toFixed(0)} per task`}
+              trend={`Average ₹${(totalRepairBill / Math.max(filteredTasks?.length, 1)).toFixed(0)} per task`}
             />
           </>
         )}

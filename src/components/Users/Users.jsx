@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { cachedFetch } from "../../services/sheetCache";
 import { Plus, Search, Loader2Icon, ShieldAlert, Edit, Filter } from "lucide-react";
 import Button from "../ui/Button";
 import Modal from "../ui/Modal";
@@ -82,7 +83,7 @@ const Users = () => {
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      const res = await fetch(
+      const res = await cachedFetch(
         `${SCRIPT_URL}?sheetId=${SHEET_Id}&sheet=Repair%20Login`
       );
       const result = await res.json();

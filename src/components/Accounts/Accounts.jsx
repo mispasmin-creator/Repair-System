@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { cachedFetch } from "../../services/sheetCache";
 import { Search, CheckSquare } from "lucide-react";
 import Button from "../ui/Button";
 import Modal from "../ui/Modal";
@@ -110,7 +111,7 @@ const Accounts = () => {
     try {
       setLoadingTasks(true);
       // Use existing GET endpoint (no redeployment needed)
-      const res = await fetch(
+      const res = await cachedFetch(
         `${SCRIPT_URL}?sheetId=${SHEET_Id}&&sheet=Accounts`
       );
       const result = await res.json();

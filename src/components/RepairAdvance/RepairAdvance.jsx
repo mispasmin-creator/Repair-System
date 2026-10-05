@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { cachedFetch } from "../../services/sheetCache";
 import { Search, Filter, CreditCard } from "lucide-react";
 import Button from "../ui/Button";
 import Modal from "../ui/Modal";
@@ -64,7 +65,7 @@ const RepairAdvance = () => {
       }
       const SHEET_NAME_TASK = "Repair System";
 
-      const res = await fetch(
+      const res = await cachedFetch(
         `${SCRIPT_URL}?sheetId=${SHEET_Id}&&sheet=${SHEET_NAME_TASK}`
       );
       const result = await res.json();

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { cachedFetch } from "../../services/sheetCache";
 import { Search, Filter, ClipboardCheck, Calendar, CheckCircle2, ExternalLink, Zap } from "lucide-react";
 import Button from "../ui/Button";
 import Modal from "../ui/Modal";
@@ -141,7 +142,7 @@ const Posting = () => {
   const safeFetchJson = async (url, retries = 2, delayMs = 800) => {
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
-        const res = await fetch(url);
+        const res = await cachedFetch(url);
         if (!res.ok) {
           if (attempt < retries) {
             await new Promise((r) => setTimeout(r, delayMs));

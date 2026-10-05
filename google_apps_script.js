@@ -845,7 +845,8 @@ function handleLogin(username, password) {
       const sheetPassword = row[1]?.toString().trim(); // Column B: Password
       const sheetRole = row[2]?.toString().trim().toLowerCase(); // Column C: Role
       const sheetPage = row[3]?.toString().trim(); // Column D: Page Access
-      const sheetManual = row[4]?.toString().trim(); // Column E: Manual
+      const sheetFirm = row[4]?.toString().trim(); // Column E: Firm Name
+      const sheetManual = row[5]?.toString().trim(); // Column F: Manual
 
       const usernameMatch = sheetUsername?.toLowerCase() === username.toLowerCase();
       const passwordMatch = sheetPassword === password;
@@ -858,6 +859,7 @@ function handleLogin(username, password) {
             username: sheetUsername,
             role: sheetRole,
             page: sheetPage,
+            firmName: sheetFirm,
             manual: sheetManual,
             name: sheetUsername
           }

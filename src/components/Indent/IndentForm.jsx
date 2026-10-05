@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { cachedFetch } from "../../services/sheetCache";
 import { Plus, X, Upload, Loader2Icon } from "lucide-react";
 import Button from "../ui/Button";
 import SearchableSelect from "../ui/SearchableSelect";
@@ -85,7 +86,7 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
     try {
       setLoaderSheetData(true);
       // Use getRepairTasks action — it already handles Repair System sheet (row 6 headers)
-      const res = await fetch(
+      const res = await cachedFetch(
         `${DATA_FETCH_SCRIPT_URL}?action=getRepairTasks&sheetId=${DATA_SHEET_ID}`
       );
       const result = await res.json();
@@ -107,7 +108,7 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
     const SHEET_NAME = "Master";
     try {
       setLoaderMasterSheetData(true);
-      const res = await fetch(
+      const res = await cachedFetch(
         `${DATA_FETCH_SCRIPT_URL}?sheetId=${DATA_SHEET_ID}&sheet=${SHEET_NAME}`
       );
       const result = await res.json();

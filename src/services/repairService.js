@@ -14,44 +14,95 @@ let inFlightRepairTasks = null;
 // page just fetched. Any write goes through updateRepairTask(), which clears it,
 // so the next fetch always sees the just-submitted change.
 const CACHE_TTL_MS = 15000;
+// Persisted copy survives page reloads; used instantly and refreshed in background-style fallback
+const SNAPSHOT_KEY = "repairSheetSnapshot";
+const SNAPSHOT_FRESH_MS = 120000;
+const FETCH_TIMEOUT_MS = 25000;
 let tasksCache = { data: null, ts: 0 };
+
+const readSnapshot = () => {
+  try {
+    const raw = localStorage.getItem(SNAPSHOT_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+};
+
+const writeSnapshot = (data) => {
+  try {
+    localStorage.setItem(SNAPSHOT_KEY, JSON.stringify({ data, ts: Date.now() }));
+  } catch {
+    // quota exceeded or storage disabled — in-memory cache still works
+  }
+};
 
 export const invalidateRepairTasksCache = () => {
   tasksCache = { data: null, ts: 0 };
+  try {
+    localStorage.removeItem(SNAPSHOT_KEY);
+  } catch {
+    // storage unavailable
+  }
 };
 
 // Server sends headers once and rows as arrays (empty rows already removed).
-const fetchRepairSheetRaw = async () => {
-  const res = await fetch(
-    `${SCRIPT_URL}?action=getRepairTasks&sheetId=${SHEET_ID}`
-  );
+// Timeout only when a saved copy exists to fall back on; otherwise wait for the data
+const fetchRepairSheetRaw = async (withTimeout) => {
+  const controller = new AbortController();
+  const timer = withTimeout ? setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS) : null;
+  try {
+    const res = await fetch(
+      `${SCRIPT_URL}?action=getRepairTasks&sheetId=${SHEET_ID}`,
+      { signal: controller.signal }
+    );
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    // Apps Script sometimes returns a Google HTML error page instead of JSON
+    const text = await res.text();
+    if (text.trim().startsWith("<")) throw new Error("Server returned HTML");
+    const result = JSON.parse(text);
+    if (!result.success) throw new Error(result.error || "Failed to fetch tasks");
 
-  const result = await res.json();
-  if (!result.success) throw new Error(result.error || "Failed to fetch tasks");
-
-  const headers = result.headers || [];
-  const rows = result.rows || [];
-  const tasks = rows.map((row) => {
-    const obj = {};
-    headers.forEach((header, idx) => {
-      if (header) obj[header] = row[idx] ?? "";
+    const headers = result.headers || [];
+    const rows = result.rows || [];
+    const tasks = rows.map((row) => {
+      const obj = {};
+      headers.forEach((header, idx) => {
+        if (header) obj[header] = row[idx] ?? "";
+      });
+      return obj;
     });
-    return obj;
-  });
-  return { headers, rows, tasks };
+    return { headers, rows, tasks };
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 };
 
 const getRepairSheetCached = async (force = false) => {
   const isFresh = tasksCache.data && Date.now() - tasksCache.ts < CACHE_TTL_MS;
   if (isFresh && !force) return tasksCache.data;
 
+  if (!force) {
+    const snap = readSnapshot();
+    if (snap?.data && Date.now() - snap.ts < SNAPSHOT_FRESH_MS) {
+      tasksCache = { data: snap.data, ts: snap.ts };
+      return snap.data;
+    }
+  }
+
   if (!inFlightRepairTasks) {
-    inFlightRepairTasks = fetchRepairSheetRaw()
+    inFlightRepairTasks = fetchRepairSheetRaw(Boolean(readSnapshot()?.data))
       .then((data) => {
         tasksCache = { data, ts: Date.now() };
+        writeSnapshot(data);
         return data;
+      })
+      .catch((err) => {
+        // Network/Apps Script failed: show last known data instead of an empty screen
+        const snap = readSnapshot();
+        if (snap?.data) return snap.data;
+        throw err;
       })
       .finally(() => {
         inFlightRepairTasks = null;

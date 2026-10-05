@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo } from "react";
+import { cachedFetch } from "../../services/sheetCache";
 import { Search, Filter, Send, Loader2Icon, X, ChevronsUpDown } from "lucide-react";
 import Button from "../ui/Button";
 import {
@@ -162,7 +163,7 @@ const SentMachine = () => {
   const fetchPaymentTypes = async () => {
     try {
       const SHEET_NAME_MASTER = "Master";
-      const res = await fetch(
+      const res = await cachedFetch(
         `${SCRIPT_URL}?sheetId=${import.meta.env.VITE_SHEET_ID}&sheet=${SHEET_NAME_MASTER}`
       );
       const result = await res.json();

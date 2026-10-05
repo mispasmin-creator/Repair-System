@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { cachedFetch } from "../../services/sheetCache";
 import { Search, Filter, CheckCircle, Loader2Icon, Layers, X, Check, Zap } from "lucide-react";
 import Button from "../ui/Button";
 import Modal from "../ui/Modal";
@@ -288,7 +289,7 @@ const CheckMachine = () => {
     try {
       setLoadingBillTypes(true);
       const SHEET_NAME_MASTER = "Master";
-      const res = await fetch(
+      const res = await cachedFetch(
         `${SCRIPT_URL}?sheetId=${SHEET_Id}&sheet=${SHEET_NAME_MASTER}`
       );
       const result = await res.json();
