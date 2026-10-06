@@ -33,16 +33,16 @@ const Users = () => {
   const [role, setRole] = useState("user");
   const [firmName, setFirmName] = useState(["Pmmpl"]);
   const [selectedPages, setSelectedPages] = useState({
-    Dashboard: true,
-    Indent: true,
-    "Sent to Vendor": false,
-    "Management Approval": false,
-    "Check Machin": false,
-    "Store In": false,
-    Posting: false,
-    "Make Payment": false,
-    "Full Kitting": false,
-    Accounts: false,
+    Dashboard: "full",
+    Indent: "full",
+    "Sent to Vendor": "none",
+    "Management Approval": "none",
+    "Check Machin": "none",
+    "Store In": "none",
+    Posting: "none",
+    "Make Payment": "none",
+    "Full Kitting": "none",
+    Accounts: "none",
   });
 
   const SCRIPT_URL = import.meta.env.VITE_SCRIPT_URL;
@@ -135,16 +135,16 @@ const Users = () => {
     setRole("user");
     setFirmName(["Pmmpl"]);
     setSelectedPages({
-      Dashboard: true,
-      Indent: true,
-      "Sent to Vendor": false,
-      "Management Approval": false,
-      "Check Machin": false,
-      "Store In": false,
-      Posting: false,
-      "Make Payment": false,
-      "Full Kitting": false,
-      Accounts: false,
+      Dashboard: "full",
+      Indent: "full",
+      "Sent to Vendor": "none",
+      "Management Approval": "none",
+      "Check Machin": "none",
+      "Store In": "none",
+      Posting: "none",
+      "Make Payment": "none",
+      "Full Kitting": "none",
+      Accounts: "none",
     });
     setIsModalOpen(true);
   };
@@ -160,27 +160,29 @@ const Users = () => {
     );
     
     const accessArray = (userRow.access || "").split(",").map(p => p.trim());
+    const parseAccessLevel = (keywords) => {
+      const foundItem = accessArray.find(a =>
+        keywords.some(k => a.toLowerCase().includes(k.toLowerCase()))
+      );
+      if (!foundItem) return "none";
+      if (foundItem.toLowerCase().includes("view")) return "view";
+      return "full";
+    };
+
     const initialPages = {
-      Dashboard: accessArray.some(p => p.toLowerCase() === "dashboard"),
-      Indent: accessArray.some(p => p.toLowerCase() === "indent"),
-      "Sent to Vendor": accessArray.some(p => p.toLowerCase().includes("vendor")),
-      "Management Approval": accessArray.some(p => p.toLowerCase().includes("management") || p.toLowerCase().includes("approval")),
-      "Check Machin": accessArray.some(p => p.toLowerCase().includes("check")),
-      "Store In": accessArray.some(p => p.toLowerCase().includes("store")),
-      Posting: accessArray.some(p => p.toLowerCase().includes("posting")),
-      "Make Payment": accessArray.some(p => p.toLowerCase().includes("payment")),
-      "Full Kitting": accessArray.some(p => p.toLowerCase().includes("kitting")),
-      Accounts: accessArray.some(p => p.toLowerCase().includes("account")),
+      Dashboard: parseAccessLevel(["dashboard"]),
+      Indent: parseAccessLevel(["indent"]),
+      "Sent to Vendor": parseAccessLevel(["vendor"]),
+      "Management Approval": parseAccessLevel(["management", "approval"]),
+      "Check Machin": parseAccessLevel(["check"]),
+      "Store In": parseAccessLevel(["store"]),
+      Posting: parseAccessLevel(["posting"]),
+      "Make Payment": parseAccessLevel(["payment"]),
+      "Full Kitting": parseAccessLevel(["kitting"]),
+      Accounts: parseAccessLevel(["account"]),
     };
     setSelectedPages(initialPages);
     setIsModalOpen(true);
-  };
-
-  const handlePageAccessChange = (pageKey) => {
-    setSelectedPages((prev) => ({
-      ...prev,
-      [pageKey]: !prev[pageKey],
-    }));
   };
 
   const handleFormSubmit = async (e) => {
@@ -192,8 +194,8 @@ const Users = () => {
     }
 
     const accessList = Object.entries(selectedPages)
-      .filter(([_, allowed]) => allowed)
-      .map(([pageKey]) => pageKey)
+      .filter(([_, level]) => level !== "none")
+      .map(([pageKey, level]) => level === "view" ? `${pageKey} (View Only)` : pageKey)
       .join(", ");
 
     try {
@@ -252,16 +254,16 @@ const Users = () => {
         setRole("user");
         setFirmName(["Pmmpl"]);
         setSelectedPages({
-          Dashboard: true,
-          Indent: true,
-          "Sent to Vendor": false,
-          "Management Approval": false,
-          "Check Machin": false,
-          "Store In": false,
-          Posting: false,
-          "Make Payment": false,
-          "Full Kitting": false,
-          Accounts: false,
+          Dashboard: "full",
+          Indent: "full",
+          "Sent to Vendor": "none",
+          "Management Approval": "none",
+          "Check Machin": "none",
+          "Store In": "none",
+          Posting: "none",
+          "Make Payment": "none",
+          "Full Kitting": "none",
+          Accounts: "none",
         });
 
         setIsModalOpen(false);
@@ -313,11 +315,12 @@ const Users = () => {
 
       {/* Stats row */}
       {!loading && loggedInUser && users.length > 0 && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
           {[
             { label: "Total Users", value: users.length, color: "bg-blue-50 text-blue-700 border-blue-100" },
             { label: "Admins", value: users.filter(u => u.role === "admin").length, color: "bg-purple-50 text-purple-700 border-purple-100" },
-            { label: "Regular Users", value: users.filter(u => u.role !== "admin").length, color: "bg-green-50 text-green-700 border-green-100" },
+            { label: "Regular Users", value: users.filter(u => u.role === "user" || !u.role).length, color: "bg-green-50 text-green-700 border-green-100" },
+            { label: "Viewers", value: users.filter(u => u.role === "viewer").length, color: "bg-amber-50 text-amber-700 border-amber-100" },
             { label: "Shown", value: filteredUsers.length, color: "bg-orange-50 text-orange-700 border-orange-100" },
           ].map((stat) => (
             <div key={stat.label} className={`rounded-xl border p-3 flex flex-col ${stat.color}`}>
@@ -372,6 +375,7 @@ const Users = () => {
                 <option value="All">All Roles</option>
                 <option value="Admin">Admin</option>
                 <option value="User">User</option>
+                <option value="Viewer">Viewer</option>
               </select>
             </div>
             <div>
@@ -450,9 +454,11 @@ const Users = () => {
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold capitalize ${
                         u.role === "admin"
                           ? "bg-purple-100 text-purple-800"
+                          : u.role === "viewer"
+                          ? "bg-amber-100 text-amber-800 border border-amber-200"
                           : "bg-gray-100 text-gray-700"
                       }`}>
-                        {u.role}
+                        {u.role || "user"}
                       </span>
                     </td>
                     {/* Firm Name */}
@@ -472,11 +478,21 @@ const Users = () => {
                     {/* Page Access */}
                     <td className="px-5 py-3.5">
                       <div className="flex flex-wrap gap-1">
-                        {(u.access || "").split(",").map((p) => p.trim()).filter(Boolean).map((page) => (
-                          <span key={page} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-100">
-                            {page}
-                          </span>
-                        ))}
+                        {(u.access || "").split(",").map((p) => p.trim()).filter(Boolean).map((page) => {
+                          const isViewOnly = page.toLowerCase().includes("view");
+                          return (
+                            <span
+                              key={page}
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold border ${
+                                isViewOnly
+                                  ? "bg-amber-50 text-amber-800 border-amber-200"
+                                  : "bg-indigo-50 text-indigo-700 border-indigo-100"
+                              }`}
+                            >
+                              {isViewOnly ? `👁 ${page}` : `✏️ ${page}`}
+                            </span>
+                          );
+                        })}
                       </div>
                     </td>
                     {/* Actions */}
@@ -558,8 +574,9 @@ const Users = () => {
               onChange={(e) => setRole(e.target.value)}
               className="w-full py-2 px-3 text-sm rounded-lg border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
-              <option value="user">User</option>
-              <option value="admin">Admin</option>
+              <option value="user">User (Full Access)</option>
+              <option value="viewer">Viewer (View-Only Access)</option>
+              <option value="admin">Admin (All Access)</option>
             </select>
           </div>
 
@@ -591,19 +608,48 @@ const Users = () => {
           {/* Page Access */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Page Access
+              Page-Wise Access Control
             </label>
-            <div className="grid grid-cols-2 gap-2 bg-gray-50 p-3 rounded-lg border border-gray-200">
+            <div className="space-y-2 bg-gray-50 p-3 rounded-lg border border-gray-200 max-h-60 overflow-y-auto">
               {pageOptions.map((opt) => (
-                <label key={opt.key} className="flex items-center gap-2 p-1.5 hover:bg-white rounded cursor-pointer transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={selectedPages[opt.key]}
-                    onChange={() => handlePageAccessChange(opt.key)}
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                  />
-                  <span className="text-sm text-gray-700">{opt.label}</span>
-                </label>
+                <div key={opt.key} className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-2 hover:bg-white rounded-lg transition-colors border border-gray-100 gap-2">
+                  <span className="text-xs font-semibold text-gray-800">{opt.label}</span>
+                  <div className="inline-flex rounded-lg bg-gray-200/80 p-0.5 text-xs font-medium">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPages(prev => ({ ...prev, [opt.key]: "none" }))}
+                      className={`px-2 py-1 rounded-md transition-all ${
+                        selectedPages[opt.key] === "none"
+                          ? "bg-white text-gray-700 shadow-sm font-bold"
+                          : "text-gray-500 hover:text-gray-900"
+                      }`}
+                    >
+                      No Access
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPages(prev => ({ ...prev, [opt.key]: "view" }))}
+                      className={`px-2 py-1 rounded-md transition-all flex items-center gap-1 ${
+                        selectedPages[opt.key] === "view"
+                          ? "bg-amber-500 text-white shadow-sm font-bold"
+                          : "text-gray-500 hover:text-gray-900"
+                      }`}
+                    >
+                      👁 View Only
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPages(prev => ({ ...prev, [opt.key]: "full" }))}
+                      className={`px-2 py-1 rounded-md transition-all flex items-center gap-1 ${
+                        selectedPages[opt.key] === "full"
+                          ? "bg-blue-600 text-white shadow-sm font-bold"
+                          : "text-gray-500 hover:text-gray-900"
+                      }`}
+                    >
+                      ✏️ Full Access
+                    </button>
+                  </div>
+                </div>
               ))}
             </div>
           </div>
