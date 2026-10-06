@@ -1,7 +1,8 @@
 // ── Read cache (speeds up repeated loads of the same sheet data) ─────────────
 // Entries expire after DATA_CACHE_SECONDS and every doPost bumps the version,
 // so data written through the app is never served stale.
-var DATA_CACHE_SECONDS = 60;
+// Writes through the app bump the cache version, so a longer TTL only delays edits made directly in the sheet
+var DATA_CACHE_SECONDS = 300;
 // CacheService caps each value at 100KB (bytes); 24k chars stays under that even for 4-byte UTF-8
 var CACHE_CHUNK_CHARS = 24000;
 
