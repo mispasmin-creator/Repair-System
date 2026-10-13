@@ -41,7 +41,6 @@ const Users = () => {
     "Store In": "none",
     Posting: "none",
     "Make Payment": "none",
-    "Full Kitting": "none",
     Accounts: "none",
   });
 
@@ -57,7 +56,6 @@ const Users = () => {
     { key: "Store In", label: "Store In" },
     { key: "Posting", label: "Process for payment" },
     { key: "Make Payment", label: "Make Payment" },
-    { key: "Full Kitting", label: "Full Kitting" },
     { key: "Accounts", label: "Accounts" },
   ];
 
@@ -143,7 +141,6 @@ const Users = () => {
       "Store In": "none",
       Posting: "none",
       "Make Payment": "none",
-      "Full Kitting": "none",
       Accounts: "none",
     });
     setIsModalOpen(true);
@@ -178,7 +175,6 @@ const Users = () => {
       "Store In": parseAccessLevel(["store"]),
       Posting: parseAccessLevel(["posting"]),
       "Make Payment": parseAccessLevel(["payment"]),
-      "Full Kitting": parseAccessLevel(["kitting"]),
       Accounts: parseAccessLevel(["account"]),
     };
     setSelectedPages(initialPages);
@@ -262,7 +258,6 @@ const Users = () => {
           "Store In": "none",
           Posting: "none",
           "Make Payment": "none",
-          "Full Kitting": "none",
           Accounts: "none",
         });
 

@@ -437,6 +437,159 @@ function getNextTaskNumber(sheet) {
   return Math.max(...taskNumbers, 0) + 1;
 }
 
+// Generates the next sequential "Repair System" Task No (TR-001, TR-002, ...).
+// Scans the whole Task No column rather than just the last row, since rows can
+// be filtered/sorted in the sheet and the last row isn't reliably the highest number.
+function getNextRepairTaskNo_(sheet, headers) {
+  var taskNoCol = headers.indexOf('Task No');
+  if (taskNoCol === -1) return 'TR-001';
+
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 7) return 'TR-001'; // Row 6 is the header, data starts row 7
+
+  var values = sheet.getRange(7, taskNoCol + 1, lastRow - 6, 1).getValues();
+  var maxNum = 0;
+  values.forEach(function (row) {
+    var match = (row[0] || '').toString().match(/TR-(\d+)/i);
+    if (match) {
+      var n = parseInt(match[1], 10);
+      if (n > maxNum) maxNum = n;
+    }
+  });
+
+  var next = maxNum + 1;
+  var padded = next < 1000 ? ('000' + next).slice(-3) : String(next);
+  return 'TR-' + padded;
+}
+
+// ── ONE-TIME MIGRATION ───────────────────────────────────────────────────────
+// Run this once from the Apps Script editor (select it in the function
+// dropdown, click Run) to backfill "Task No" for old rows left blank after
+// the sheet's old auto-numbering formula was deleted.
+//
+// For rows whose task already progressed into "Repair FMS Advance Payment"
+// (matched by Firm Name + Serial No + Machine Name + Department + Machine
+// Part Name), the ORIGINAL number recorded there is restored, so that
+// sheet's existing "Repair Task No" links keep working. Everything else gets
+// a fresh sequential TR-XXX continuing from the highest number in use.
+//
+// Ambiguous matches (same key appearing more than once in the Advance sheet)
+// are skipped and given a fresh number instead, since there's no reliable
+// way to tell which row they belonged to.
+//
+// SAFETY: Make a copy of the spreadsheet (File > Make a copy) before running
+// this. It writes values directly and cannot be undone via Ctrl+Z once the
+// script finishes. Delete this function afterwards; it's not meant to run twice.
+function backfillRepairTaskNumbers_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var repairSheet = ss.getSheetByName('Repair System');
+  var advSheet = ss.getSheetByName('Repair FMS Advance Payment');
+  if (!repairSheet) throw new Error('Repair System sheet not found');
+
+  var repairHeaders = repairSheet.getRange(6, 1, 1, repairSheet.getLastColumn()).getValues()[0];
+  var taskNoCol = repairHeaders.indexOf('Task No');
+  var firmCol = repairHeaders.indexOf('Firm Name');
+  var serialCol = repairHeaders.indexOf('Serial No');
+  var machineCol = repairHeaders.indexOf('Machine Name');
+  var deptCol = repairHeaders.indexOf('Department');
+  var partCol = repairHeaders.indexOf('Machine Part Name');
+  if (taskNoCol === -1) throw new Error('Task No column not found in Repair System');
+
+  var lastRow = repairSheet.getLastRow();
+  if (lastRow < 7) {
+    Logger.log('No data rows in Repair System.');
+    return;
+  }
+
+  var numRows = lastRow - 6;
+  var repairData = repairSheet.getRange(7, 1, numRows, repairSheet.getLastColumn()).getValues();
+
+  var makeKey = function (firm, serial, machine, dept, part) {
+    return [firm, serial, machine, dept, part]
+      .map(function (v) { return (v || '').toString().trim().toLowerCase(); })
+      .join('|');
+  };
+
+  // Build a one-use lookup from the Advance Payment sheet: key -> original Task No.
+  // Keys that occur more than once are marked ambiguous and never used for recovery.
+  var advMap = {};
+  var ambiguousKeys = {};
+  if (advSheet) {
+    var advHeaders = advSheet.getRange(6, 1, 1, advSheet.getLastColumn()).getValues()[0];
+    var advTaskNoCol = advHeaders.indexOf('Repair Task No');
+    var advFirmCol = advHeaders.indexOf('Firm Name');
+    var advSerialCol = advHeaders.indexOf('Serial No');
+    var advMachineCol = advHeaders.indexOf('Machine Name');
+    var advDeptCol = advHeaders.indexOf('Department');
+    var advPartCol = advHeaders.indexOf('Machine Part Name');
+    var advLastRow = advSheet.getLastRow();
+
+    if (advTaskNoCol !== -1 && advLastRow >= 7) {
+      var advData = advSheet.getRange(7, 1, advLastRow - 6, advSheet.getLastColumn()).getValues();
+      advData.forEach(function (row) {
+        var origTaskNo = (row[advTaskNoCol] || '').toString().trim();
+        if (!origTaskNo) return;
+        var key = makeKey(
+          row[advFirmCol], row[advSerialCol], row[advMachineCol], row[advDeptCol], row[advPartCol]
+        );
+        if (key in advMap) {
+          ambiguousKeys[key] = true;
+        } else {
+          advMap[key] = origTaskNo;
+        }
+      });
+    }
+  }
+
+  // Current highest TR number already present, so new numbers never collide.
+  var maxNum = 0;
+  repairData.forEach(function (row) {
+    var m = (row[taskNoCol] || '').toString().match(/TR-(\d+)/i);
+    if (m) {
+      var n = parseInt(m[1], 10);
+      if (n > maxNum) maxNum = n;
+    }
+  });
+
+  var recoveredCount = 0;
+  var freshCount = 0;
+  var skippedAmbiguousCount = 0;
+
+  for (var idx = 0; idx < repairData.length; idx++) {
+    var row = repairData[idx];
+    var existing = (row[taskNoCol] || '').toString().trim();
+    if (existing) continue; // already has a value — leave it alone
+
+    var key = makeKey(row[firmCol], row[serialCol], row[machineCol], row[deptCol], row[partCol]);
+    var value;
+
+    if (key in advMap && !ambiguousKeys[key]) {
+      value = advMap[key];
+      delete advMap[key]; // consume so a second matching row doesn't reuse it
+      var rm = value.match(/TR-(\d+)/i);
+      if (rm) {
+        var rn = parseInt(rm[1], 10);
+        if (rn > maxNum) maxNum = rn;
+      }
+      recoveredCount++;
+    } else {
+      if (ambiguousKeys[key]) skippedAmbiguousCount++;
+      maxNum += 1;
+      var padded = maxNum < 1000 ? ('000' + maxNum).slice(-3) : String(maxNum);
+      value = 'TR-' + padded;
+      freshCount++;
+    }
+
+    repairSheet.getRange(7 + idx, taskNoCol + 1).setValue(value);
+  }
+
+  Logger.log(
+    'Backfill done. Recovered from Advance sheet: ' + recoveredCount +
+    ', fresh numbers assigned: ' + freshCount +
+    ' (of which ambiguous-skipped: ' + skippedAmbiguousCount + ')'
+  );
+}
+
 // Main function to handle POST requests
 function doPost(e) {
   try {
@@ -574,6 +727,10 @@ function doPostInner_(e) {
     }
 
     else if (action === 'insert1') {
+      // For new Repair System tasks, Task No is generated here (TR-001, TR-002, ...)
+      // instead of relying on a sheet formula. Locked so two submits landing at the
+      // same time can't read the same "current max" and both get the same number.
+      var repairLock = null;
       try {
         // Step 1: Extract data
         const formData = {};
@@ -593,6 +750,12 @@ function doPostInner_(e) {
         // Step 2: Generate Serial Number from sheet
         const headers = sheet.getRange(6, 1, 1, sheet.getLastColumn()).getValues()[0];
 
+        if (sheetName === 'Repair System') {
+          repairLock = LockService.getScriptLock();
+          repairLock.waitLock(10000);
+          formData['Task No'] = getNextRepairTaskNo_(sheet, headers);
+        }
+
         // Step 3: Construct row in header order
         const newRow = headers.map((header) => {
           const value = formData[header];
@@ -608,6 +771,7 @@ function doPostInner_(e) {
         return ContentService.createTextOutput(JSON.stringify({
           success: true,
           message: "Row added successfully",
+          taskNo: formData['Task No'] || undefined,
           rowCount: sheet.getLastRow()
         })).setMimeType(ContentService.MimeType.JSON);
 
@@ -617,6 +781,8 @@ function doPostInner_(e) {
           error: error.message,
           message: "Insert failed"
         })).setMimeType(ContentService.MimeType.JSON);
+      } finally {
+        if (repairLock) repairLock.releaseLock();
       }
     }
 

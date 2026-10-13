@@ -12,7 +12,6 @@ import {
   User,
   Users,
   Calculator,
-  BoxSelect,
   ClipboardCheck
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -30,7 +29,6 @@ const Sidebar = ({ activeTab, setActiveTab }) => {
     { id: 'posting', label: 'Process for payment', icon: ClipboardCheck },
     // { id: 'repair-advance', label: 'Repair Advance', icon: CreditCard },
     { id: 'make-payment', label: 'Make Payment', icon: DollarSign },
-    { id: 'full-kitting', label: 'Full Kitting', icon: BoxSelect },
     { id: 'accounts', label: 'Accounts', icon: Calculator },
   ];
 

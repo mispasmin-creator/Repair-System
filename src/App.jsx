@@ -11,7 +11,6 @@ const CheckMachine = lazy(() => import("./components/CheckMachine/CheckMachine")
 const StoreIn = lazy(() => import("./components/StoreIn/StoreIn"));
 const Posting = lazy(() => import("./components/Posting/Posting"));
 const MakePayment = lazy(() => import("./components/MakePayment/MakePayment"));
-const FullKitting = lazy(() => import("./components/FullKitting/FullKitting"));
 const ManagementApproval = lazy(() => import("./components/ManagementApproval/ManagementApproval"));
 const Users = lazy(() => import("./components/Users/Users"));
 const Accounts = lazy(() => import("./components/Accounts/Accounts"));
@@ -124,8 +123,6 @@ function AppContent() {
         return <Posting />;
       case "make-payment":
         return <MakePayment />;
-      case "full-kitting":
-        return <FullKitting />;
       case "users":
         return <Users />;
       case "accounts":

@@ -476,7 +476,11 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
       const result = await response.json();
       
       if (result.success || response.ok) {
-        toast.success("✅ Task assigned successfully!");
+        toast.success(
+          result.taskNo
+            ? `✅ Task ${result.taskNo} assigned successfully!`
+            : "✅ Task assigned successfully!"
+        );
 
         // ✅ If user added a NEW machine name, save it to Master sheet silently
         if (isAddingMachine && selectedMachine && DATA_FETCH_SCRIPT_URL && DATA_SHEET_ID) {

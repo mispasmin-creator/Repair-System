@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { cachedFetch } from "../../services/sheetCache";
-import { Search, Filter, ClipboardCheck, Calendar, CheckCircle2, ExternalLink, Zap } from "lucide-react";
+import { Search, Filter, ClipboardCheck, Calendar, CheckCircle2, ExternalLink, Zap, Layers, X } from "lucide-react";
 import Button from "../ui/Button";
 import Modal from "../ui/Modal";
 import {
@@ -31,8 +31,12 @@ const Posting = () => {
 
   const [formData, setFormData] = useState({
     remark: "",
+    billReceived: "no",
+    billNo: "",
+    typeOfBill: "",
+    totalBillAmount: "",
+    billImage: null,
   });
-
   const [showFilters, setShowFilters] = useState(false);
   const [selectedFirm, setSelectedFirm] = useState("All");
   const [selectedDepartment, setSelectedDepartment] = useState("All");
@@ -41,6 +45,13 @@ const Posting = () => {
   const [commonDetailModalOpen, setCommonDetailModalOpen] = useState(false);
   const [commonDetailParentTask, setCommonDetailParentTask] = useState(null);
   const [commonDetailTasksList, setCommonDetailTasksList] = useState([]);
+
+  // Advance "Bill Received = Yes" + "Independent" bill type: lets this bill
+  // also cover other still-pending advance tasks (same as Check Machine's
+  // common-bill picker, but wired into the Advance Payment sheet via a
+  // shared Bill No. rather than a Repair System "Common Parent Task" column).
+  const [selectedCommonTasks, setSelectedCommonTasks] = useState([]);
+  const [commonSearchTerm, setCommonSearchTerm] = useState("");
 
   const handleViewCommonTasks = (parentTask) => {
     setCommonDetailParentTask(parentTask);
@@ -85,12 +96,56 @@ const Posting = () => {
     setSelectedTask(task);
     setFormData({
       remark: "",
+      billReceived: "no",
+      billNo: "",
+      typeOfBill: "",
+      totalBillAmount: "",
+      billImage: null,
     });
+    setSelectedCommonTasks([]);
+    setCommonSearchTerm("");
     setIsModalOpen(true);
   };
 
   const SCRIPT_URL = import.meta.env.VITE_SCRIPT_URL;
   const SHEET_Id = import.meta.env.VITE_SHEET_ID;
+  const FOLDER_ID = import.meta.env.VITE_FOLDER_ID;
+
+  const uploadFileToDrive = async (file) => {
+    const reader = new FileReader();
+
+    return new Promise((resolve, reject) => {
+      reader.onload = async () => {
+        const base64Data = reader.result;
+        try {
+          const res = await fetch(SCRIPT_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: new URLSearchParams({
+              action: "uploadFile",
+              base64Data,
+              fileName: file.name,
+              mimeType: file.type,
+              folderId: FOLDER_ID,
+            }).toString(),
+          });
+          const data = await res.json();
+          if (data.success && data.fileUrl) {
+            resolve(data.fileUrl);
+          } else {
+            toast.error("❌ Bill image upload failed");
+            resolve("");
+          }
+        } catch (err) {
+          console.error("Upload error:", err);
+          toast.error("❌ Bill image upload failed due to network error");
+          resolve("");
+        }
+      };
+      reader.onerror = () => reject("❌ Failed to read file");
+      reader.readAsDataURL(file);
+    });
+  };
 
   const formatDate = (val) => {
     if (!val) return "-";
@@ -345,26 +400,57 @@ const Posting = () => {
       return;
     }
 
+    const billReceivedNow = selectedTask.isAdvance && formData.billReceived === "yes";
+    if (billReceivedNow) {
+      if (!formData.billNo.trim() || !formData.typeOfBill || !formData.totalBillAmount || !formData.billImage) {
+        toast.error("Please fill all bill details (Bill No, Type of Bill, Total Bill Amount, Bill Image)");
+        return;
+      }
+    }
+
     try {
       setSubmitLoading(true);
       const todayIST = getTodayIST();
 
       if (selectedTask.isAdvance) {
         // ── ADVANCE: Update "Repair FMS Advance Payment" sheet ─────────────
-        const tasksToUpdate = [selectedTask.taskNo, ...(selectedTask.commonTasksLinked || [])];
-        const updateResults = await Promise.allSettled(
-          tasksToUpdate.map((tNo) =>
-            updateAdvancePayment(tNo, {
-              "Actual Posting": todayIST,
-              "Process Remark": formData.remark.trim(),
-            })
-          )
-        );
+        let billImageUrl = "";
+        if (billReceivedNow && formData.billImage) {
+          billImageUrl = await uploadFileToDrive(formData.billImage);
+        }
+
+        const advanceFields = {
+          "Actual Posting": todayIST,
+          "Process Remark": formData.remark.trim(),
+        };
+        if (billReceivedNow) {
+          advanceFields["Bill No."] = formData.billNo.trim();
+          advanceFields["Type of Bill"] = formData.typeOfBill;
+          advanceFields["Total Bill Amount"] = formData.totalBillAmount;
+          advanceFields["Bill Image Link"] = billImageUrl || "";
+          advanceFields["Bill Date"] = todayIST;
+        }
+
+        // Child tasks share the same Bill No. but their own portion is 0 and
+        // their Type of Bill becomes "Common" — matching Check Machine's
+        // normal-flow convention. Downstream pages group them automatically
+        // by matching Firm Name + Bill No., no extra link column needed.
+        const childFields = billReceivedNow
+          ? { ...advanceFields, "Type of Bill": "Common", "Total Bill Amount": "0" }
+          : advanceFields;
+
+        const existingLinked = selectedTask.commonTasksLinked || [];
+        const newlyLinked = billReceivedNow ? selectedCommonTasks : [];
+        const childTaskNos = Array.from(new Set([...existingLinked, ...newlyLinked]));
+
+        const updateResults = await Promise.allSettled([
+          updateAdvancePayment(selectedTask.taskNo, advanceFields),
+          ...childTaskNos.map((tNo) => updateAdvancePayment(tNo, childFields)),
+        ]);
         const anySuccess = updateResults.some((r) => r.status === "fulfilled" && r.value?.success);
         if (anySuccess) {
-          const commonCount = selectedTask?.commonTasksLinked?.length || 0;
-          if (commonCount > 0) {
-            toast.success(`✅ Advance posting processed! ${commonCount} common bill(s) also updated.`);
+          if (childTaskNos.length > 0) {
+            toast.success(`✅ Advance posting processed! ${childTaskNos.length} common bill(s) also updated.`);
           } else {
             toast.success("✅ Advance posting processed successfully");
           }
@@ -787,6 +873,201 @@ const Posting = () => {
                   );
                 })}
               </div>
+            </div>
+          )}
+
+          {/* Advance-only: Bill Received toggle + bill detail fields */}
+          {selectedTask?.isAdvance && (
+            <div className="rounded-lg border border-orange-200 bg-orange-50/50 p-3.5 space-y-3">
+              <label className="block text-sm font-semibold text-gray-800">
+                Bill Received? <span className="text-red-500">*</span>
+              </label>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-1.5 text-sm text-gray-700 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="billReceived"
+                    value="no"
+                    checked={formData.billReceived === "no"}
+                    onChange={() => setFormData((prev) => ({ ...prev, billReceived: "no" }))}
+                  />
+                  No — will add at Check Machine step
+                </label>
+                <label className="flex items-center gap-1.5 text-sm text-gray-700 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="billReceived"
+                    value="yes"
+                    checked={formData.billReceived === "yes"}
+                    onChange={() => setFormData((prev) => ({ ...prev, billReceived: "yes" }))}
+                  />
+                  Yes — enter bill details now
+                </label>
+              </div>
+
+              {formData.billReceived === "yes" && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Bill No. <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={formData.billNo}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, billNo: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Type of Bill <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      required
+                      value={formData.typeOfBill}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, typeOfBill: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">Select Bill Type</option>
+                      <option value="Common">Common</option>
+                      <option value="Independent">Independent</option>
+                    </select>
+                  </div>
+
+                  {/* Independent bill: let it also cover other pending advance tasks */}
+                  {formData.typeOfBill && formData.typeOfBill.toLowerCase() === "independent" && (
+                    <div className="col-span-1 md:col-span-2 p-3.5 bg-indigo-50/70 border border-indigo-200 rounded-lg space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <label className="block text-sm font-bold text-gray-800 flex items-center gap-1.5">
+                            <Layers className="w-4 h-4 text-indigo-600" />
+                            For Common Bill (Link Pending Advance Tasks)
+                          </label>
+                          <p className="text-xs text-gray-500">
+                            Select other pending advance machines covered under this same bill:
+                          </p>
+                        </div>
+                        <span className="text-xs bg-indigo-100 text-indigo-800 font-semibold px-2.5 py-0.5 rounded-full">
+                          {selectedCommonTasks.length} selected
+                        </span>
+                      </div>
+
+                      <div className="relative">
+                        <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-gray-400" />
+                        <input
+                          type="text"
+                          placeholder="Search pending task no, machine name..."
+                          value={commonSearchTerm}
+                          onChange={(e) => setCommonSearchTerm(e.target.value)}
+                          className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        />
+                      </div>
+
+                      {(() => {
+                        const availablePending = pendingTasks
+                          .filter((t) => t.isAdvance && t.taskNo !== selectedTask?.taskNo)
+                          .filter((t) => {
+                            if (!commonSearchTerm) return true;
+                            const term = commonSearchTerm.toLowerCase();
+                            return (
+                              (t.taskNo || "").toLowerCase().includes(term) ||
+                              (t.machineName || "").toLowerCase().includes(term) ||
+                              (t.vendorName || "").toLowerCase().includes(term)
+                            );
+                          });
+
+                        if (availablePending.length === 0) {
+                          return (
+                            <div className="p-3 bg-white rounded border border-dashed border-gray-300 text-center text-xs text-gray-500">
+                              {commonSearchTerm ? "No matching pending tasks found" : "No other pending advance tasks available to link"}
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div className="max-h-44 overflow-y-auto bg-white border border-gray-200 rounded-md divide-y divide-gray-100">
+                            {availablePending.map((t) => {
+                              const isChecked = selectedCommonTasks.includes(t.taskNo);
+                              return (
+                                <div
+                                  key={t.taskNo}
+                                  onClick={() =>
+                                    setSelectedCommonTasks((prev) =>
+                                      isChecked ? prev.filter((no) => no !== t.taskNo) : [...prev, t.taskNo]
+                                    )
+                                  }
+                                  className={`flex items-center justify-between p-2.5 cursor-pointer text-xs transition-colors ${isChecked ? "bg-indigo-50/80 font-medium" : "hover:bg-gray-50"}`}
+                                >
+                                  <div className="flex items-center space-x-2.5 min-w-0">
+                                    <input
+                                      type="checkbox"
+                                      checked={isChecked}
+                                      onChange={() => {}}
+                                      className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500 cursor-pointer"
+                                    />
+                                    <div className="min-w-0">
+                                      <span className="font-bold text-blue-600 block">{t.taskNo}</span>
+                                      <span className="text-gray-800 truncate block font-medium" title={t.machineName}>
+                                        {t.machineName}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <div className="text-right flex-shrink-0 text-gray-500 text-[11px] ml-2">
+                                    <span>{t.vendorName || "-"}</span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
+
+                      {selectedCommonTasks.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 pt-1">
+                          {selectedCommonTasks.map((tNo) => (
+                            <span key={tNo} className="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded text-xs font-semibold">
+                              {tNo}
+                              <button
+                                type="button"
+                                onClick={() => setSelectedCommonTasks((prev) => prev.filter((no) => no !== tNo))}
+                                className="hover:text-red-600 ml-0.5"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Total Bill Amount <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      value={formData.totalBillAmount}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, totalBillAmount: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Bill Image <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      required
+                      onChange={(e) => setFormData((prev) => ({ ...prev, billImage: e.target.files[0] }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

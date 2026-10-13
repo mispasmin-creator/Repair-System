@@ -390,14 +390,20 @@ const CheckMachine = () => {
 
       if (selectedTask.isAdvance) {
         // ── ADVANCE TASK: Update "Repair FMS Advance Payment" sheet (Step 4) ──
-        const result = await updateAdvancePayment(selectedTask.taskNo, {
+        // If the bill was already entered at the Process for Payment step,
+        // don't resend those fields — they're hidden from the form here, and
+        // sending them would risk overwriting the originally recorded values.
+        const advanceCheckFields = {
           "Actual Check Machine Date": nowFormatted,
-          "Bill Date": nowFormatted,
-          "Bill Image Link": billImageUrl || "",
           "Checked By": user?.name || "",
-          "Bill No.": formData.billNo || "",
-          "Type of Bill": formData.typeOfBill || "",
-        });
+        };
+        if (!billAlreadyCaptured) {
+          advanceCheckFields["Bill Date"] = nowFormatted;
+          advanceCheckFields["Bill Image Link"] = billImageUrl || "";
+          advanceCheckFields["Bill No."] = formData.billNo || "";
+          advanceCheckFields["Type of Bill"] = formData.typeOfBill || "";
+        }
+        const result = await updateAdvancePayment(selectedTask.taskNo, advanceCheckFields);
 
         if (result.success) {
           toast.success("✅ Advance machine check submitted successfully!");
@@ -535,7 +541,10 @@ const CheckMachine = () => {
     setCommonDetailModalOpen(true);
   };
 
-
+  // Advance tasks whose bill was already entered at the Process for Payment
+  // step don't need to be asked for it again here.
+  const billAlreadyCaptured =
+    !!(selectedTask?.isAdvance && selectedTask?.billNo && selectedTask.billNo !== "-");
 
   return (
     <div className="space-y-6">
@@ -954,6 +963,19 @@ const CheckMachine = () => {
               />
             </div>
 
+            {billAlreadyCaptured && (
+              <div className="col-span-1 md:col-span-2 p-3.5 bg-green-50 border border-green-200 rounded-lg text-sm space-y-1">
+                <p className="font-semibold text-green-800">
+                  ✅ Bill already recorded at Process for Payment step
+                </p>
+                <p><span className="text-gray-600">Bill No:</span> <strong>{selectedTask?.billNo}</strong></p>
+                <p><span className="text-gray-600">Type of Bill:</span> <strong>{selectedTask?.typeOfBill || "-"}</strong></p>
+                <p><span className="text-gray-600">Total Bill Amount:</span> <strong>₹{Number(selectedTask?.totalBillAmount || 0).toLocaleString()}</strong></p>
+              </div>
+            )}
+
+            {!billAlreadyCaptured && (
+            <>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Bill No. *
@@ -1144,6 +1166,8 @@ const CheckMachine = () => {
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
+            </>
+            )}
 
             {/* <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">

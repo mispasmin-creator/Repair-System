@@ -1002,9 +1002,12 @@ const MakePayment = () => {
                           {task.transportationAmount ? `₹${Number(task.transportationAmount).toLocaleString()}` : task.howMuch ? `₹${Number(task.howMuch).toLocaleString()}` : "-"}
                         </td>
                         <td className="px-4 py-3 text-sm whitespace-nowrap">
-                          {task.billImage ? (
-                            <button type="button" onClick={() => window.open(task.billImage, "_blank", "noopener,noreferrer")} className="text-blue-600 underline text-sm hover:text-blue-800 font-medium">View Bill</button>
-                          ) : <span className="text-gray-400 text-xs">No Bill</span>}
+                          {(() => {
+                            const billImageUrl = task.isAdvance ? task.billImageLink : task.billImage;
+                            return billImageUrl ? (
+                              <button type="button" onClick={() => window.open(billImageUrl, "_blank", "noopener,noreferrer")} className="text-blue-600 underline text-sm hover:text-blue-800 font-medium">View Bill</button>
+                            ) : <span className="text-gray-400 text-xs">No Bill</span>;
+                          })()}
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">{task.billNo || "-"}</td>
                         <td className="px-4 py-3 text-sm font-medium text-gray-900 whitespace-nowrap">
@@ -1103,17 +1106,20 @@ const MakePayment = () => {
                         {task.toBePaidAmount ? `₹${Number(task.toBePaidAmount).toLocaleString()}` : "-"}
                       </TableCell>
                       <TableCell>
-                        {task.billImage ? (
-                          <button
-                            type="button"
-                            className="text-blue-600 underline text-sm hover:text-blue-800 font-medium"
-                            onClick={() => window.open(task.billImage, "_blank", "noopener,noreferrer")}
-                          >
-                            View Bill
-                          </button>
-                        ) : (
-                          <span className="text-gray-400 text-xs">No Bill</span>
-                        )}
+                        {(() => {
+                          const billImageUrl = task.isAdvance ? task.billImageLink : task.billImage;
+                          return billImageUrl ? (
+                            <button
+                              type="button"
+                              className="text-blue-600 underline text-sm hover:text-blue-800 font-medium"
+                              onClick={() => window.open(billImageUrl, "_blank", "noopener,noreferrer")}
+                            >
+                              View Bill
+                            </button>
+                          ) : (
+                            <span className="text-gray-400 text-xs">No Bill</span>
+                          );
+                        })()}
                       </TableCell>
                       <TableCell>
                         <span
