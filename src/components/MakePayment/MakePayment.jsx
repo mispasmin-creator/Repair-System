@@ -186,7 +186,19 @@ const MakePayment = () => {
         billGroups[billKey] = task;
         siblingsMap[billKey] = [];
       } else {
-        siblingsMap[billKey].push(task.taskNo);
+        const existing = billGroups[billKey];
+        const existingHasBill =
+          (existing.typeOfBill || "").toLowerCase().trim() === "independent" ||
+          parseFloat((existing.totalBillAmount || "0").toString().replace(/[^0-9.-]+/g, "")) > 0;
+        const currentHasBill =
+          (task.typeOfBill || "").toLowerCase().trim() === "independent" ||
+          parseFloat((task.totalBillAmount || "0").toString().replace(/[^0-9.-]+/g, "")) > 0;
+        if (!existingHasBill && currentHasBill) {
+          billGroups[billKey] = task;
+          siblingsMap[billKey].push(existing.taskNo);
+        } else {
+          siblingsMap[billKey].push(task.taskNo);
+        }
       }
     });
 
@@ -230,7 +242,19 @@ const MakePayment = () => {
         billGroups[billKey] = task;
         siblingsMap[billKey] = [];
       } else {
-        siblingsMap[billKey].push(task.repairTaskNo || task.taskNo);
+        const existing = billGroups[billKey];
+        const existingHasBill =
+          (existing.typeOfBill || "").toLowerCase().trim() === "independent" ||
+          parseFloat((existing.totalBillAmount || "0").toString().replace(/[^0-9.-]+/g, "")) > 0;
+        const currentHasBill =
+          (task.typeOfBill || "").toLowerCase().trim() === "independent" ||
+          parseFloat((task.totalBillAmount || "0").toString().replace(/[^0-9.-]+/g, "")) > 0;
+        if (!existingHasBill && currentHasBill) {
+          billGroups[billKey] = task;
+          siblingsMap[billKey].push(existing.repairTaskNo || existing.taskNo);
+        } else {
+          siblingsMap[billKey].push(task.repairTaskNo || task.taskNo);
+        }
       }
     });
 
@@ -253,29 +277,65 @@ const MakePayment = () => {
     });
   }, [displayedHistory]);
 
-  // For a task, returns the Total Bill Amount to display:
-  // Always prioritizes task.totalBillAmount if available.
-  const getDisplayTotalAmount = (task) => {
+  // Helper to find a task by Task No across all loaded tasks (prioritizes advance records for advance tasks)
+  const findTask = (taskNo, isAdv = false) => {
+    if (!taskNo) return null;
+    const cleanNo = taskNo.trim();
+    if (isAdv) {
+      const adv = (pendingRepairPayments || []).concat(historyRepairPayments || [])
+        .find((t) => t.isAdvance && (t.taskNo === cleanNo || t.repairTaskNo === cleanNo));
+      if (adv) return adv;
+      const advStore = (repairTasks || []).find((t) => t.isAdvance && (t.taskNo === cleanNo || t.repairTaskNo === cleanNo));
+      if (advStore) return advStore;
+    }
+    return (
+      (pendingRepairPayments || []).find((t) => t.taskNo === cleanNo || t.repairTaskNo === cleanNo) ||
+      (historyRepairPayments || []).find((t) => t.taskNo === cleanNo || t.repairTaskNo === cleanNo) ||
+      (repairTasks || []).find((t) => t.taskNo === cleanNo || t.repairTaskNo === cleanNo)
+    );
+  };
+
+  // For a task, returns the combined To Be Paid Amount (sum of itself + all linked common tasks)
+  const getDisplayToBePaidAmount = (task) => {
     if (!task) return "";
-    if (task.totalBillAmount && task.totalBillAmount !== "-") return task.totalBillAmount;
     const ownAmt = parseFloat((task.toBePaidAmount || "0").toString().replace(/[^0-9.-]+/g, "")) || 0;
     const linkedAmt = (task.commonTasksLinked || []).reduce((sum, childNo) => {
-      const childTask = repairTasks.find((t) => t.taskNo === childNo);
-      const amt = parseFloat((childTask?.toBePaidAmount || "0").toString().replace(/[^0-9.-]+/g, "")) || 0;
+      const sibling = findTask(childNo, task.isAdvance);
+      const amt = parseFloat((sibling?.toBePaidAmount || "0").toString().replace(/[^0-9.-]+/g, "")) || 0;
       return sum + amt;
     }, 0);
     const combined = ownAmt + linkedAmt;
-    return combined > 0 ? combined : "";
+    return combined > 0 ? combined : (ownAmt > 0 ? ownAmt : "");
+  };
+
+  // For a task, returns the Total Bill Amount to display:
+  // Prioritizes task.totalBillAmount if non-zero, then checks siblings, then falls back to combined sum of toBePaidAmount.
+  const getDisplayTotalAmount = (task) => {
+    if (!task) return "";
+    const rawVal = parseFloat((task.totalBillAmount || "0").toString().replace(/[^0-9.-]+/g, "")) || 0;
+    if (rawVal > 0) return rawVal;
+
+    // Check if any linked common sibling has a non-zero total bill amount
+    if (task.commonTasksLinked && task.commonTasksLinked.length > 0) {
+      for (const childNo of task.commonTasksLinked) {
+        const sibling = findTask(childNo, task.isAdvance);
+        const sibVal = parseFloat((sibling?.totalBillAmount || "0").toString().replace(/[^0-9.-]+/g, "")) || 0;
+        if (sibVal > 0) return sibVal;
+      }
+    }
+
+    // Fallback: sum of toBePaidAmount across this task and all linked common tasks
+    return getDisplayToBePaidAmount(task);
   };
 
   const totalBillAmountSum = useMemo(() => {
     const currentList = activeTab === "pending" ? displayedPending : displayedHistory;
     return currentList.reduce((sum, task) => {
-      const rawVal = (task.totalBillAmount || "").toString().replace(/[^0-9.-]+/g, "");
+      const rawVal = (getDisplayTotalAmount(task) || task.totalBillAmount || "").toString().replace(/[^0-9.-]+/g, "");
       const amount = parseFloat(rawVal) || 0;
       return sum + amount;
     }, 0);
-  }, [activeTab, displayedPending, displayedHistory]);
+  }, [activeTab, displayedPending, displayedHistory, repairTasks, pendingRepairPayments]);
 
   const [formData, setFormData] = useState({
     totalBillAmount: "",
@@ -297,10 +357,12 @@ const MakePayment = () => {
 
   const handleMaterialClick = (task) => {
     setSelectedTask(task);
+    const displayTotal = getDisplayTotalAmount(task);
+    const displayToBePaid = getDisplayToBePaidAmount(task);
     setFormData({
-      totalBillAmount: task.totalBillAmount?.toString() || task.toBePaidAmount?.toString() || "",
+      totalBillAmount: displayTotal ? displayTotal.toString() : (task.toBePaidAmount?.toString() || ""),
       paymentType: task.paymentType || "",
-      toBePaidAmount: task.toBePaidAmount?.toString() || "",
+      toBePaidAmount: displayToBePaid ? displayToBePaid.toString() : (task.toBePaidAmount?.toString() || ""),
       utrChequeNo: "",
     });
     setIsModalOpen(true);
@@ -378,8 +440,18 @@ const MakePayment = () => {
           return { ...task, isChildTask: false };
         }
         const group = billNoGroups[task.billNo] || [];
-        const isChild = group[0]?.taskNo !== task.taskNo;
-        return { ...task, isChildTask: isChild };
+        const parent = group.find(
+          (t) =>
+            (t.typeOfBill || "").toLowerCase().trim() === "independent" ||
+            parseFloat((t.totalBillAmount || "0").toString().replace(/[^0-9.-]+/g, "")) > 0
+        ) || group[0];
+        const isChild = parent?.taskNo !== task.taskNo;
+        const childSiblings = group.filter((t) => t.taskNo !== parent?.taskNo);
+        return {
+          ...task,
+          isChildTask: isChild,
+          commonTasksLinked: isChild ? [] : childSiblings.map((t) => t.taskNo),
+        };
       });
 
       setRepairTasks(tasksWithParentFlag);
@@ -419,11 +491,17 @@ const MakePayment = () => {
             return { ...task, isChildTask: false, commonTasksLinked: [] };
           }
           const group = firmFiltered.filter(sameGroup);
-          const isChild = group[0]?.taskNo !== task.taskNo;
+          const parent = group.find(
+            (t) =>
+              (t.typeOfBill || "").toLowerCase().trim() === "independent" ||
+              parseFloat((t.totalBillAmount || "0").toString().replace(/[^0-9.-]+/g, "")) > 0
+          ) || group[0];
+          const isChild = parent?.taskNo !== task.taskNo;
+          const childSiblings = group.filter((t) => t.taskNo !== parent?.taskNo);
           return {
             ...task,
             isChildTask: isChild,
-            commonTasksLinked: isChild ? [] : siblings.map((t) => t.taskNo),
+            commonTasksLinked: isChild ? [] : childSiblings.map((t) => t.taskNo),
           };
         });
 
@@ -449,8 +527,8 @@ const MakePayment = () => {
       setHistoryRepairPayments([...normalHistory.filter(inNormalFlow), ...advHistory]);
 
       // Also merge advance tasks into `repairTasks` so the modal's common-task lookup
-      // can resolve linked advance child tasks' machine names.
-      setRepairTasks([...tasksWithParentFlag, ...advWithParentFlag]);
+      // can resolve linked advance child tasks' machine names and amounts (prioritizes advance tasks).
+      setRepairTasks([...advWithParentFlag, ...tasksWithParentFlag]);
 
     } catch (err) {
       console.error("Error fetching tasks:", err);
@@ -535,15 +613,27 @@ const MakePayment = () => {
       if (selectedTask.isAdvance) {
         // ── ADVANCE TASK: Update "Repair FMS Advance Payment" sheet (Step 3) ──
         const tasksToUpdate = [selectedTask.taskNo, ...(selectedTask.commonTasksLinked || [])];
+        const isCombined = tasksToUpdate.length > 1;
+        const totalCombined = parseFloat(getDisplayToBePaidAmount(selectedTask)) || 0;
+        const userPaid = parseFloat(formData.toBePaidAmount) || 0;
+        const isFull = totalCombined > 0 && userPaid >= totalCombined;
+
         const updateResults = await Promise.allSettled(
-          tasksToUpdate.map((tNo) =>
-            updateAdvancePayment(tNo, {
+          tasksToUpdate.map((tNo) => {
+            const rowTask = (tNo === selectedTask.taskNo)
+              ? selectedTask
+              : findTask(tNo, true);
+            const rowAmt = isCombined
+              ? (isFull ? (rowTask?.toBePaidAmount || "0") : (rowTask?.toBePaidAmount || formData.toBePaidAmount))
+              : formData.toBePaidAmount;
+
+            return updateAdvancePayment(tNo, {
               "Actual Payment Date": todayIST,
               "Advance Payment UTR / Cheque No": formData.utrChequeNo || "",
-              "Advance Amount Paid": formData.toBePaidAmount || "",
+              "Advance Amount Paid": rowAmt || "",
               "Payment Done By": user?.name || "",
-            })
-          )
+            });
+          })
         );
 
         const anySuccess = updateResults.some((r) => r.status === "fulfilled" && r.value?.success);
@@ -580,7 +670,7 @@ const MakePayment = () => {
           "Machine Name": selectedTask.machineName || "",
           "Vendor Name ": selectedTask.vendorName || "",
           "Bill No.": selectedTask.billNo || "",
-          "Total Bill Amount": selectedTask.totalBillAmount || "",
+          "Total Bill Amount": formData.totalBillAmount || getDisplayTotalAmount(selectedTask) || selectedTask.totalBillAmount || "",
           "Payment Type": formData.paymentType,
           "To Be Paid Amount": formData.toBePaidAmount,
         };
@@ -1021,7 +1111,10 @@ const MakePayment = () => {
                           })()}
                         </td>
                         <td className="px-4 py-3 text-sm font-medium text-gray-900 whitespace-nowrap">
-                          {task.toBePaidAmount ? `₹${Number(task.toBePaidAmount).toLocaleString()}` : "-"}
+                          {(() => {
+                            const amt = getDisplayToBePaidAmount(task) || task.toBePaidAmount;
+                            return amt ? `₹${Number(amt).toLocaleString()}` : "-";
+                          })()}
                         </td>
                       </tr>
                     ))
@@ -1254,7 +1347,7 @@ const MakePayment = () => {
               </label>
               <input
                 type="number"
-                value={selectedTask?.totalBillAmount}
+                value={formData.totalBillAmount || getDisplayTotalAmount(selectedTask) || ""}
                 readOnly
                 onChange={(e) =>
                   setFormData((prev) => ({
@@ -1296,7 +1389,7 @@ const MakePayment = () => {
               </label>
               <input
                 type="number"
-                value={formData.toBePaidAmount}
+                value={formData.toBePaidAmount || (selectedTask ? (getDisplayToBePaidAmount(selectedTask) || selectedTask.toBePaidAmount || "") : "")}
                 onChange={(e) =>
                   setFormData((prev) => ({
                     ...prev,
