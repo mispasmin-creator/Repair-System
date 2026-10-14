@@ -303,13 +303,13 @@ const Posting = () => {
 
       setTasks(tasksWithParentFlag);
 
-      // Normal pending: Actual 3 filled + Posting not done - hide child tasks
+      // Normal pending: Check Machine done (Actual 2) + Posting not done - hide child tasks
       const normalPending = tasksWithParentFlag.filter(
-        (t) => t.actual3 && !t.actualPosting && !t.isChildTask
+        (t) => t.actual2 && !t.actualPosting && !t.isChildTask
       );
       // Normal history: Posting done - hide child tasks
       const normalHistory = tasksWithParentFlag.filter(
-        (t) => t.actual3 && t.actualPosting && !t.isChildTask
+        (t) => t.actualPosting && !t.isChildTask
       );
 
       // ── Advance tasks from Repair FMS Advance Payment sheet ──────────────

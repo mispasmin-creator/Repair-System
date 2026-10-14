@@ -1,28 +1,34 @@
 import React, { useEffect, useState } from "react";
-import { cachedFetch } from "../../services/sheetCache";
-import { Search, CheckSquare } from "lucide-react";
+import {
+  Search,
+  CheckSquare,
+  Send,
+  ShieldCheck,
+  CheckCircle2,
+  FileText,
+  CreditCard,
+  PackageCheck,
+  Calculator,
+  Layers,
+  ArrowRight,
+} from "lucide-react";
 import Button from "../ui/Button";
 import Modal from "../ui/Modal";
-import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableRow,
-  TableHead,
-  TableCell,
-} from "../ui/Table";
 import { useAuth } from "../../context/AuthContext";
+import { fetchRepairTasks as fetchRepairTasksSvc } from "../../services/repairService";
+import { fetchAdvancePaymentsFromSupabase } from "../../services/supabaseRepairService";
+import { openDrivePreview } from "../../utils/driveUtils";
 
-// Each step maps to exact column header names in the Accounts sheet
+// Steps in Accounts workflow
 const STEPS = [
   {
     key: "audit",
     label: "Audit Data",
-    plannedKey: "Planned 1",
-    actualKey: "Actual 1",
-    delayKey: "Delay 1",
-    statusKey: "Status 1",
-    remarksKey: "Remarks1",
+    plannedKey: "Accounts Planned 1",
+    actualKey: "Accounts Actual 1",
+    delayKey: "Accounts Delay 1",
+    statusKey: "Accounts Status 1",
+    remarksKey: "Accounts Remarks 1",
     actualHeader: "Actual 1",
     statusHeader: "Status 1",
     remarksHeader: "Remarks1",
@@ -30,11 +36,11 @@ const STEPS = [
   {
     key: "rectify",
     label: "Rectify the Mistake",
-    plannedKey: "Planned 2",
-    actualKey: "Actual 2",
-    delayKey: "Delay 2",
-    statusKey: "Status 2",
-    remarksKey: "Remarks 2",
+    plannedKey: "Accounts Planned 2",
+    actualKey: "Accounts Actual 2",
+    delayKey: "Accounts Delay 2",
+    statusKey: "Accounts Status 2",
+    remarksKey: "Accounts Remarks 2",
     actualHeader: "Actual 2",
     statusHeader: "Status 2",
     remarksHeader: "Remarks 2",
@@ -42,11 +48,11 @@ const STEPS = [
   {
     key: "reaudit",
     label: "Reaudit Data",
-    plannedKey: "Planned 3",
-    actualKey: "Actual 3",
-    delayKey: "Delay 3",
-    statusKey: "Status 3",
-    remarksKey: "Remarks 3",
+    plannedKey: "Accounts Planned 3",
+    actualKey: "Accounts Actual 3",
+    delayKey: "Accounts Delay 3",
+    statusKey: "Accounts Status 3",
+    remarksKey: "Accounts Remarks 3",
     actualHeader: "Actual 3",
     statusHeader: "Status 3",
     remarksHeader: "Remarks 3",
@@ -54,11 +60,11 @@ const STEPS = [
   {
     key: "tally",
     label: "Take Entry By Tally",
-    plannedKey: "Planned 4",
-    actualKey: "Actual 4",
-    delayKey: "Delay 4",
-    statusKey: "Status 4",
-    remarksKey: "Remarks 4",
+    plannedKey: "Accounts Planned 4",
+    actualKey: "Accounts Actual 4",
+    delayKey: "Accounts Delay 4",
+    statusKey: "Accounts Status 4",
+    remarksKey: "Accounts Remarks 4",
     actualHeader: "Actual 4",
     statusHeader: "Status 4",
     remarksHeader: "Remarks 4",
@@ -66,29 +72,17 @@ const STEPS = [
   {
     key: "completed",
     label: "Completed",
-    plannedKey: "Planned 4",
-    actualKey: "Actual 4",
-    delayKey: "Delay 4",
-    statusKey: "Status 4",
-    remarksKey: "Remarks 4",
+    plannedKey: "Accounts Planned 4",
+    actualKey: "Accounts Actual 4",
+    delayKey: "Accounts Delay 4",
+    statusKey: "Accounts Status 4",
+    remarksKey: "Accounts Remarks 4",
     actualHeader: "Actual 4",
     statusHeader: "Status 4",
     remarksHeader: "Remarks 4",
     isReadOnly: true,
   },
 ];
-
-const getStatusColor = (status) => {
-  const s = (status || "").toLowerCase();
-  if (s === "complete" || s === "completed" || s === "matched" || s === "ok") {
-    return "bg-green-100 text-green-800";
-  }
-  if (s === "mismatch" || s === "rejected") {
-    return "bg-red-100 text-red-800";
-  }
-  if (!s) return "bg-gray-100 text-gray-500";
-  return "bg-yellow-100 text-yellow-800";
-};
 
 const Accounts = () => {
   const { user } = useAuth();
@@ -97,104 +91,180 @@ const Accounts = () => {
   const [loadingTasks, setLoadingTasks] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
 
+  const [pipelineStats, setPipelineStats] = useState({
+    sentPending: 0,
+    mgmtPending: 0,
+    checkPending: 0,
+    postingPending: 0,
+    paymentPending: 0,
+    storeInPending: 0,
+    accountsPending: 0,
+  });
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
   const [loaderSubmit, setLoaderSubmit] = useState(false);
   const [formData, setFormData] = useState({ status: "", remarks: "" });
 
   const SCRIPT_URL = import.meta.env.VITE_SCRIPT_URL;
-  const SHEET_Id = import.meta.env.VITE_SHEET_ID;
 
   const activeStep = STEPS.find((s) => s.key === activeTab);
+
+  // Compute pending counts for all 7 pipeline stages
+  const computePipelineStats = (allRawTasks, advList = []) => {
+    const isAdv = (t) =>
+      (t["Payment Type"] || t["Vendor 1 Payment Type"] || "").toLowerCase() === "advance";
+
+    // 1. Sent to Vendor: Planned 1 present, Actual 1 empty
+    const sentPending = allRawTasks.filter((t) => t["Planned 1"] && !t["Actual 1"]).length;
+
+    // 2. Management Approval: Actual 1 done, Mgmt Approval Date empty
+    const mgmtPending = allRawTasks.filter(
+      (t) => t["Actual 1"] && !t["Management Approval Date"]
+    ).length;
+
+    // 3. Check Machine:
+    // Normal: Mgmt approval done, Check Machine empty
+    // Advance: Advance payment done (Actual 4), Check Machine empty
+    const checkPending = allRawTasks.filter((t) => {
+      if (isAdv(t)) {
+        return Boolean(t["Actual 4"]) && !t["Actual 2"];
+      }
+      return Boolean(t["Management Approval Date"]) && !t["Actual 2"];
+    }).length;
+
+    // 4. Process for Payment (Posting):
+    // Normal: Check Machine done (Actual 2), Posting empty
+    // Advance: Mgmt approval done, Posting empty
+    const postingPending = allRawTasks.filter((t) => {
+      if (isAdv(t)) {
+        return Boolean(t["Management Approval Date"]) && !t["Actual Posting"];
+      }
+      return Boolean(t["Actual 2"]) && !t["Actual Posting"];
+    }).length;
+
+    // 5. Make Payment:
+    // Normal: Posting done (Actual Posting), Payment empty (Actual 4)
+    // Advance: Pending advance records in repair_advance
+    const normalPaymentPending = allRawTasks.filter(
+      (t) => !isAdv(t) && Boolean(t["Actual Posting"]) && !t["Actual 4"]
+    ).length;
+    const advPaymentPending = (advList || []).filter((a) => {
+      const isPaid = Boolean(
+        a.utr_no || a.payment_utr_no || (a.status && a.status.toLowerCase() === "approved")
+      );
+      return !isPaid;
+    }).length;
+    const paymentPending = normalPaymentPending + advPaymentPending;
+
+    // 6. Store In:
+    // Normal: Payment done (Actual 4), Store In empty (Actual 3)
+    // Advance: Check Machine done (Actual 2), Store In empty (Actual 3)
+    const storeInPending = allRawTasks.filter((t) => {
+      if (isAdv(t)) {
+        return Boolean(t["Actual 2"]) && !t["Actual 3"];
+      }
+      return Boolean(t["Actual 4"]) && !t["Actual 3"];
+    }).length;
+
+    // 7. Accounts:
+    // Store In completed (Actual 3), Accounts Tally (Accounts Actual 4) empty
+    const accountsPending = allRawTasks.filter(
+      (t) => Boolean(t["Actual 3"]) && !t["Accounts Actual 4"]
+    ).length;
+
+    return {
+      sentPending,
+      mgmtPending,
+      checkPending,
+      postingPending,
+      paymentPending,
+      storeInPending,
+      accountsPending,
+    };
+  };
 
   const fetchAllTasks = async () => {
     try {
       setLoadingTasks(true);
-      // Use existing GET endpoint (no redeployment needed)
-      const res = await cachedFetch(
-        `${SCRIPT_URL}?sheetId=${SHEET_Id}&&sheet=Accounts`
-      );
-      const result = await res.json();
 
-      const allRows = result?.table?.rows || [];
+      const [rawTasks, advList] = await Promise.all([
+        fetchRepairTasksSvc(user?.firmName),
+        fetchAdvancePaymentsFromSupabase().catch(() => []),
+      ]);
 
-      // Accounts sheet:
-      //   Apps Script doGet skips Sheet Row 1 (uses as cols/headers),
-      //   so allRows[0] = Sheet Row 2 (banner)
-      //   allRows[1] = Sheet Row 3 (banner)
-      //   allRows[2] = Sheet Row 4 (banner)
-      //   allRows[3] = Sheet Row 5 (banner)
-      //   allRows[4] = Sheet Row 6 (ACTUAL HEADERS) ← fixed from [5]
-      //   allRows[5+] = Sheet Row 7+ (DATA)         ← fixed from slice(6)
-      const headerRow = allRows[4];
-      const actualHeaders = (headerRow?.c || []).map(
-        (cell) => (cell?.f ?? cell?.v ?? "").toString().trim()
-      );
+      // Calculate pipeline stage pending counts
+      const stats = computePipelineStats(rawTasks, advList);
+      setPipelineStats(stats);
 
-      const dataRows = allRows.slice(5);
+      // Rule: In Accounts page, ONLY entries that have completed Store In are shown!
+      const storeInDoneTasks = rawTasks.filter((t) => Boolean(t["Actual 3"]));
 
-      const get = (cells, headerName) => {
-        const idx = actualHeaders.indexOf(headerName);
-        if (idx < 0) return "";
-        const cell = cells[idx];
-        return (cell?.v ?? cell?.f ?? "").toString().trim();
-      };
+      const formatted = storeInDoneTasks.map((t) => {
+        const steps = {
+          audit: {
+            planned: t["Accounts Planned 1"] || t["Actual 3"],
+            actual: t["Accounts Actual 1"] || "",
+            status: t["Accounts Status 1"] || "",
+            remarks: t["Accounts Remarks 1"] || "",
+          },
+          rectify: {
+            planned: t["Accounts Planned 2"] || "",
+            actual: t["Accounts Actual 2"] || "",
+            status: t["Accounts Status 2"] || "",
+            remarks: t["Accounts Remarks 2"] || "",
+          },
+          reaudit: {
+            planned: t["Accounts Planned 3"] || "",
+            actual: t["Accounts Actual 3"] || "",
+            status: t["Accounts Status 3"] || "",
+            remarks: t["Accounts Remarks 3"] || "",
+          },
+          tally: {
+            planned:
+              t["Accounts Planned 4"] ||
+              (t["Accounts Actual 1"] && !t["Accounts Planned 2"]
+                ? t["Accounts Actual 1"]
+                : ""),
+            actual: t["Accounts Actual 4"] || "",
+            status: t["Accounts Status 4"] || "",
+            remarks: t["Accounts Remarks 4"] || "",
+          },
+          completed: {
+            planned: t["Accounts Planned 4"] || "",
+            actual: t["Accounts Actual 4"] || "",
+            status: t["Accounts Status 4"] || "",
+            remarks: t["Accounts Remarks 4"] || "",
+          },
+        };
 
-      const formatted = dataRows
-        .filter((row) => {
-          // skip completely empty rows
-          const cells = row.c || [];
-          return cells.some((c) => c?.v || c?.f);
-        })
-        .map((row) => {
-          const cells = row.c || [];
+        return {
+          taskNo: t["Task No"] || t.taskNo,
+          firmName: t["Firm Name"] || t.firmName,
+          serialNo: t["Serial No"] || t.serialNo,
+          machineName: t["Machine Name"] || t.machineName,
+          machinePartName: t["Machine Part Name"] || t.machinePartName,
+          department: t["Department"] || t.department,
+          location: t["Location"] || t.location,
+          vendorName: t["Vendor Name"] || t.vendorName,
+          transportationCharges: t["Transportation Charges"],
+          weighmentSlip: t["Weighment Slip"],
+          transportingImage: t["Transporting Image With Machine"],
+          paymentType: t["Payment Type"] || t["Vendor 1 Payment Type"],
+          howMuch: t["How Much"],
+          transporterName: t["(Transporter Name)"] || t["Transporter Name"],
+          transportationAmount: t["Transportation Amount"],
+          billImage: t["Bill Image"],
+          billNo: t["Bill No."] || t["Bill No"],
+          typeOfBill: t["Type of Bill"],
+          totalBillAmount: t["Total Bill Amount"],
+          toBePaidAmount: t["To Be Paid Amount"],
+          actualStoreIn: t["Actual 3"],
+          steps,
+        };
+      });
 
-          const steps = {};
-          STEPS.forEach((step) => {
-            steps[step.key] = {
-              planned: get(cells, step.plannedKey),
-              actual: get(cells, step.actualKey),
-              delay: get(cells, step.delayKey),
-              status: get(cells, step.statusKey),
-              remarks: get(cells, step.remarksKey),
-            };
-          });
-
-          return {
-            taskNo: get(cells, "Task No"),
-            firmName: get(cells, "Firm Name"),
-            serialNo: get(cells, "Serial No"),
-            machineName: get(cells, "Machine Name"),
-            machinePartName: get(cells, "Machine Part Name"),
-            department: get(cells, "Department"),
-            location: get(cells, "Location"),
-            vendorName: get(cells, "Vendor Name"),
-            transportationCharges: get(cells, "Transportation Charges"),
-            weighmentSlip: get(cells, "Weighment Slip"),
-            transportingImage: get(cells, "Transporting Image With Machine"),
-            paymentType: get(cells, "Payment Type"),
-            howMuch: get(cells, "How Much"),
-            transporterName: get(cells, "Transporter Name"),
-            transportationAmount: get(cells, "Transportation Amount"),
-            billImage: get(cells, "Bill Image"),
-            billNo: get(cells, "Bill No.") || get(cells, "Bill No"),
-            typeOfBill: get(cells, "Type of Bill"),
-            totalBillAmount: get(cells, "Total Bill Amount"),
-            toBePaidAmount: get(cells, "To Be Paid Amount"),
-            steps,
-          };
-        });
-
-      // Filter by firm
-      const userFirmName = user?.firmName || "";
-      const isAllFirm = !userFirmName || userFirmName.toLowerCase() === "all";
-      const filtered = formatted.filter((task) =>
-        isAllFirm
-          ? true
-          : (task.firmName || "").toLowerCase() === userFirmName.toLowerCase()
-      );
-
-      setTasks(filtered);
+      setTasks(formatted);
     } catch (err) {
       console.error("Error fetching Accounts data:", err);
     } finally {
@@ -202,20 +272,31 @@ const Accounts = () => {
     }
   };
 
-
   useEffect(() => {
     fetchAllTasks();
-  }, []);
+  }, [user?.firmName]);
+
+  // Tab count helper
+  const getTabCount = (stepKey) => {
+    return tasks.filter((task) => {
+      if (stepKey === "completed") {
+        return Boolean(task.steps.tally?.actual);
+      }
+      if (stepKey === "tally") {
+        return Boolean(task.steps.tally?.planned) && !task.steps.tally?.actual;
+      }
+      return Boolean(task.steps[stepKey]?.planned) && !task.steps[stepKey]?.actual;
+    }).length;
+  };
 
   const filteredTasks = tasks.filter((task) => {
     // Completed tab: show entries where Tally (Actual 4) is filled
     if (activeTab === "completed") {
-      if (!task.steps["tally"].actual) return false;
+      if (!task.steps.tally?.actual) return false;
     } else {
-      // All other tabs: only show rows where their Planned date exists
-      if (!task.steps[activeStep.key].planned) return false;
-      // Exclude already-completed entries from Tally tab
-      if (activeTab === "tally" && task.steps["tally"].actual) return false;
+      // Step tab: row's Planned date must exist, and its Actual date must be empty
+      if (!task.steps[activeStep.key]?.planned) return false;
+      if (task.steps[activeStep.key]?.actual) return false;
     }
 
     if (!searchTerm) return true;
@@ -225,15 +306,17 @@ const Accounts = () => {
       (task.machineName || "").toLowerCase().includes(term) ||
       (task.serialNo || "").toLowerCase().includes(term) ||
       (task.department || "").toLowerCase().includes(term) ||
-      (task.firmName || "").toLowerCase().includes(term)
+      (task.firmName || "").toLowerCase().includes(term) ||
+      (task.vendorName || "").toLowerCase().includes(term) ||
+      (task.billNo || "").toLowerCase().includes(term)
     );
   });
 
   const handleUpdateClick = (task) => {
     setSelectedTask(task);
     setFormData({
-      status: task.steps[activeStep.key].status || "",
-      remarks: task.steps[activeStep.key].remarks || "",
+      status: task.steps[activeStep.key]?.status || (activeTab === "audit" ? "Done" : "Done"),
+      remarks: task.steps[activeStep.key]?.remarks || "",
     });
     setIsModalOpen(true);
   };
@@ -276,155 +359,350 @@ const Accounts = () => {
     }
   };
 
+  // Pipeline stage cards definition
+  const pipelineStages = [
+    {
+      id: "sent",
+      step: "Step 1",
+      name: "Sent to Vendor",
+      count: pipelineStats.sentPending,
+      icon: Send,
+      color: "text-amber-600",
+      bg: "bg-amber-50",
+      border: "border-amber-200",
+      badge: "bg-amber-100 text-amber-800",
+    },
+    {
+      id: "mgmt",
+      step: "Step 2",
+      name: "Mgmt Approval",
+      count: pipelineStats.mgmtPending,
+      icon: ShieldCheck,
+      color: "text-purple-600",
+      bg: "bg-purple-50",
+      border: "border-purple-200",
+      badge: "bg-purple-100 text-purple-800",
+    },
+    {
+      id: "check",
+      step: "Step 3",
+      name: "Check Machine",
+      count: pipelineStats.checkPending,
+      icon: CheckCircle2,
+      color: "text-indigo-600",
+      bg: "bg-indigo-50",
+      border: "border-indigo-200",
+      badge: "bg-indigo-100 text-indigo-800",
+    },
+    {
+      id: "posting",
+      step: "Step 4",
+      name: "Process Payment",
+      count: pipelineStats.postingPending,
+      icon: FileText,
+      color: "text-blue-600",
+      bg: "bg-blue-50",
+      border: "border-blue-200",
+      badge: "bg-blue-100 text-blue-800",
+    },
+    {
+      id: "payment",
+      step: "Step 5",
+      name: "Make Payment",
+      count: pipelineStats.paymentPending,
+      icon: CreditCard,
+      color: "text-emerald-600",
+      bg: "bg-emerald-50",
+      border: "border-emerald-200",
+      badge: "bg-emerald-100 text-emerald-800",
+    },
+    {
+      id: "store_in",
+      step: "Step 6",
+      name: "Store In",
+      count: pipelineStats.storeInPending,
+      icon: PackageCheck,
+      color: "text-teal-600",
+      bg: "bg-teal-50",
+      border: "border-teal-200",
+      badge: "bg-teal-100 text-teal-800",
+    },
+    {
+      id: "accounts",
+      step: "Step 7",
+      name: "Accounts / Tally",
+      count: pipelineStats.accountsPending,
+      icon: Calculator,
+      color: "text-rose-600",
+      bg: "bg-rose-50",
+      border: "border-rose-200",
+      badge: "bg-rose-100 text-rose-800",
+    },
+  ];
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-gray-900">Accounts</h1>
+      {/* Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Accounts</h1>
+          <p className="text-sm text-gray-500 mt-1">
+            Entries are audited and posted to Tally after completing Store In
+          </p>
+        </div>
+        <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg text-xs font-semibold text-blue-700">
+          <Layers className="w-4 h-4 text-blue-600" />
+          <span>Post-Store In Stage Active</span>
+        </div>
       </div>
 
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+      {/* Stage-wise Pending Summary Cards */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-blue-600 animate-pulse"></span>
+            <h2 className="text-sm font-semibold text-gray-800 uppercase tracking-wider">
+              Repair Pipeline Pending Overview (Stage-wise)
+            </h2>
+          </div>
+          <span className="text-xs text-gray-500">Live Stage Summary</span>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+          {pipelineStages.map((stg) => {
+            const Icon = stg.icon;
+            return (
+              <div
+                key={stg.id}
+                className={`${stg.bg} ${stg.border} border rounded-xl p-3.5 flex flex-col justify-between transition-all duration-150 hover:shadow-sm`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                    {stg.step}
+                  </span>
+                  <Icon className={`w-4 h-4 ${stg.color}`} />
+                </div>
+                <div>
+                  <div className="text-xl sm:text-2xl font-black text-gray-900 tracking-tight">
+                    {loadingTasks ? "..." : stg.count}
+                  </div>
+                  <div className="text-xs font-medium text-gray-700 truncate mt-0.5">
+                    {stg.name}
+                  </div>
+                </div>
+                <div className="mt-2.5">
+                  <span
+                    className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold ${stg.badge}`}
+                  >
+                    {stg.count > 0 ? `${stg.count} Pending` : "Clear"}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Accounts Main Section */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200">
         {/* Tabs */}
         <div className="border-b border-gray-200">
-          <nav className="flex space-x-8 px-6 overflow-x-auto">
-            {STEPS.map((step) => (
-              <button
-                key={step.key}
-                onClick={() => setActiveTab(step.key)}
-                className={`py-4 px-1 text-sm font-medium border-b-2 whitespace-nowrap transition-colors duration-200 ${
-                  activeTab === step.key
-                    ? "border-blue-500 text-blue-600"
-                    : "border-transparent text-gray-500 hover:text-gray-700"
-                }`}
-              >
-                {step.label}
-              </button>
-            ))}
+          <nav className="flex space-x-6 px-6 overflow-x-auto">
+            {STEPS.map((step) => {
+              const count = getTabCount(step.key);
+              const isActive = activeTab === step.key;
+              return (
+                <button
+                  key={step.key}
+                  onClick={() => setActiveTab(step.key)}
+                  className={`py-4 px-1 text-sm font-medium border-b-2 whitespace-nowrap transition-colors duration-200 flex items-center gap-2 ${
+                    isActive
+                      ? "border-blue-500 text-blue-600"
+                      : "border-transparent text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  <span>{step.label}</span>
+                  <span
+                    className={`px-2 py-0.5 text-xs font-bold rounded-full ${
+                      isActive
+                        ? "bg-blue-100 text-blue-700"
+                        : "bg-gray-100 text-gray-600"
+                    }`}
+                  >
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
           </nav>
         </div>
 
         {/* Search */}
-        <div className="p-6 border-b border-gray-200">
+        <div className="p-4 sm:p-6 border-b border-gray-200 bg-gray-50/50">
           <div className="relative max-w-md">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
             <input
               type="text"
-              placeholder="Search by task no, machine, firm, department..."
+              placeholder="Search by task no, machine, vendor, firm, bill no..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+              className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-white"
             />
           </div>
         </div>
 
         {/* Table */}
-        <div className="overflow-auto max-h-[calc(100vh-300px)]">
+        <div className="overflow-auto max-h-[calc(100vh-320px)]">
           <table className="min-w-full divide-y divide-gray-200 text-left text-sm">
             <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
               <tr>
-                <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[100px] text-center">Action</th>
-                <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[120px]">Task No</th>
-                <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[130px]">Firm Name</th>
-                <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[120px]">Serial No</th>
-                <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[160px]">Machine Name</th>
-                <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[150px]">Machine Part Name</th>
-                <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[120px]">Department</th>
-                <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[110px]">Location</th>
-                <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[140px]">Vendor Name</th>
-                <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[160px]">Transportation Charges</th>
-                <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[140px]">Weighment Slip</th>
-                <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[160px]">Transporting Image</th>
-                <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[130px]">Payment Type</th>
-                <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[120px]">How Much</th>
-                <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[150px]">Transporter Name</th>
-                <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[160px]">Transportation Amount</th>
-                <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[120px]">Bill Image</th>
-                <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[120px]">Bill No.</th>
-                <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[130px]">Type of Bill</th>
-                <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[150px]">Total Bill Amount</th>
-                <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[150px]">To Be Paid Amount</th>
+                <th className="px-4 py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[100px] text-center">
+                  Action
+                </th>
+                <th className="px-4 py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[120px]">
+                  Task No
+                </th>
+                <th className="px-4 py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[130px]">
+                  Firm Name
+                </th>
+                <th className="px-4 py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[120px]">
+                  Serial No
+                </th>
+                <th className="px-4 py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[160px]">
+                  Machine Name
+                </th>
+                <th className="px-4 py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[150px]">
+                  Machine Part Name
+                </th>
+                <th className="px-4 py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[120px]">
+                  Department
+                </th>
+                <th className="px-4 py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[110px]">
+                  Location
+                </th>
+                <th className="px-4 py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[140px]">
+                  Vendor Name
+                </th>
+                <th className="px-4 py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[130px]">
+                  Store In Date
+                </th>
+                <th className="px-4 py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[120px]">
+                  Planned Date
+                </th>
+                <th className="px-4 py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[120px]">
+                  Bill No.
+                </th>
+                <th className="px-4 py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[130px]">
+                  Type of Bill
+                </th>
+                <th className="px-4 py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[150px]">
+                  Total Bill Amount
+                </th>
+                <th className="px-4 py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[150px]">
+                  To Be Paid Amount
+                </th>
+                <th className="px-4 py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[120px]">
+                  Bill Image
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 bg-white">
               {loadingTasks ? (
                 <tr>
-                  <td colSpan={21} className="text-center py-12">
+                  <td colSpan={16} className="text-center py-12">
                     <div className="flex flex-col items-center justify-center">
-                      <div className="w-9 h-9 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                      <p className="mt-3 text-sm text-gray-500 font-medium">Loading tasks...</p>
+                      <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                      <p className="mt-3 text-sm text-gray-500 font-medium">Loading accounts tasks...</p>
                     </div>
                   </td>
                 </tr>
               ) : filteredTasks.length === 0 ? (
                 <tr>
-                  <td colSpan={21} className="text-center py-12 text-gray-500">No tasks found</td>
+                  <td colSpan={16} className="text-center py-12 text-gray-500">
+                    No tasks found in this tab
+                  </td>
                 </tr>
               ) : (
                 filteredTasks.map((task, idx) => {
                   const step = task.steps[activeStep.key] || {};
-                  const canUpdate = step.planned && !step.actual;
                   return (
-                    <tr key={task.taskNo || idx} className="hover:bg-blue-50/40 transition-colors duration-150">
+                    <tr
+                      key={task.taskNo || idx}
+                      className="hover:bg-blue-50/40 transition-colors duration-150"
+                    >
                       <td className="px-4 py-3 text-sm whitespace-nowrap text-center">
                         {activeTab === "completed" ? (
-                          <span className="inline-flex items-center gap-1 px-3 py-1.5 bg-green-100 text-green-700 text-xs font-semibold rounded-lg">
-                            ✓ Completed
+                          <span className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-700 text-xs font-semibold rounded-lg">
+                            ✓ Done
                           </span>
-                        ) : canUpdate ? (
-                          <button onClick={() => handleUpdateClick(task)} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-xs font-semibold rounded-lg transition-colors">
+                        ) : (
+                          <button
+                            onClick={() => handleUpdateClick(task)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors"
+                          >
                             <CheckSquare className="w-3.5 h-3.5" />
                             Update
                           </button>
-                        ) : step.actual ? (
-                          <button onClick={() => handleUpdateClick(task)} className="inline-flex items-center px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold rounded-lg transition-colors">
-                            Edit
-                          </button>
-                        ) : (
-                          <button onClick={() => handleUpdateClick(task)} className="inline-flex items-center px-3 py-1.5 bg-orange-100 hover:bg-orange-200 text-orange-700 text-xs font-semibold rounded-lg transition-colors">
-                            Action
-                          </button>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-sm font-medium text-blue-600 whitespace-nowrap">{task.taskNo || "-"}</td>
-                      <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">{task.firmName || "-"}</td>
-                      <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{task.serialNo || "-"}</td>
-                      <td className="px-4 py-3 text-sm font-medium text-gray-900 whitespace-nowrap">{task.machineName || "-"}</td>
-                      <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{task.machinePartName || "-"}</td>
-                      <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">{task.department || "-"}</td>
-                      <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">{task.location || "-"}</td>
-                      <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">{task.vendorName || "-"}</td>
+                      <td className="px-4 py-3 text-sm font-semibold text-blue-600 whitespace-nowrap">
+                        {task.taskNo || "-"}
+                      </td>
                       <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">
-                        {task.transportationCharges ? `₹${Number(task.transportationCharges).toLocaleString()}` : "-"}
+                        {task.firmName || "-"}
                       </td>
-                      <td className="px-4 py-3 text-sm whitespace-nowrap">
-                        {task.weighmentSlip ? (
-                          <button type="button" onClick={() => window.open(task.weighmentSlip, "_blank", "noopener,noreferrer")} className="text-blue-600 underline text-xs hover:text-blue-800 font-medium">View Slip</button>
-                        ) : <span className="text-gray-400 text-xs">-</span>}
+                      <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
+                        {task.serialNo || "-"}
                       </td>
-                      <td className="px-4 py-3 text-sm whitespace-nowrap">
-                        {task.transportingImage ? (
-                          <button type="button" onClick={() => window.open(task.transportingImage, "_blank", "noopener,noreferrer")} className="text-blue-600 underline text-xs hover:text-blue-800 font-medium">View Image</button>
-                        ) : <span className="text-gray-400 text-xs">-</span>}
+                      <td className="px-4 py-3 text-sm font-medium text-gray-900 whitespace-nowrap">
+                        {task.machineName || "-"}
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">{task.paymentType || "-"}</td>
+                      <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
+                        {task.machinePartName || "-"}
+                      </td>
                       <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">
-                        {task.howMuch ? `₹${Number(task.howMuch).toLocaleString()}` : "-"}
+                        {task.department || "-"}
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">{task.transporterName || "-"}</td>
                       <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">
-                        {task.transportationAmount ? `₹${Number(task.transportationAmount).toLocaleString()}` : "-"}
+                        {task.location || "-"}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">
+                        {task.vendorName || "-"}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-emerald-700 font-medium whitespace-nowrap">
+                        {task.actualStoreIn || "-"}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-blue-600 font-medium whitespace-nowrap">
+                        {step.planned || "-"}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">
+                        {task.billNo || "-"}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">
+                        {task.typeOfBill || "-"}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap font-medium">
+                        {task.totalBillAmount
+                          ? `₹${Number(task.totalBillAmount).toLocaleString()}`
+                          : "-"}
+                      </td>
+                      <td className="px-4 py-3 text-sm font-bold text-gray-900 whitespace-nowrap">
+                        {task.toBePaidAmount
+                          ? `₹${Number(task.toBePaidAmount).toLocaleString()}`
+                          : "-"}
                       </td>
                       <td className="px-4 py-3 text-sm whitespace-nowrap">
                         {task.billImage ? (
-                          <button type="button" onClick={() => window.open(task.billImage, "_blank", "noopener,noreferrer")} className="text-blue-600 underline text-sm hover:text-blue-800 font-medium">View Bill</button>
-                        ) : <span className="text-gray-400 text-xs">No Bill</span>}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">{task.billNo || "-"}</td>
-                      <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">{task.typeOfBill || "-"}</td>
-                      <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">
-                        {task.totalBillAmount ? `₹${Number(task.totalBillAmount).toLocaleString()}` : "-"}
-                      </td>
-                      <td className="px-4 py-3 text-sm font-medium text-gray-900 whitespace-nowrap">
-                        {task.toBePaidAmount ? `₹${Number(task.toBePaidAmount).toLocaleString()}` : "-"}
+                          <button
+                            type="button"
+                            onClick={() => openDrivePreview(task.billImage)}
+                            className="text-blue-600 underline text-xs hover:text-blue-800 font-medium"
+                          >
+                            View Bill
+                          </button>
+                        ) : (
+                          <span className="text-gray-400 text-xs">No Bill</span>
+                        )}
                       </td>
                     </tr>
                   );
@@ -435,6 +713,7 @@ const Accounts = () => {
         </div>
       </div>
 
+      {/* Modal */}
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
@@ -457,21 +736,23 @@ const Accounts = () => {
               <p className="text-gray-800 mt-0.5">{selectedTask?.machineName || "-"}</p>
             </div>
             <div>
-              <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Serial No</p>
-              <p className="text-gray-800 mt-0.5">{selectedTask?.serialNo || "-"}</p>
-            </div>
-            <div>
-              <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Department</p>
-              <p className="text-gray-800 mt-0.5">{selectedTask?.department || "-"}</p>
+              <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Store In Date</p>
+              <p className="text-emerald-700 font-semibold mt-0.5">{selectedTask?.actualStoreIn || "-"}</p>
             </div>
             <div>
               <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Vendor Name</p>
               <p className="text-gray-800 mt-0.5">{selectedTask?.vendorName || "-"}</p>
             </div>
+            <div>
+              <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Bill No</p>
+              <p className="text-gray-800 mt-0.5">{selectedTask?.billNo || "-"}</p>
+            </div>
             <div className="col-span-2">
               <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Planned Date</p>
               <p className="text-blue-600 font-semibold mt-0.5">
-                {selectedTask && activeStep ? selectedTask.steps[activeStep.key]?.planned || "-" : "-"}
+                {selectedTask && activeStep
+                  ? selectedTask.steps[activeStep.key]?.planned || "-"
+                  : "-"}
               </p>
             </div>
           </div>
@@ -486,9 +767,12 @@ const Accounts = () => {
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-800"
             >
               <option value="">-- Select Status --</option>
-              <option value="Done">Done</option>
+              <option value="Done">Done (Approved)</option>
               {activeTab === "audit" && (
-                <option value="Not Done">Not Done</option>
+                <>
+                  <option value="Mismatch">Mismatch (Send to Rectify)</option>
+                  <option value="Not Done">Not Done</option>
+                </>
               )}
             </select>
           </div>
@@ -500,7 +784,7 @@ const Accounts = () => {
               value={formData.remarks}
               onChange={(e) => setFormData((prev) => ({ ...prev, remarks: e.target.value }))}
               rows={3}
-              placeholder="Add remarks here..."
+              placeholder="Add audit/tally remarks here..."
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
             />
           </div>
@@ -520,4 +804,3 @@ const Accounts = () => {
 };
 
 export default Accounts;
-

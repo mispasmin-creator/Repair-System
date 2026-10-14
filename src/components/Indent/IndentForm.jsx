@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from "react";
-import { cachedFetch } from "../../services/sheetCache";
 import { Plus, X, Upload, Loader2Icon } from "lucide-react";
 import Button from "../ui/Button";
 import SearchableSelect from "../ui/SearchableSelect";
 import toast from "react-hot-toast";
 import { useAuth } from "../../context/AuthContext";
+import { supabase } from "../../services/supabaseClient";
+import masterData from "../../data/masterData.json";
 
 const IndentForm = ({ onSubmit, onCancel, taskList }) => {
   const { user } = useAuth();
@@ -82,105 +83,38 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
   const FOLDER_ID = import.meta.env.VITE_FOLDER_ID;
 
   const fetchSheetData = async () => {
-    if (!DATA_FETCH_SCRIPT_URL || !DATA_SHEET_ID) return;
     try {
       setLoaderSheetData(true);
-      // Use getRepairTasks action — it already handles Repair System sheet (row 6 headers)
-      const res = await cachedFetch(
-        `${DATA_FETCH_SCRIPT_URL}?action=getRepairTasks&sheetId=${DATA_SHEET_ID}`
-      );
-      const result = await res.json();
+      const { data, error } = await supabase
+        .from("indent")
+        .select("task_no");
 
-      if (result.success && result.data) {
-        setSheetData(result.data);
-      } else {
-        console.warn("fetchSheetData (getRepairTasks):", result.error || result.message);
+      if (data && !error) {
+        setSheetData(data.map((d) => ({ "Task No": d.task_no, taskNo: d.task_no })));
       }
     } catch (err) {
-      console.warn("fetchSheetData error:", err);
+      console.warn("fetchSheetData Supabase error:", err);
     } finally {
       setLoaderSheetData(false);
     }
   };
 
   const fetchMasterSheetData = async () => {
-    if (!DATA_FETCH_SCRIPT_URL || !DATA_SHEET_ID) return;
-    const SHEET_NAME = "Master";
     try {
       setLoaderMasterSheetData(true);
-      const res = await cachedFetch(
-        `${DATA_FETCH_SCRIPT_URL}?sheetId=${DATA_SHEET_ID}&sheet=${SHEET_NAME}`
-      );
-      const result = await res.json();
+      const sortAlpha = (list = []) =>
+        [...list].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base", numeric: true }));
 
-      if (result.success && result.table) {
-        const headers = (result.table.cols || []).map((col) => (col.label || "").toString().trim());
-        const rows = result.table.rows || [];
-
-        // Helper to find column index by potential names or fallback index
-        const findColIndex = (possibleNames, fallbackIndex) => {
-          const idx = headers.findIndex((h) => {
-            const clean = h.toLowerCase().replace(/[^a-z0-9]/g, "");
-            return possibleNames.some((p) => clean.includes(p.toLowerCase().replace(/[^a-z0-9]/g, "")));
-          });
-          return idx !== -1 ? idx : fallbackIndex;
-        };
-
-        const indentorColIdx = findColIndex(["Indentor Name", "Indentor", "Doer Name", "Doer"], 0);
-        const authColIdx = findColIndex(["Authorized Name", "Authorized", "Given By"], 1);
-        const machineColIdx = findColIndex(["Machine Name", "Machine"], 2);
-        const deptColIdx = findColIndex(["Department", "Dept"], 3);
-        const uomColIdx = findColIndex(["UOM", "Unit"], 4);
-        const firmColIdx = findColIndex(["Firm Name", "Firm"], 5);
-        const priorityColIdx = findColIndex(["Priority"], -1);
-        const taskStatusColIdx = findColIndex(["Task Status", "Status"], -1);
-
-        const getColValues = (colIdx) => {
-          if (colIdx === -1 || colIdx === undefined) return [];
-          const seen = new Set();
-          const list = [];
-          rows.forEach((rowObj) => {
-            const cell = rowObj.c && rowObj.c[colIdx];
-            if (cell && cell.v !== null && cell.v !== undefined) {
-              const val = cell.v.toString().trim();
-              if (val && !seen.has(val.toLowerCase())) {
-                seen.add(val.toLowerCase());
-                list.push(val);
-              }
-            }
-          });
-          return list;
-        };
-
-        const sortAlpha = (list) =>
-          [...list].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base", numeric: true }));
-
-        const indentorList = sortAlpha(getColValues(indentorColIdx));
-        const authList = sortAlpha(getColValues(authColIdx));
-        const machineList = sortAlpha(getColValues(machineColIdx));
-        const deptList = sortAlpha(getColValues(deptColIdx));
-        const uomList = sortAlpha(getColValues(uomColIdx));
-        const firmList = sortAlpha(getColValues(firmColIdx));
-
-        setDoerName(indentorList);
-        setGivenByData(authList);
-        setMachineNameMasterData(machineList);
-        setDepartmentData(deptList);
-        setUomData(uomList);
-        setFirmNameData(firmList);
-
-        if (priorityColIdx !== -1) {
-          const priList = getColValues(priorityColIdx);
-          if (priList.length > 0) setPriorityData(sortAlpha(priList));
-        }
-        if (taskStatusColIdx !== -1) {
-          setTaskStatusData(sortAlpha(getColValues(taskStatusColIdx)));
-        }
-      } else {
-        console.error("Server error:", result.message || result.error);
-      }
+      setDoerName(sortAlpha(masterData["Indentor Name "] || []));
+      setGivenByData(sortAlpha(masterData["Authorized Name"] || []));
+      setMachineNameMasterData(sortAlpha(masterData["Machine Name"] || []));
+      setDepartmentData(sortAlpha(masterData["Department"] || []));
+      setUomData(sortAlpha(masterData["UOM"] || []));
+      setFirmNameData(sortAlpha(masterData["Firm Name"] || ["Pmmpl", "Purab", "Refrasynth", "Rkl", "Refratech"]));
+      setPriorityData(["Critical", "High", "Medium", "Low"]);
+      setTaskStatusData(["Pending", "Complete"]);
     } catch (err) {
-      console.error("Fetch error:", err);
+      console.error("Master data load error:", err);
     } finally {
       setLoaderMasterSheetData(false);
     }
@@ -462,60 +396,63 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
         Quantity: quantity,
       };
 
-      // Append all fields individually to formData
-      Object.entries(taskData).forEach(([key, value]) => {
-        formPayload.append(key, value);
-      });
+      // Calculate the assigned task number
+      const maxTaskNum = Math.max(
+        ...(sheetData || []).concat(taskList || []).map((t) => {
+          const m = (t.taskNo || t["Task No"] || "").match(/TR-(\d+)/i);
+          return m ? parseInt(m[1], 10) : 0;
+        }),
+        0
+      );
+      const assignedTaskNo = `TR-${String(maxTaskNum + 1).padStart(3, "0")}`;
 
-      // Submit to the correct sheet URL
-      const response = await fetch(`${SUBMIT_SCRIPT_URL}?headerRow=5`, {
-        method: "POST",
-        body: formPayload,
-      });
-
-      const result = await response.json();
-      
-      if (result.success || response.ok) {
-        toast.success(
-          result.taskNo
-            ? `✅ Task ${result.taskNo} assigned successfully!`
-            : "✅ Task assigned successfully!"
+      // Save directly to Supabase indent table
+      const { error: supaErr } = await supabase
+        .from("indent")
+        .upsert(
+          {
+            task_no: assignedTaskNo,
+            firm_name: selectedFirmName || "All",
+            machine_name: selectedMachine,
+            serial_no: selectedSerialNo,
+            department: selectedDepartment || null,
+            location: location || null,
+            machine_part_name: machinePartName || null,
+            priority: selectedPriority || "Medium",
+            uom: uom || null,
+            quantity: parseFloat(quantity) || 1,
+            problem_description: description || null,
+            given_by: selectedGivenBy || null,
+            indentor_name: selectedDoerName || null,
+            enable_reminders: enableReminder,
+            machine_image_url: userManualUrl || null,
+          },
+          { onConflict: "task_no" }
         );
 
-        // ✅ If user added a NEW machine name, save it to Master sheet silently
-        if (isAddingMachine && selectedMachine && DATA_FETCH_SCRIPT_URL && DATA_SHEET_ID) {
-          try {
-            await fetch(SUBMIT_SCRIPT_URL, {
-              method: "POST",
-              headers: { "Content-Type": "application/x-www-form-urlencoded" },
-              body: new URLSearchParams({
-                action: "addToMaster",
-                sheetName: "Master",
-                sheetId: DATA_SHEET_ID,
-                columnName: "Machine Name",
-                value: selectedMachine,
-              }).toString(),
-            });
-            // Refresh master data so dropdown shows new machine next time
-            fetchMasterSheetData();
-          } catch (masterErr) {
-            console.warn("Could not save machine to Master sheet:", masterErr);
-          }
-        }
-
-        // Clear form state
-        clearFormState();
-        
-        // Call onSubmit to refresh the parent component's data
-        if (onSubmit) {
-          onSubmit();
-        }
-        
-        // Close modal
-        onCancel();
-      } else {
-        throw new Error(result.message || "Submission failed");
+      if (supaErr) {
+        console.error("Supabase indent insert error:", supaErr);
+        toast.error("❌ Failed to save task: " + supaErr.message);
+        return;
       }
+
+      toast.success(`✅ Task ${assignedTaskNo} assigned successfully!`);
+
+      // If user added a NEW machine name, append to dropdown
+      if (isAddingMachine && selectedMachine) {
+        setMachineNameMasterData((prev) => [...prev, selectedMachine]);
+      }
+
+      // Clear form state
+      clearFormState();
+
+      // Call onSubmit to refresh the parent component's data
+      if (onSubmit) {
+        onSubmit();
+      }
+
+      // Close modal
+      onCancel();
 
     } catch (error) {
       console.error("❌ Submission failed:", error);

@@ -197,8 +197,6 @@ const RepairAdvance = () => {
         }),
         "Received Quantity": formData.receivedQuantity,
         "Bill Match": formData.billMatch,
-        "Bill Image": billImageUrl,
-        "Bill No.": formData.billNo,
         "Product Image": billImageUrl,
       };
 

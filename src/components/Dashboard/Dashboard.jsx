@@ -22,8 +22,17 @@ import { BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveCo
 import { useAuth } from "../../context/AuthContext";
 import useDataStore from "../../store/dataStore";
 import { fetchRepairSheet } from "../../services/repairService";
+import masterData from "../../data/masterData.json";
 import Button from "../ui/Button";
 import toast from "react-hot-toast";
+
+const parseSafeNumber = (val) => {
+  if (val === null || val === undefined || val === "" || val === "-") return 0;
+  if (typeof val === "number") return isNaN(val) ? 0 : val;
+  const clean = String(val).replace(/[^0-9.-]+/g, "");
+  const num = parseFloat(clean);
+  return isNaN(num) ? 0 : num;
+};
 
 // Skeleton Loader Components
 const MetricCardSkeleton = () => (
@@ -127,16 +136,21 @@ const Dashboard = ({ setActiveTab }) => {
       if (!isBackground) {
         setLoading(true);
       }
-      const { rows } = await fetchRepairSheet(user?.firmName || "");
+      const { tasks: sheetTasks } = await fetchRepairSheet(user?.firmName || "");
 
-      const formattedTasks = rows.map((cells) => ({
-        status: cells[47] || "",
-        totalBillRepair: cells[36] || "",
-        department: cells[14] || "",
-        paymentType: cells[26] || "",
-        vendorName: cells[20] || "",
-        firmName: cells[2] || "",
-      }));
+      const formattedTasks = (sheetTasks || []).map((t) => {
+        const rawStatus = (t["Status"] || "").trim().toLowerCase();
+        const billAmt = parseSafeNumber(t["Total Bill Amount"]) || parseSafeNumber(t["Amount"]) || parseSafeNumber(t["Transportation Charges"]) || 0;
+
+        return {
+          status: status,
+          totalBillRepair: billAmt,
+          department: t["Department"] || "General",
+          paymentType: t["Payment Type"] || "Normal",
+          vendorName: t["Vendor Name"] || t["Approved Vendor Name"] || "N/A",
+          firmName: t["Firm Name"] || "",
+        };
+      });
 
       setTasks(formattedTasks);
 
@@ -152,52 +166,13 @@ const Dashboard = ({ setActiveTab }) => {
       if (!isBackground) {
         setLoadingMaster(true);
       }
-      const SHEET_NAME_MASTER = "Master";
-      const result = await safeFetchJson(
-        `${SCRIPT_URL}?sheetId=${SHEET_Id}&sheet=${SHEET_NAME_MASTER}`
-      );
-      if (result && result.table && result.table.rows) {
-        const rows = result.table.rows;
-        const cols = result.table.cols || [];
+      const loadedVendors = masterData["Vendor Name"] || [];
+      const loadedTransporters = masterData["Transporter Name"] || ["Self", "Boby Cargo", "Gagan Roadways", "OM Logistics", "V-Trans"];
+      const loadedPaymentTypes = masterData["Payment Type"] || ["Advance", "Full", "Cash"];
 
-        // Resolve Vendor Name / Transporter Name columns by header text,
-        // falling back to the original fixed positions (0, 1) if not found.
-        const vendorColIdx = cols.findIndex(
-          (c) => (c.label || "").toLowerCase().replace(/[^a-z0-9]/g, "") === "vendorname"
-        );
-        const resolvedVendorIdx = vendorColIdx !== -1 ? vendorColIdx : 0;
-
-        const transporterColIdx = cols.findIndex(
-          (c) => (c.label || "").toLowerCase().replace(/[^a-z0-9]/g, "") === "transportername"
-        );
-        const resolvedTransporterIdx = transporterColIdx !== -1 ? transporterColIdx : 1;
-
-        const loadedVendors = rows
-          .map((row) => row.c[resolvedVendorIdx]?.v)
-          .filter((v) => v !== null && v !== undefined && v.toString().trim() !== "");
-        const loadedTransporters = rows
-          .map((row) => row.c[resolvedTransporterIdx]?.v)
-          .filter((v) => v !== null && v !== undefined && v.toString().trim() !== "");
-
-        setVendors(loadedVendors);
-        setTransporters(loadedTransporters);
-
-        const pTypeColIdx = (result.table.cols || []).findIndex(
-          (c) => (c.label || "").toLowerCase().replace(/[^a-z0-9]/g, "") === "paymenttype"
-        );
-        const resolvedPTypeIdx = pTypeColIdx !== -1 ? pTypeColIdx : 6;
-        const loadedPaymentTypes = [
-          ...new Set(
-            rows
-              .map((row) => row.c[resolvedPTypeIdx]?.v)
-              .filter((v) => v !== null && v !== undefined && v.toString().trim() !== "")
-              .map((v) => v.toString().trim())
-          ),
-        ];
-        if (loadedPaymentTypes.length > 0) {
-          setPaymentTypes(loadedPaymentTypes);
-        }
-      }
+      setVendors(loadedVendors);
+      setTransporters(loadedTransporters);
+      setPaymentTypes(loadedPaymentTypes);
     } catch (err) {
       console.error("Error fetching master lists:", err);
     } finally {
@@ -251,7 +226,7 @@ const Dashboard = ({ setActiveTab }) => {
       setTotalCompletedTask(compeletedTask);
 
       const totalRepairBill = filteredTasks.reduce((sum, item) => {
-        return sum + Number(item.totalBillRepair || 0);
+        return sum + parseSafeNumber(item.totalBillRepair);
       }, 0);
       setTotalRepairBill(totalRepairBill);
 
@@ -276,7 +251,7 @@ const Dashboard = ({ setActiveTab }) => {
         if (!acc[type]) {
           acc[type] = 0;
         }
-        acc[type] += Number(task.totalBillRepair || 0);
+        acc[type] += parseSafeNumber(task.totalBillRepair);
         return acc;
       }, {});
 
@@ -289,11 +264,11 @@ const Dashboard = ({ setActiveTab }) => {
       setPaymentTypeDistribution(paymentTypeDistribution);
 
       const topRepairs = [...filteredTasks]
-        .sort((a, b) => Number(b.totalBillRepair || 0) - Number(a.totalBillRepair || 0))
+        .sort((a, b) => parseSafeNumber(b.totalBillRepair) - parseSafeNumber(a.totalBillRepair))
         .slice(0, 5)
         .map(task => ({
           vendor: task.vendorName,
-          cost: Number(task.totalBillRepair || 0)
+          cost: parseSafeNumber(task.totalBillRepair)
         }));
       setVendorWiseRepairCosts(topRepairs);
     } else {
@@ -386,10 +361,10 @@ const Dashboard = ({ setActiveTab }) => {
             />
             <MetricCard
               title="Total Repair Cost"
-              value={`₹${totalRepairBill.toLocaleString()}`}
+              value={`₹${(totalRepairBill || 0).toLocaleString()}`}
               icon={DollarSign}
               gradient="from-amber-500 via-orange-500 to-rose-500"
-              trend={`Average ₹${(totalRepairBill / Math.max(filteredTasks?.length, 1)).toFixed(0)} per task`}
+              trend={`Average ₹${((totalRepairBill || 0) / Math.max(filteredTasks?.length, 1)).toFixed(0)} per task`}
             />
           </>
         )}

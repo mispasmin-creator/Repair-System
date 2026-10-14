@@ -17,6 +17,8 @@ import useDataStore from "../../store/dataStore";
 import toast from "react-hot-toast";
 import { fetchRepairTasks as fetchRepairTasksSvc } from "../../services/repairService";
 import { fetchAdvancePayments, updateAdvancePayment, getTodayIST, isAdvanceRow } from "../../services/advancePaymentService";
+import ImagePreviewModal from "../ui/ImagePreviewModal";
+import { openDrivePreview } from "../../utils/driveUtils";
 
 const CheckMachine = () => {
   const { user } = useAuth();
@@ -36,6 +38,12 @@ const CheckMachine = () => {
   const [selectedTask, setSelectedTask] = useState(null);
   const [loadingTasks, setLoadingTasks] = useState(false);
   const [loaderSubmit, setLoaderSubmit] = useState(false);
+  const [previewImage, setPreviewImage] = useState({ isOpen: false, url: "", title: "" });
+
+  const handleViewImage = (url, title = "Image Preview") => {
+    if (!url) return;
+    setPreviewImage({ isOpen: true, url, title });
+  };
 
   // Common Bill linking states
   const [selectedCommonTasks, setSelectedCommonTasks] = useState([]);
@@ -158,6 +166,8 @@ const CheckMachine = () => {
           priority: row["Priority"] || "",
           department: row["Department"] || "",
           location: row["Location"] || "",
+          machineImageUrl: row["Image Link"] || row["machine_image_url"] || "",
+          transportingImage: row["Transporting Image With Machine"] || row["transport_image_url"] || "",
           // Sent Machine step
           planned: row["Planned 1"] || "",
           actual: row["Actual 1"] || "",
@@ -647,11 +657,13 @@ const CheckMachine = () => {
                 <TableHead className="min-w-[100px]">Lead Time</TableHead>
                 <TableHead className="min-w-[120px]">Payment Type</TableHead>
                 <TableHead className="min-w-[120px]">Advance Amount</TableHead>
+                <TableHead className="min-w-[120px]">Machine Image</TableHead>
+                <TableHead className="min-w-[130px]">Transport Image</TableHead>
               </TableHeader>
               <TableBody>
                 {loadingTasks && pendingRepairTasks.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={12} className="text-center py-12">
+                    <TableCell colSpan={14} className="text-center py-12">
                       <div className="flex flex-col items-center justify-center">
                         <div className="w-9 h-9 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                         <p className="mt-3 text-sm text-gray-500 font-medium">Loading tasks...</p>
@@ -660,7 +672,7 @@ const CheckMachine = () => {
                   </TableRow>
                 ) : displayedPendingTasks.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={12} className="text-center py-12 text-gray-500">
+                    <TableCell colSpan={14} className="text-center py-12 text-gray-500">
                       No pending tasks found
                     </TableCell>
                   </TableRow>
@@ -700,6 +712,32 @@ const CheckMachine = () => {
                       <TableCell>{task.leadTimeToDeliverDays ? `${task.leadTimeToDeliverDays} Days` : "-"}</TableCell>
                       <TableCell>{task.paymentType || "-"}</TableCell>
                       <TableCell>{task.howMuch ? `₹${Number(task.howMuch).toLocaleString()}` : "-"}</TableCell>
+                      <TableCell>
+                        {task.machineImageUrl ? (
+                          <button
+                            type="button"
+                            onClick={() => handleViewImage(task.machineImageUrl, `Machine Photo (Indent) — ${task.taskNo}`)}
+                            className="text-blue-600 underline text-xs hover:text-blue-800 font-medium cursor-pointer"
+                          >
+                            View Machine
+                          </button>
+                        ) : (
+                          <span className="text-gray-400 text-xs">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {task.transportingImage ? (
+                          <button
+                            type="button"
+                            onClick={() => handleViewImage(task.transportingImage, `Transport Photo (Sent To Vendor) — ${task.taskNo}`)}
+                            className="text-blue-600 underline text-xs hover:text-blue-800 font-medium cursor-pointer"
+                          >
+                            View Transport
+                          </button>
+                        ) : (
+                          <span className="text-gray-400 text-xs">-</span>
+                        )}
+                      </TableCell>
                     </TableRow>
                   ))
                 )}
@@ -727,12 +765,14 @@ const CheckMachine = () => {
                 <TableHead className="min-w-[120px]">Bill No</TableHead>
                 <TableHead className="min-w-[120px]">Bill Type</TableHead>
                 <TableHead className="min-w-[120px]">Total Bill Amount</TableHead>
+                <TableHead className="min-w-[120px]">Machine Image</TableHead>
+                <TableHead className="min-w-[130px]">Transport Image</TableHead>
                 <TableHead className="min-w-[120px]">Bill Image</TableHead>
               </TableHeader>
               <TableBody>
                 {loadingTasks && historyRepairTasks.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={16} className="text-center py-12">
+                    <TableCell colSpan={18} className="text-center py-12">
                       <div className="flex flex-col items-center justify-center">
                         <div className="w-9 h-9 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                         <p className="mt-3 text-sm text-gray-500 font-medium">Loading tasks...</p>
@@ -741,7 +781,7 @@ const CheckMachine = () => {
                   </TableRow>
                 ) : displayedHistoryTasks.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={16} className="text-center py-12 text-gray-500">
+                    <TableCell colSpan={18} className="text-center py-12 text-gray-500">
                       No history tasks found
                     </TableCell>
                   </TableRow>
@@ -797,15 +837,50 @@ const CheckMachine = () => {
                         {task.totalBillAmount ? `₹${Number(task.totalBillAmount).toLocaleString()}` : "-"}
                       </TableCell>
                       <TableCell>
+                        {task.machineImageUrl ? (
+                          <button
+                            type="button"
+                            className="text-blue-600 underline text-xs hover:text-blue-800 font-medium cursor-pointer"
+                            onClick={() =>
+                              handleViewImage(
+                                task.machineImageUrl,
+                                `Machine Photo (Indent) — ${task.taskNo}`
+                              )
+                            }
+                          >
+                            View Machine
+                          </button>
+                        ) : (
+                          <span className="text-gray-400 text-xs">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {task.transportingImage ? (
+                          <button
+                            type="button"
+                            className="text-blue-600 underline text-xs hover:text-blue-800 font-medium cursor-pointer"
+                            onClick={() =>
+                              handleViewImage(
+                                task.transportingImage,
+                                `Transport Photo (Sent To Vendor) — ${task.taskNo}`
+                              )
+                            }
+                          >
+                            View Transport
+                          </button>
+                        ) : (
+                          <span className="text-gray-400 text-xs">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
                         {task.billImage ? (
                           <button
                             type="button"
-                            className="text-blue-600 underline text-sm hover:text-blue-800 font-medium"
+                            className="text-blue-600 underline text-sm hover:text-blue-800 font-medium cursor-pointer"
                             onClick={() =>
-                              window.open(
+                              handleViewImage(
                                 task.billImage,
-                                "_blank",
-                                "noopener,noreferrer"
+                                `Bill Image — ${task.taskNo}`
                               )
                             }
                           >
@@ -891,6 +966,38 @@ const CheckMachine = () => {
                 readOnly
                 className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-500"
               />
+            </div>
+
+            {/* Machine & Transport Photos Reference */}
+            <div className="col-span-1 md:col-span-2 p-3.5 bg-blue-50/80 border border-blue-200 rounded-lg">
+              <span className="text-xs font-bold text-blue-900 uppercase tracking-wide block mb-2">
+                Machine Photos Reference (From Indent & Sent To Vendor)
+              </span>
+              <div className="flex flex-wrap items-center gap-3 text-xs">
+                {selectedTask?.machineImageUrl ? (
+                  <button
+                    type="button"
+                    onClick={() => handleViewImage(selectedTask.machineImageUrl, `Machine Photo (Indent) — ${selectedTask.taskNo}`)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-blue-300 text-blue-700 hover:bg-blue-100 font-semibold rounded-md shadow-xs transition-colors cursor-pointer"
+                  >
+                    <span>📷 View Machine Photo (Indent)</span>
+                  </button>
+                ) : (
+                  <span className="text-gray-500 italic">No Indent Machine Photo</span>
+                )}
+
+                {selectedTask?.transportingImage ? (
+                  <button
+                    type="button"
+                    onClick={() => handleViewImage(selectedTask.transportingImage, `Transport Photo (Sent to Vendor) — ${selectedTask.taskNo}`)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-blue-300 text-blue-700 hover:bg-blue-100 font-semibold rounded-md shadow-xs transition-colors cursor-pointer"
+                  >
+                    <span>🚚 View Transport Photo (Sent to Vendor)</span>
+                  </button>
+                ) : (
+                  <span className="text-gray-500 italic">No Sent-To-Vendor Photo</span>
+                )}
+              </div>
             </div>
 
             {/* Existing fields... */}
@@ -1152,7 +1259,7 @@ const CheckMachine = () => {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Bill Image *
+                Bill Image * (Vendor Invoice Photo)
               </label>
               <input
                 type="file"
@@ -1163,8 +1270,24 @@ const CheckMachine = () => {
                     billImage: e.target.files[0],
                   }))
                 }
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
               />
+              {formData.billImage && (
+                <p className="text-xs text-green-600 mt-1 font-medium">
+                  ✓ Selected: {formData.billImage.name}
+                </p>
+              )}
+              {selectedTask?.billImage && !formData.billImage && (
+                <div className="mt-1">
+                  <button
+                    type="button"
+                    onClick={() => handleViewImage(selectedTask.billImage, `Bill Image — ${selectedTask.taskNo}`)}
+                    className="text-xs text-blue-600 underline font-medium hover:text-blue-800 cursor-pointer"
+                  >
+                    View Existing Bill Image
+                  </button>
+                </div>
+              )}
             </div>
             </>
             )}
@@ -1302,6 +1425,14 @@ const CheckMachine = () => {
           </div>
         </div>
       </Modal>
+
+      {/* In-app Image Viewer Modal */}
+      <ImagePreviewModal
+        isOpen={previewImage.isOpen}
+        onClose={() => setPreviewImage({ isOpen: false, url: "", title: "" })}
+        imageUrl={previewImage.url}
+        title={previewImage.title}
+      />
     </div>
   );
 };

@@ -16,6 +16,7 @@ import useDataStore from "../../store/dataStore";
 import toast from "react-hot-toast";
 import { fetchRepairTasks as fetchRepairTasksSvc } from "../../services/repairService";
 import { fetchAdvancePayments, updateAdvancePayment, getTodayIST, getNowIST, isAdvanceRow } from "../../services/advancePaymentService";
+import { openDrivePreview } from "../../utils/driveUtils";
 
 // Google Form URLs mapped by firm name
 const FIRM_FORM_URLS = {
@@ -1095,7 +1096,7 @@ const MakePayment = () => {
                           {(() => {
                             const billImageUrl = task.isAdvance ? task.billImageLink : task.billImage;
                             return billImageUrl ? (
-                              <button type="button" onClick={() => window.open(billImageUrl, "_blank", "noopener,noreferrer")} className="text-blue-600 underline text-sm hover:text-blue-800 font-medium">View Bill</button>
+                              <button type="button" onClick={() => openDrivePreview(billImageUrl)} className="text-blue-600 underline text-sm hover:text-blue-800 font-medium">View Bill</button>
                             ) : <span className="text-gray-400 text-xs">No Bill</span>;
                           })()}
                         </td>
@@ -1205,7 +1206,7 @@ const MakePayment = () => {
                             <button
                               type="button"
                               className="text-blue-600 underline text-sm hover:text-blue-800 font-medium"
-                              onClick={() => window.open(billImageUrl, "_blank", "noopener,noreferrer")}
+                              onClick={() => openDrivePreview(billImageUrl)}
                             >
                               View Bill
                             </button>

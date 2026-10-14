@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Search, Filter, Package, Loader2Icon, Zap } from "lucide-react";
+import { Search, Filter, Package, Loader2Icon, Zap, Upload, FileText, CheckCircle2 } from "lucide-react";
 import Button from "../ui/Button";
 import Modal from "../ui/Modal";
 import {
@@ -15,6 +15,8 @@ import useDataStore from "../../store/dataStore";
 import toast from "react-hot-toast";
 import { fetchRepairTasks as fetchRepairTasksSvc } from "../../services/repairService";
 import { fetchAdvancePayments, updateAdvancePayment, getTodayIST, isAdvanceRow } from "../../services/advancePaymentService";
+import { updateRepairTaskInSupabase } from "../../services/supabaseRepairService";
+import { openDrivePreview } from "../../utils/driveUtils";
 
 const StoreIn = () => {
   const { user } = useAuth();
@@ -40,6 +42,12 @@ const StoreIn = () => {
     productImage: "",
     billNo: ""
   });
+
+  // States for updating/correcting Bill Image
+  const [isBillModalOpen, setIsBillModalOpen] = useState(false);
+  const [taskForBillUpdate, setTaskForBillUpdate] = useState(null);
+  const [newBillFile, setNewBillFile] = useState(null);
+  const [billUploadLoading, setBillUploadLoading] = useState(false);
 
   const [showFilters, setShowFilters] = useState(false);
   const [selectedFirm, setSelectedFirm] = useState("All");
@@ -144,6 +152,7 @@ const StoreIn = () => {
           toBePaidAmount: row["To Be Paid Amount"] || "",
           planned2: row["Planned 3"] || "",
           actual2: row["Actual 3"] || "",
+          actualPayment: row["Actual 4"] || "",
           receivedQuantity: row["Received Quantity"] || "",
           billMatch: row["Bill Match"] || "",
           productImage: row["Product Image"] || "",
@@ -163,13 +172,13 @@ const StoreIn = () => {
         );
       };
 
-      // Normal pending: Actual 2 filled + Actual 3 empty — child tasks hidden
+      // Normal pending: Payment done (Actual 4) + Store In empty (Actual 3) — child tasks hidden
       const normalPending = formattedTasks.filter(
-        (t) => t.actual1 && !t.actual2 && !isChildTask(t.taskNo)
+        (t) => t.actualPayment && !t.actual2 && !isChildTask(t.taskNo)
       );
-      // Normal history: Actual 3 filled — child tasks hidden
+      // Normal history: Store In filled (Actual 3) — child tasks hidden
       const normalHistory = formattedTasks.filter(
-        (t) => t.actual1 && t.actual2 && !isChildTask(t.taskNo)
+        (t) => t.actual2 && !isChildTask(t.taskNo)
       );
 
       // Advance Step 5 pending: Actual Check Machine Date filled + Actual Store In Date empty
@@ -292,9 +301,9 @@ const StoreIn = () => {
 
     try {
       setSubmitLoading(true);
-      let billImageUrl = "";
+      let productImageUrl = "";
       if (formData.productImage) {
-        billImageUrl = await uploadFileToDrive(formData.productImage);
+        productImageUrl = await uploadFileToDrive(formData.productImage);
       }
 
       const todayIST = getTodayIST();
@@ -305,6 +314,7 @@ const StoreIn = () => {
           "Actual Store In Date": todayIST,
           "Received Quantity": formData.receivedQuantity || "",
           "Store In Done By": user?.name || "",
+          "Product Image": productImageUrl || "",
         });
 
         if (result.success) {
@@ -325,9 +335,7 @@ const StoreIn = () => {
         "Actual 3": todayIST,
         "Received Quantity": formData.receivedQuantity,
         "Bill Match": formData.billMatch ? "Yes" : "No",
-        "Bill Image": billImageUrl,
-        "Bill No.": formData.billNo,
-        "Product Image": billImageUrl,
+        "Product Image": productImageUrl,
       };
 
       const response = await fetch(SCRIPT_URL, {
@@ -341,20 +349,26 @@ const StoreIn = () => {
       const result = await response.json();
 
       if (result.success) {
-        // Update the Zustand store
+        // Direct sync to Supabase
+        await updateRepairTaskInSupabase(selectedTask.taskNo, {
+          "Actual 3": todayIST,
+          "Received Quantity": formData.receivedQuantity,
+          "Bill Match": formData.billMatch ? "Yes" : "No",
+          "Product Image": productImageUrl,
+        }).catch((err) => console.error("Supabase direct update error:", err));
+
+        // Update the Zustand store - preserving Check Machine billImage intact
         updateRepairTask(selectedTask.taskNo, {
-          actual2: payload.Actual2,
+          actual2: todayIST,
           receivedQuantity: formData.receivedQuantity,
           billMatch: formData.billMatch ? "Yes" : "No",
-          billImage: billImageUrl,
-          billNo: formData.billNo,
-          productImage: billImageUrl
+          productImage: productImageUrl
         });
         
         // Refresh data after successful update
         await fetchAllTasks();
         
-        toast.success("✅ Task updated successfully");
+        toast.success("✅ Store In submitted successfully");
         setIsModalOpen(false);
       } else {
         toast.error("❌ Failed to update task: " + result.message);
@@ -364,6 +378,64 @@ const StoreIn = () => {
       toast.error("❌ Something went wrong while submitting");
     } finally {
       setSubmitLoading(false);
+    }
+  };
+
+  const handleOpenBillUpdate = (task) => {
+    setTaskForBillUpdate(task);
+    setNewBillFile(null);
+    setIsBillModalOpen(true);
+  };
+
+  const handleSaveBillUpdate = async (e) => {
+    e.preventDefault();
+    if (!newBillFile || !taskForBillUpdate) {
+      toast.error("Please select a bill image to upload");
+      return;
+    }
+
+    try {
+      setBillUploadLoading(true);
+      const billUrl = await uploadFileToDrive(newBillFile);
+      if (!billUrl) {
+        toast.error("❌ Failed to upload bill to Drive");
+        return;
+      }
+
+      if (taskForBillUpdate.isAdvance) {
+        await updateAdvancePayment(taskForBillUpdate.taskNo, {
+          "Bill Image Link": billUrl,
+        });
+      } else {
+        const payload = {
+          action: "update1",
+          sheetName: "Repair System",
+          taskNo: taskForBillUpdate.taskNo,
+          "Bill Image": billUrl,
+        };
+
+        await fetch(SCRIPT_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+          body: new URLSearchParams(payload).toString(),
+        });
+
+        await updateRepairTaskInSupabase(taskForBillUpdate.taskNo, {
+          "Bill Image": billUrl,
+        }).catch((err) => console.error("Supabase bill update err:", err));
+      }
+
+      toast.success("✅ Bill image updated successfully!");
+      setIsBillModalOpen(false);
+      setNewBillFile(null);
+      await fetchAllTasks();
+    } catch (err) {
+      console.error("Bill update error:", err);
+      toast.error("❌ Failed to update bill image");
+    } finally {
+      setBillUploadLoading(false);
     }
   };
 
@@ -556,17 +628,20 @@ const StoreIn = () => {
                       <TableCell>{task.paymentType || "-"}</TableCell>
                       <TableCell>{task.howMuch ? `₹${Number(task.howMuch).toLocaleString()}` : "-"}</TableCell>
                       <TableCell>
-                        {task.billImage ? (
-                          <button
-                            type="button"
-                            className="text-blue-600 underline text-sm hover:text-blue-800 font-medium"
-                            onClick={() => window.open(task.billImage, "_blank", "noopener,noreferrer")}
-                          >
-                            View Bill
-                          </button>
-                        ) : (
-                          <span className="text-gray-400 text-xs">No Bill</span>
-                        )}
+                        {(() => {
+                          const billImg = task.billImage || task.billImageLink;
+                          return billImg ? (
+                            <button
+                              type="button"
+                              className="text-blue-600 underline text-sm hover:text-blue-800 font-medium cursor-pointer"
+                              onClick={() => openDrivePreview(billImg)}
+                            >
+                              View Bill
+                            </button>
+                          ) : (
+                            <span className="text-gray-400 text-xs">No Bill</span>
+                          );
+                        })()}
                       </TableCell>
                       <TableCell>{task.billNo || "-"}</TableCell>
                       <TableCell>{formatCurrency(getDisplayTotalAmount(task))}</TableCell>
@@ -591,6 +666,7 @@ const StoreIn = () => {
                 <TableHead className="min-w-[140px]">Vendor Name</TableHead>
                 <TableHead className="min-w-[130px]">Received Quantity</TableHead>
                 <TableHead className="min-w-[120px]">Bill Image</TableHead>
+                <TableHead className="min-w-[130px]">Product Image</TableHead>
                 <TableHead className="min-w-[120px]">Bill Amount</TableHead>
                 <TableHead className="min-w-[120px]">To Be Paid</TableHead>
                 <TableHead className="min-w-[120px]">Bill Match</TableHead>
@@ -598,7 +674,7 @@ const StoreIn = () => {
               <TableBody>
                 {loadingTasks ? (
                   <TableRow>
-                    <TableCell colSpan={11} className="text-center py-12">
+                    <TableCell colSpan={12} className="text-center py-12">
                       <div className="flex flex-col items-center justify-center">
                         <div className="w-9 h-9 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                         <p className="mt-3 text-sm text-gray-500 font-medium">Loading tasks...</p>
@@ -607,7 +683,7 @@ const StoreIn = () => {
                   </TableRow>
                 ) : filteredHistoryTasks.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={11} className="text-center py-12 text-gray-500">
+                    <TableCell colSpan={12} className="text-center py-12 text-gray-500">
                       No history tasks found
                     </TableCell>
                   </TableRow>
@@ -624,16 +700,42 @@ const StoreIn = () => {
                       <TableCell>{task.vendorName || "-"}</TableCell>
                       <TableCell>{task.receivedQuantity || "-"}</TableCell>
                       <TableCell>
-                        {task.billImage ? (
+                        <div className="flex items-center space-x-1.5">
+                          {(() => {
+                            const billImg = task.billImage || task.billImageLink;
+                            return billImg ? (
+                              <button
+                                type="button"
+                                className="text-blue-600 underline text-sm hover:text-blue-800 font-medium cursor-pointer"
+                                onClick={() => openDrivePreview(billImg)}
+                              >
+                                View Bill
+                              </button>
+                            ) : (
+                              <span className="text-gray-400 text-xs">No Bill</span>
+                            );
+                          })()}
                           <button
                             type="button"
-                            className="text-blue-600 underline text-sm hover:text-blue-800 font-medium"
-                            onClick={() => window.open(task.billImage, "_blank", "noopener,noreferrer")}
+                            title="Update / Re-upload Bill Image"
+                            className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                            onClick={() => handleOpenBillUpdate(task)}
                           >
-                            View Bill
+                            <Upload className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {task.productImage ? (
+                          <button
+                            type="button"
+                            className="text-emerald-600 underline text-sm hover:text-emerald-800 font-medium cursor-pointer"
+                            onClick={() => openDrivePreview(task.productImage)}
+                          >
+                            View Product
                           </button>
                         ) : (
-                          <span className="text-gray-400 text-xs">No Bill</span>
+                          <span className="text-gray-400 text-xs">-</span>
                         )}
                       </TableCell>
                       <TableCell>{formatCurrency(getDisplayTotalAmount(task))}</TableCell>
@@ -658,6 +760,7 @@ const StoreIn = () => {
         )}
       </div>
 
+      {/* Modal 1: Store In Material */}
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
@@ -665,6 +768,35 @@ const StoreIn = () => {
         size="lg"
       >
         <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Bill reference card from Check Machine */}
+          <div className="p-3.5 bg-blue-50 border border-blue-200 rounded-lg text-sm flex items-center justify-between">
+            <div className="space-y-1">
+              <p className="font-semibold text-blue-900 flex items-center">
+                <FileText className="w-4 h-4 mr-1.5 text-blue-600" />
+                Check Machine Bill Information
+              </p>
+              <p className="text-xs text-blue-800">
+                Bill No: <strong>{selectedTask?.billNo || "N/A"}</strong>
+                {" | "}
+                Total Amount: <strong>{formatCurrency(getDisplayTotalAmount(selectedTask))}</strong>
+              </p>
+            </div>
+            {(() => {
+              const bImg = selectedTask?.billImage || selectedTask?.billImageLink;
+              return bImg ? (
+                <button
+                  type="button"
+                  onClick={() => openDrivePreview(bImg)}
+                  className="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-md hover:bg-blue-700 transition shadow-sm"
+                >
+                  View Bill Image
+                </button>
+              ) : (
+                <span className="text-gray-400 text-xs italic">No Bill Uploaded</span>
+              );
+            })()}
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -726,7 +858,7 @@ const StoreIn = () => {
 
           <div className="space-y-4">
             <label className="block text-sm font-medium text-gray-700">
-              Product Image
+              Product Image (Machine/Item received at Store)
             </label>
             <input
               type="file"
@@ -759,7 +891,7 @@ const StoreIn = () => {
                 }
                 className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
               />
-              <span className="ml-2 text-sm text-gray-700">Bill Match</span>
+              <span className="ml-2 text-sm text-gray-700">Bill Match (Received material matches the Bill)</span>
             </label>
           </div>
 
@@ -774,6 +906,72 @@ const StoreIn = () => {
             <Button type="submit" variant="primary" disabled={submitLoading}>
               {submitLoading && <Loader2Icon className="animate-spin mr-2" />}
               Submit
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Modal 2: Update / Re-upload Bill Image */}
+      <Modal
+        isOpen={isBillModalOpen}
+        onClose={() => setIsBillModalOpen(false)}
+        title="Update / Re-upload Bill Image"
+        size="md"
+      >
+        <form onSubmit={handleSaveBillUpdate} className="space-y-4">
+          <div className="p-3 bg-gray-50 border border-gray-200 rounded-md text-sm space-y-1">
+            <p><span className="text-gray-500">Task No:</span> <strong className="text-blue-600">{taskForBillUpdate?.taskNo}</strong></p>
+            <p><span className="text-gray-500">Machine:</span> <strong>{taskForBillUpdate?.machineName}</strong></p>
+            <p><span className="text-gray-500">Bill No:</span> <strong>{taskForBillUpdate?.billNo || "N/A"}</strong></p>
+            {(() => {
+              const bImg = taskForBillUpdate?.billImage || taskForBillUpdate?.billImageLink;
+              return bImg ? (
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={() => openDrivePreview(bImg)}
+                    className="text-xs text-blue-600 underline font-medium"
+                  >
+                    View Current Image
+                  </button>
+                </div>
+              ) : null;
+            })()}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Select Real Bill / Invoice Image *
+            </label>
+            <input
+              type="file"
+              accept="image/*"
+              required
+              onChange={(e) => setNewBillFile(e.target.files[0] || null)}
+              className="block w-full text-sm text-gray-500
+               file:mr-4 file:py-2 file:px-4
+               file:rounded-full file:border-0
+               file:text-sm file:font-semibold
+               file:bg-blue-50 file:text-blue-700
+               hover:file:bg-blue-100"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Yeh image Google Sheet aur Database me Check Machine ke Bill Image column me save hogi. Product Image bilkul safe rahegi.
+            </p>
+          </div>
+
+          <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setIsBillModalOpen(false)}
+              disabled={billUploadLoading}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" variant="primary" disabled={billUploadLoading}>
+              {billUploadLoading && <Loader2Icon className="animate-spin mr-2" />}
+              Save Bill Image
             </Button>
           </div>
         </form>

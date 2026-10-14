@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { cachedFetch } from "../../services/sheetCache";
+import { supabase } from "../../services/supabaseClient";
 import { Plus, Search, Filter } from "lucide-react";
 import Button from "../ui/Button";
 import Modal from "../ui/Modal";
@@ -64,94 +64,51 @@ const Indent = () => {
         (task.quantity || "").toLowerCase().includes(searchTerm.toLowerCase())
     );
 
-  const SCRIPT_URL = import.meta.env.VITE_SCRIPT_URL;
-  const SHEET_Id = import.meta.env.VITE_SHEET_ID;
-  const FOLDER_ID = import.meta.env.VITE_FOLDER_ID;
-
   const fetchAllTasks = async () => {
     try {
       setLoadingTasks(true);
-      const SHEET_NAME_TASK = "Repair System";
+      const { data, error } = await supabase
+        .from("indent")
+        .select(`
+          *,
+          accounts (status_1)
+        `)
+        .order("created_at", { ascending: false });
 
-      const res = await cachedFetch(
-        `${SCRIPT_URL}?sheetId=${SHEET_Id}&&sheet=${SHEET_NAME_TASK}`
-      );
-      const result = await res.json();
+      if (error) throw error;
 
-      const allRows = result?.table?.rows || [];
-
-      // Real headers live on row 6 (index 4 in allRows)
-      const headerCells = allRows[4]?.c || [];
-      const headerMap = {};
-      headerCells.forEach((cell, idx) => {
-        const headerName = cell?.v ? String(cell.v).trim().toLowerCase() : "";
-        if (headerName) {
-          headerMap[headerName] = idx;
-        }
-      });
-
-      // Skip first 5 rows (index 0 to 4)
-      const taskRows = allRows.slice(5);
-
-      const formattedTasks = taskRows.map((row, index) => {
-        const cells = row.c || [];
-
-        // Safe cell access with fallbacks (always returns a string, since sheet
-        // cells that look numeric come back as numbers and break .toLowerCase() calls downstream)
-        const getCellValue = (index) => {
-          const v = cells[index]?.v;
-          return v === null || v === undefined ? "" : String(v);
-        };
-
-        const getByHeader = (key, fallbackIdx) => {
-          const lowerKey = key.toLowerCase();
-          if (headerMap[lowerKey] !== undefined) {
-            return getCellValue(headerMap[lowerKey]);
-          }
-          return fallbackIdx !== undefined ? getCellValue(fallbackIdx) : "";
-        };
-
-        // Get status from column AV (index 47)
-        const statusValue = getByHeader("status", 47);
-        let status;
-        if (statusValue.toLowerCase() === "complete") {
-          status = "Complete";
-        } else if (statusValue.toLowerCase() === "pending") {
-          status = "Pending";
-        } else {
-          status = "Pending"; // Default to Pending if blank or any other value
-        }
+      const formattedTasks = (data || []).map((row, index) => {
+        const acc = Array.isArray(row.accounts) ? row.accounts[0] : row.accounts;
+        const status = (acc?.status_1 || "").toLowerCase() === "complete" ? "Complete" : "Pending";
 
         return {
-          id: `task-${index}`, // Add unique id for React keys
-          timestamp: getCellValue(0),
-          taskNo: getCellValue(1),
-          firmName: getCellValue(2),
-          serialNo: getCellValue(3),
-          machineName: getCellValue(4),
-          machinePartName: getCellValue(5),
-          givenBy: getCellValue(6),
-          doerName: getByHeader("doer name", 7) || getByHeader("indentor name", 7),
-          uom: getByHeader("uom"),
-          quantity: getByHeader("quantity"),
-          problem: getCellValue(8),
-          enableReminder: getCellValue(9),
-          requireAttachment: getCellValue(10),
-          taskStartDate: getByHeader("task start date", 11),
-          taskEndDate: getByHeader("task ending date", 12) || getByHeader("task end date", 12),
-          priority: getCellValue(13),
-          department: getCellValue(14),
-          location: getCellValue(15),
-          imageLink: getByHeader("image link", 16) || getCellValue(16),
+          id: row.id || `task-${index}`,
+          timestamp: row.created_at ? new Date(row.created_at).toLocaleString("en-GB", { timeZone: "Asia/Kolkata" }) : "",
+          taskNo: row.task_no || "",
+          firmName: row.firm_name || "",
+          serialNo: row.serial_no || "",
+          machineName: row.machine_name || "",
+          machinePartName: row.machine_part_name || "",
+          givenBy: row.given_by || "",
+          doerName: row.indentor_name || "",
+          uom: row.uom || "",
+          quantity: row.quantity !== null && row.quantity !== undefined ? String(row.quantity) : "1",
+          problem: row.problem_description || "",
+          enableReminder: row.enable_reminders ? "Yes" : "No",
+          requireAttachment: "No",
+          taskStartDate: row.task_start_date ? new Date(row.task_start_date).toLocaleDateString("en-GB", { timeZone: "Asia/Kolkata" }) : "",
+          taskEndDate: row.task_ending_date ? new Date(row.task_ending_date).toLocaleDateString("en-GB", { timeZone: "Asia/Kolkata" }) : "",
+          priority: row.priority || "Medium",
+          department: row.department || "",
+          location: row.location || "",
+          imageLink: row.machine_image_url || "",
           status: status,
         };
       });
 
-      console.log("Formatted Tasks:", formattedTasks);
       setTasks(formattedTasks);
     } catch (err) {
-      console.error("Error fetching tasks:", err);
-      // Set empty array on error to prevent rendering issues
+      console.error("Error fetching tasks from Supabase:", err);
       setTasks([]);
     } finally {
       setLoadingTasks(false);

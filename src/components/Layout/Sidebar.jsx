@@ -25,10 +25,9 @@ const Sidebar = ({ activeTab, setActiveTab }) => {
     { id: 'sent-machine', label: 'Sent to Vendor', icon: Send },
     { id: 'management-approval', label: 'Management Approval', icon: ShieldCheck },
     { id: 'check-machine', label: 'Check Machine', icon: CheckCircle },
-    { id: 'store-in', label: 'Store In', icon: Package },
     { id: 'posting', label: 'Process for payment', icon: ClipboardCheck },
-    // { id: 'repair-advance', label: 'Repair Advance', icon: CreditCard },
     { id: 'make-payment', label: 'Make Payment', icon: DollarSign },
+    { id: 'store-in', label: 'Store In', icon: Package },
     { id: 'accounts', label: 'Accounts', icon: Calculator },
   ];
 

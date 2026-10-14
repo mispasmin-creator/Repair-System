@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { cachedFetch } from "../../services/sheetCache";
+import { supabase } from "../../services/supabaseClient";
 import { Plus, Search, Loader2Icon, ShieldAlert, Edit, Filter } from "lucide-react";
 import Button from "../ui/Button";
 import Modal from "../ui/Modal";
@@ -81,39 +81,45 @@ const Users = () => {
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      const res = await cachedFetch(
-        `${SCRIPT_URL}?sheetId=${SHEET_Id}&sheet=Repair%20Login`
-      );
-      const result = await res.json();
+      const { data, error } = await supabase
+        .from("users")
+        .select("*")
+        .order("created_at", { ascending: true });
 
-      if (result.success && result.table && result.table.rows) {
-        const mappedUsers = result.table.rows.map((row, idx) => {
-          const cells = row.c || [];
-          return {
-            id: `user-${idx}`,
-            username: (cells[0]?.v || "").toString().trim(),
-            password: (cells[1]?.v || "").toString().trim(),
-            role: (cells[2]?.v || "").toString().trim(),
-            access: (cells[3]?.v || "").toString().trim(),
-            firmName: (cells[4]?.v || "").toString().trim(),
-          };
-        }).filter(u => u.username !== ""); // Filter out empty rows
+      if (error) throw error;
 
-        const viewerFirm = loggedInUser?.firmName || "";
-        const isAllFirm = !viewerFirm || viewerFirm.toLowerCase() === "all";
-        const scopedUsers = isAllFirm
-          ? mappedUsers
-          : mappedUsers.filter(
-              (u) => (u.firmName || "").toLowerCase() === viewerFirm.toLowerCase()
-            );
+      const mappedUsers = (data || []).map((u, idx) => {
+        let accessStr = "";
+        if (u.page_access && typeof u.page_access === "object") {
+          accessStr = Object.entries(u.page_access)
+            .filter(([_, level]) => level && level !== "none")
+            .map(([pageKey, level]) => level === "view" ? `${pageKey} (View Only)` : pageKey)
+            .join(", ");
+        } else if (typeof u.page_access === "string") {
+          accessStr = u.page_access;
+        }
 
-        setUsers(scopedUsers);
-      } else {
-        console.error("Failed to load users:", result);
-        toast.error("❌ Failed to fetch users");
-      }
+        return {
+          id: u.id || `user-${idx}`,
+          username: u.username || "",
+          password: u.password || "",
+          role: u.role || "user",
+          access: accessStr,
+          firmName: u.firm_name || "All",
+        };
+      });
+
+      const viewerFirm = loggedInUser?.firmName || "";
+      const isAllFirm = !viewerFirm || viewerFirm.toLowerCase() === "all";
+      const scopedUsers = isAllFirm
+        ? mappedUsers
+        : mappedUsers.filter(
+            (u) => (u.firmName || "").toLowerCase().includes(viewerFirm.toLowerCase())
+          );
+
+      setUsers(scopedUsers);
     } catch (error) {
-      console.error("Error fetching users:", error);
+      console.error("Error fetching users from Supabase:", error);
       toast.error("❌ Error fetching users");
     } finally {
       setLoading(false);
@@ -197,43 +203,26 @@ const Users = () => {
     try {
       setLoaderSubmit(true);
 
-      const formPayload = new FormData();
-      formPayload.append("sheetName", "Repair Login");
+      const firmStr = Array.isArray(firmName) ? firmName.join(", ") : firmName;
+      const { error: supaErr } = await supabase
+        .from("users")
+        .upsert(
+          {
+            username: username.trim(),
+            password: password.trim(),
+            role: role,
+            firm_name: firmStr,
+            page_access: selectedPages,
+          },
+          { onConflict: "username" }
+        );
 
-      if (isEditMode) {
-        formPayload.append("action", "updateRow");
-        formPayload.append("keyColumn", "User Name");
-        formPayload.append("keyValue", username.trim());
-        
-        formPayload.append("Password", password.trim());
-        formPayload.append("Role", role);
-        formPayload.append("Page Access", accessList);
-        formPayload.append("Firm Name", Array.isArray(firmName) ? firmName.join(", ") : firmName);
-      } else {
-        formPayload.append("action", "insert");
-        
-        const userData = {
-          "User Name": username.trim(),
-          Password: password.trim(),
-          Role: role,
-          "Page Access": accessList,
-          "Firm Name": Array.isArray(firmName) ? firmName.join(", ") : firmName,
-        };
-
-        Object.entries(userData).forEach(([key, val]) => {
-          formPayload.append(key, val);
-        });
+      if (supaErr) {
+        toast.error("❌ Failed to save user: " + supaErr.message);
+        return;
       }
 
-      const response = await fetch(`${SCRIPT_URL}?headerRow=1`, {
-        method: "POST",
-        body: formPayload,
-      });
-
-      const result = await response.json();
-
-      if (result.success || response.ok) {
-        toast.success(isEditMode ? "✅ User updated successfully!" : "✅ User created successfully!");
+      toast.success(isEditMode ? "✅ User updated successfully!" : "✅ User created successfully!");
         
         // If the edited user is the currently logged-in user, update their session too
         if (isEditMode && loggedInUser?.name?.toLowerCase() === username.trim().toLowerCase()) {
@@ -263,9 +252,6 @@ const Users = () => {
 
         setIsModalOpen(false);
         fetchUsers();
-      } else {
-        throw new Error(result.message || "Failed to save user");
-      }
     } catch (error) {
       console.error("Error saving user:", error);
       toast.error(isEditMode ? "❌ Failed to update user" : "❌ Failed to add user");

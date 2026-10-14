@@ -12,13 +12,13 @@ const ADVANCE_SHEET_NAME = "Repair FMS Advance Payment";
  * Fetches all rows from "Repair FMS Advance Payment" sheet.
  * Returns objects keyed by Row 6 header names, with isAdvance: true flag.
  */
-// Concurrent callers share one network request (the Apps Script call is slow).
-let inFlightAdvancePayments = null;
+import {
+  fetchAdvancePaymentsFromSupabase,
+  updateAdvancePaymentInSupabase,
+} from "./supabaseRepairService.js";
 
-// Short-lived client cache so quick page-to-page navigation doesn't re-hit
-// the network for data another page just fetched. Cleared on every write via
-// updateAdvancePayment() so a refresh right after a submit sees the change.
-const CACHE_TTL_MS = 15000;
+let inFlightAdvancePayments = null;
+const CACHE_TTL_MS = 60000;
 let advancePaymentsCache = { data: null, ts: 0 };
 
 export const invalidateAdvancePaymentsCache = () => {
@@ -31,7 +31,7 @@ export const fetchAdvancePayments = (force = false) => {
   if (isFresh && !force) return Promise.resolve(advancePaymentsCache.data);
 
   if (!inFlightAdvancePayments) {
-    inFlightAdvancePayments = fetchAdvancePaymentsRaw()
+    inFlightAdvancePayments = fetchAdvancePaymentsFromSupabase()
       .then((data) => {
         advancePaymentsCache = { data, ts: Date.now() };
         return data;
@@ -43,101 +43,13 @@ export const fetchAdvancePayments = (force = false) => {
   return inFlightAdvancePayments;
 };
 
-const fetchAdvancePaymentsRaw = async () => {
-  const res = await fetch(
-    `${SCRIPT_URL}?action=getAdvancePayments&sheetId=${SHEET_ID}`
-  );
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const result = await res.json();
-  if (!result.success) throw new Error(result.error || "Failed to fetch advance payments");
-
-  const raw = result.data || [];
-
-  return raw
-    .filter((row) => Object.values(row).some((v) => v !== "" && v !== null && v !== undefined))
-    .map((row) => ({
-        isAdvance: true,
-        taskNo: row["Repair Task No"] || "",
-        repairTaskNo: row["Repair Task No"] || "",
-        firmName: row["Firm Name"] || "",
-        serialNo: row["Serial No"] || "",
-        machineName: row["Machine Name"] || row["Machine Name "] || "",
-        machinePartName: row["Machine Part Name"] || "",
-        department: row["Department"] || "",
-        vendorName: row["Vendor Name"] || row["Vendor Name "] || "",
-        paymentType: row["Payment Type"] || "Advance",
-        toBePaidAmount: row["To Be Paid Amount"] || "",
-        billNo: row["Bill No."] || "",
-        typeOfBill: row["Type of Bill"] || "",
-        totalBillAmount: row["Total Bill Amount"] || "",
-
-        // Management Approval
-        managementApprovalDate: row["Management Approval Date"] || "",
-        managementRemark: row["Management Remark"] || "",
-
-        // Step 2: Posting
-        plannedPosting: row["Planned Posting"] || "",
-        actualPosting: row["Actual Posting"] || "",
-        postingVoucherNo: row["Posting Voucher No"] || "",
-        postingDoneBy: row["Posting Done By"] || "",
-
-        // Step 3: Make Payment (Advance Release)
-        plannedPayment: row["Planned Payment"] || "",
-        actualPaymentDate: row["Actual Payment Date"] || "",
-        advancePaymentUTR: row["Advance Payment UTR / Cheque No"] || "",
-        advanceAmountPaid: row["Advance Amount Paid"] || "",
-        paymentDoneBy: row["Payment Done By"] || "",
-
-        // Step 4: Check Machine
-        plannedCheckMachine: row["Planned Check Machine"] || "",
-        actualCheckMachineDate: row["Actual Check Machine Date"] || "",
-        billDate: row["Bill Date"] || "",
-        billImageLink: row["Bill Image Link"] || "",
-        checkedBy: row["Checked By"] || "",
-
-        // Step 5: Store In
-        plannedStoreIn: row["Planned Store In"] || "",
-        actualStoreInDate: row["Actual Store In Date"] || "",
-        receivedQuantity: row["Received Quantity"] || "",
-        storeInDoneBy: row["Store In Done By"] || "",
-
-        // Step 6: Full Billing
-        plannedFullBilling: row["Planned Full Billing"] || "",
-        actualFullBillingDate: row["Actual Full Billing Date"] || "",
-        balanceAmountToPay: row["Balance Amount To Pay"] || "",
-        balancePaymentUTR: row["Balance Payment UTR / Cheque No"] || "",
-        billingStatus: row["Billing Status"] || "",
-
-        // Step 7: Accounts
-        plannedAccounts: row["Planned Accounts"] || "",
-        actualAccountsDate: row["Actual Accounts Date"] || "",
-        accountsStatus: row["Accounts Status"] || "",
-        accountsRemark: row["Accounts Remark"] || "",
-    }));
-};
-
 /**
  * Updates specific fields in "Repair FMS Advance Payment" sheet
- * by matching Repair Task No (uses update1 action).
- * Keys must match exact sheet Row 6 header names.
+ * by matching Repair Task No natively in Supabase.
  */
 export const updateAdvancePayment = async (repairTaskNo, fields) => {
-  const payload = new URLSearchParams({
-    action: "update1",
-    sheetName: ADVANCE_SHEET_NAME,
-    taskNo: repairTaskNo,
-    ...fields,
-  });
-
-  const res = await fetch(SCRIPT_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: payload.toString(),
-  });
-
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const result = await res.json();
   invalidateAdvancePaymentsCache();
+  const result = await updateAdvancePaymentInSupabase(repairTaskNo, fields);
   return result;
 };
 
