@@ -13,6 +13,7 @@ import {
 } from "../ui/Table";
 import toast from "react-hot-toast";
 import { useAuth } from "../../context/AuthContext";
+import { matchesFirm } from "../../services/supabaseRepairService";
 
 const Users = () => {
   const { user: loggedInUser, updateUser } = useAuth();
@@ -113,9 +114,7 @@ const Users = () => {
       const isAllFirm = !viewerFirm || viewerFirm.toLowerCase() === "all";
       const scopedUsers = isAllFirm
         ? mappedUsers
-        : mappedUsers.filter(
-            (u) => (u.firmName || "").toLowerCase().includes(viewerFirm.toLowerCase())
-          );
+        : mappedUsers.filter((u) => matchesFirm(u.firmName, viewerFirm));
 
       setUsers(scopedUsers);
     } catch (error) {

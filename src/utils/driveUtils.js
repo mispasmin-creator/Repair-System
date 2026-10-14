@@ -60,3 +60,6 @@ export const openDrivePreview = (url) => {
     window.open(previewUrl, "_blank", "noopener,noreferrer");
   }
 };
+
+export const openFilePreview = openDrivePreview;
+

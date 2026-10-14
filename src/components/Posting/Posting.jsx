@@ -15,6 +15,7 @@ import { useAuth } from "../../context/AuthContext";
 import toast from "react-hot-toast";
 import { fetchRepairTasks as fetchRepairTasksSvc } from "../../services/repairService";
 import { fetchAdvancePayments, updateAdvancePayment, getTodayIST, getNowIST, isAdvanceRow } from "../../services/advancePaymentService";
+import { uploadFileToSupabase } from "../../services/storageService";
 
 const Posting = () => {
   const { user } = useAuth();
@@ -111,40 +112,16 @@ const Posting = () => {
   const SHEET_Id = import.meta.env.VITE_SHEET_ID;
   const FOLDER_ID = import.meta.env.VITE_FOLDER_ID;
 
-  const uploadFileToDrive = async (file) => {
-    const reader = new FileReader();
-
-    return new Promise((resolve, reject) => {
-      reader.onload = async () => {
-        const base64Data = reader.result;
-        try {
-          const res = await fetch(SCRIPT_URL, {
-            method: "POST",
-            headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            body: new URLSearchParams({
-              action: "uploadFile",
-              base64Data,
-              fileName: file.name,
-              mimeType: file.type,
-              folderId: FOLDER_ID,
-            }).toString(),
-          });
-          const data = await res.json();
-          if (data.success && data.fileUrl) {
-            resolve(data.fileUrl);
-          } else {
-            toast.error("❌ Bill image upload failed");
-            resolve("");
-          }
-        } catch (err) {
-          console.error("Upload error:", err);
-          toast.error("❌ Bill image upload failed due to network error");
-          resolve("");
-        }
-      };
-      reader.onerror = () => reject("❌ Failed to read file");
-      reader.readAsDataURL(file);
-    });
+  const uploadFile = async (file, prefix = "posting_bill") => {
+    if (!file) return "";
+    try {
+      const url = await uploadFileToSupabase(file, prefix);
+      return url;
+    } catch (err) {
+      console.error("Supabase Storage error:", err);
+      toast.error(err.message || "❌ Bill image upload failed");
+      return "";
+    }
   };
 
   const formatDate = (val) => {
@@ -229,7 +206,7 @@ const Posting = () => {
       if (!isBackground) setLoadingTasks(true);
 
       // Start the Advance sheet request in parallel with the Repair System one
-      const advancePromise = fetchAdvancePayments();
+      const advancePromise = fetchAdvancePayments(user?.firmName);
       advancePromise.catch(() => {});
 
       // ── Normal (Non-Advance) tasks from Repair System sheet ──────────────
@@ -318,13 +295,7 @@ const Posting = () => {
       let advHistory = [];
       let advWithParentFlag = [];
       try {
-        const advanceTasks = await advancePromise;
-        // Filter by firm if user is not all-firm
-        const userFirm = (user?.firmName || "").toLowerCase();
-        const isAllFirm = !userFirm || userFirm === "all";
-        const firmFiltered = isAllFirm
-          ? advanceTasks
-          : advanceTasks.filter((t) => (t.firmName || "").toLowerCase() === userFirm);
+        const firmFiltered = await advancePromise;
 
         // Mark child tasks for advance payments too (same logic as Normal tasks)
         // Grouped by Firm Name + Bill No. together so different firms with a
@@ -416,7 +387,7 @@ const Posting = () => {
         // ── ADVANCE: Update "Repair FMS Advance Payment" sheet ─────────────
         let billImageUrl = "";
         if (billReceivedNow && formData.billImage) {
-          billImageUrl = await uploadFileToDrive(formData.billImage);
+          billImageUrl = await uploadFile(formData.billImage, "advance_posting_bill");
         }
 
         const advanceFields = {

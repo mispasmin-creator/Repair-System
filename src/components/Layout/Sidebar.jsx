@@ -75,7 +75,7 @@ const Sidebar = ({ activeTab, setActiveTab }) => {
                 <button
                   onClick={() => setActiveTab(item.id)}
                   title={item.label}
-                  className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition-all duration-200 text-left ${
+                  className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors duration-100 text-left ${
                     activeTab === item.id
                       ? 'bg-blue-50 text-blue-600 border-r-4 border-blue-600 font-semibold'
                       : 'text-gray-600 hover:bg-gray-50 hover:text-gray-800'
@@ -107,7 +107,7 @@ const Sidebar = ({ activeTab, setActiveTab }) => {
       <div className="px-3 pb-4 flex-shrink-0 border-t border-gray-200">
         <button
           onClick={logout}
-          className="w-full flex items-center space-x-3 px-3 py-2.5 mt-2 text-gray-600 hover:bg-red-50 hover:text-red-600 rounded-lg transition-all duration-200"
+          className="w-full flex items-center space-x-3 px-3 py-2 mt-2 text-gray-600 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors duration-100"
         >
           <LogOut className="w-4 h-4 flex-shrink-0" />
           <span className="text-sm font-medium">Logout</span>

@@ -190,7 +190,7 @@ const Accounts = () => {
 
       const [rawTasks, advList] = await Promise.all([
         fetchRepairTasksSvc(user?.firmName),
-        fetchAdvancePaymentsFromSupabase().catch(() => []),
+        fetchAdvancePaymentsFromSupabase(user?.firmName).catch(() => []),
       ]);
 
       // Calculate pipeline stage pending counts

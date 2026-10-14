@@ -15,6 +15,7 @@ const ADVANCE_SHEET_NAME = "Repair FMS Advance Payment";
 import {
   fetchAdvancePaymentsFromSupabase,
   updateAdvancePaymentInSupabase,
+  matchesFirm,
 } from "./supabaseRepairService.js";
 
 let inFlightAdvancePayments = null;
@@ -25,10 +26,22 @@ export const invalidateAdvancePaymentsCache = () => {
   advancePaymentsCache = { data: null, ts: 0 };
 };
 
-export const fetchAdvancePayments = (force = false) => {
+export const filterAdvanceByFirm = (tasks, userFirmName = "") => {
+  return (tasks || []).filter((t) => matchesFirm(t.firmName, userFirmName));
+};
+
+export const fetchAdvancePayments = (userFirmName = "", force = false) => {
+  // Support calling fetchAdvancePayments(force) if first param is boolean
+  if (typeof userFirmName === "boolean") {
+    force = userFirmName;
+    userFirmName = "";
+  }
+
   const isFresh =
     advancePaymentsCache.data && Date.now() - advancePaymentsCache.ts < CACHE_TTL_MS;
-  if (isFresh && !force) return Promise.resolve(advancePaymentsCache.data);
+  if (isFresh && !force) {
+    return Promise.resolve(filterAdvanceByFirm(advancePaymentsCache.data, userFirmName));
+  }
 
   if (!inFlightAdvancePayments) {
     inFlightAdvancePayments = fetchAdvancePaymentsFromSupabase()
@@ -40,7 +53,7 @@ export const fetchAdvancePayments = (force = false) => {
         inFlightAdvancePayments = null;
       });
   }
-  return inFlightAdvancePayments;
+  return inFlightAdvancePayments.then((data) => filterAdvanceByFirm(data, userFirmName));
 };
 
 /**

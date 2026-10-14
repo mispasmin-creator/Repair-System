@@ -5,6 +5,7 @@ import SearchableSelect from "../ui/SearchableSelect";
 import toast from "react-hot-toast";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../services/supabaseClient";
+import { uploadFileToSupabase } from "../../services/storageService";
 import masterData from "../../data/masterData.json";
 
 const IndentForm = ({ onSubmit, onCancel, taskList }) => {
@@ -36,13 +37,19 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
   const [availableFrequencies, setAvailableFrequencies] = useState([]);
 
   const [selectedSerialNo, setSelectedSerialNo] = useState("");
-  const [selectedFirmName, setSelectedFirmName] = useState("");
+  
+  const userFirms =
+    user?.firmName && user.firmName.toLowerCase() !== "all"
+      ? user.firmName.split(",").map((f) => f.trim()).filter(Boolean)
+      : ["Pmmpl", "Purab", "Rkl", "Refrasynth", "Refratech"];
+
+  const [selectedFirmName, setSelectedFirmName] = useState(() => userFirms[0] || "Pmmpl");
 
   useEffect(() => {
-    if (user?.firmName && user.firmName.toLowerCase() !== "all") {
-      setSelectedFirmName(user.firmName);
+    if (userFirms.length > 0 && !userFirms.includes(selectedFirmName)) {
+      setSelectedFirmName(userFirms[0]);
     }
-  }, [user]);
+  }, [user?.firmName]);
   const [selectedGivenBy, setSelectedGivenBy] = useState("");
   const [selectedDoerName, setSelectedDoerName] = useState("");
   const [selectedTaskType, setSelectedTaskType] = useState("Select Task Type");
@@ -170,58 +177,22 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
     }
   }, [startDate, endDate]);
 
-  const uploadFileToDrive = async (file) => {
-    const reader = new FileReader();
-
-    return new Promise((resolve, reject) => {
-      reader.onload = async () => {
-        const base64Data = reader.result;
-
-        try {
-          const res = await fetch(SUBMIT_SCRIPT_URL, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/x-www-form-urlencoded",
-            },
-            body: new URLSearchParams({
-              action: "uploadFile",
-              base64Data: base64Data,
-              fileName: file.name,
-              mimeType: file.type || "image/jpeg",
-              folderId: FOLDER_ID,
-            }).toString(),
-          });
-
-          const data = await res.json();
-
-          console.log("FileUploadData:", data);
-
-          if (data.success && data.fileUrl) {
-            resolve(data.fileUrl);
-          } else {
-            console.error("File upload response error:", data);
-            toast.error("❌ Image upload issue: " + (data.error || "Google Drive file permission"));
-            resolve(data.fileUrl || "");
-          }
-        } catch (err) {
-          console.error("Upload error:", err);
-          toast.error("❌ Upload failed due to network error");
-          resolve("");
-        }
-      };
-
-      reader.onerror = () => {
-        reject("❌ Failed to read file");
-      };
-
-      reader.readAsDataURL(file);
-    });
+  const uploadFile = async (file, prefix = "indent_doc") => {
+    if (!file) return "";
+    try {
+      const url = await uploadFileToSupabase(file, prefix);
+      return url;
+    } catch (err) {
+      console.error("Supabase Storage error:", err);
+      toast.error(err.message || "❌ File upload failed");
+      return "";
+    }
   };
 
   const clearFormState = () => {
     setSelectedSerialNo("");
     setSelectedMachine("");
-    setSelectedFirmName("");
+    setSelectedFirmName(userFirms[0] || "Pmmpl");
     setSelectedGivenBy("");
     setSelectedDoerName("");
     setSelectedTaskType("Select Task Type");
@@ -356,7 +327,7 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
       // Upload file first if exists
       let userManualUrl = "";
       if (userManualFile) {
-        userManualUrl = await uploadFileToDrive(userManualFile);
+        userManualUrl = await uploadFile(userManualFile, "machine_manual");
       }
 
       const formPayload = new FormData();
@@ -465,6 +436,25 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
   return (
     <form onSubmit={handleSubmitForm} className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Firm Name Selection */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Firm Name *
+          </label>
+          <select
+            value={selectedFirmName}
+            onChange={(e) => setSelectedFirmName(e.target.value)}
+            required
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-white font-medium"
+          >
+            {userFirms.map((f) => (
+              <option key={f} value={f}>
+                {f}
+              </option>
+            ))}
+          </select>
+        </div>
+
         {/* Machine Name Dropdown */}
         <SearchableSelect
           id="machineName"

@@ -30,7 +30,7 @@ export const TableBody = ({ children, className = '' }) => {
 
 export const TableRow = ({ children, className = '' }) => {
   return (
-    <tr className={`hover:bg-blue-50/40 transition-colors duration-150 ${className}`}>
+    <tr className={`hover:bg-blue-50/50 ${className}`}>
       {children}
     </tr>
   );

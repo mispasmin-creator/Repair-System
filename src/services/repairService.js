@@ -10,6 +10,7 @@ const SHEET_ID = import.meta.env.VITE_SHEET_ID;
 import {
   fetchRepairTasksFromSupabase,
   updateRepairTaskInSupabase,
+  matchesFirm,
 } from "./supabaseRepairService.js";
 
 let inFlightRepairTasks = null;
@@ -52,16 +53,10 @@ export const fetchRepairTasks = async (userFirmName = "", { force = false } = {}
   return filterByFirm(all, userFirmName);
 };
 
-const filterByFirm = (tasks, userFirmName) => {
-  if (!userFirmName || userFirmName.toLowerCase() === "all") return tasks;
-  const allowed = userFirmName
-    .split(",")
-    .map((f) => f.trim().toLowerCase())
-    .filter(Boolean);
-  return (tasks || []).filter((t) => {
-    const firm = (t["Firm Name"] || "").toLowerCase().trim();
-    return allowed.includes(firm) || allowed.includes("all");
-  });
+export const filterByFirm = (tasks, userFirmName) => {
+  return (tasks || []).filter((t) =>
+    matchesFirm(t["Firm Name"] || t.firmName, userFirmName)
+  );
 };
 
 /**

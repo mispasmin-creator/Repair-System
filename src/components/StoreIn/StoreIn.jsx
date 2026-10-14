@@ -13,10 +13,11 @@ import {
 import { useAuth } from "../../context/AuthContext";
 import useDataStore from "../../store/dataStore";
 import toast from "react-hot-toast";
-import { fetchRepairTasks as fetchRepairTasksSvc } from "../../services/repairService";
+import { fetchRepairTasks as fetchRepairTasksSvc, invalidateRepairTasksCache } from "../../services/repairService";
 import { fetchAdvancePayments, updateAdvancePayment, getTodayIST, isAdvanceRow } from "../../services/advancePaymentService";
 import { updateRepairTaskInSupabase } from "../../services/supabaseRepairService";
 import { openDrivePreview } from "../../utils/driveUtils";
+import { uploadFileToSupabase } from "../../services/storageService";
 
 const StoreIn = () => {
   const { user } = useAuth();
@@ -96,7 +97,7 @@ const StoreIn = () => {
       if (!isBackground) setLoadingTasks(true);
 
       // Start the Advance sheet request in parallel with the Repair System one
-      const advancePromise = fetchAdvancePayments();
+      const advancePromise = fetchAdvancePayments(user?.firmName);
       advancePromise.catch(() => {});
 
       // Use shared service — returns objects keyed by sheet header names (Row 6)
@@ -186,12 +187,7 @@ const StoreIn = () => {
       let advHistory = [];
       let advWithParentFlag = [];
       try {
-        const advanceTasks = await advancePromise;
-        const userFirm = (user?.firmName || "").toLowerCase();
-        const isAllFirm = !userFirm || userFirm === "all";
-        const firmFiltered = isAllFirm
-          ? advanceTasks
-          : advanceTasks.filter((t) => (t.firmName || "").toLowerCase() === userFirm);
+        const firmFiltered = await advancePromise;
 
         // Mark child tasks for advance payments too (Firm Name + Bill No. based grouping as Normal)
         advWithParentFlag = firmFiltered.map((task) => {
@@ -251,49 +247,15 @@ const StoreIn = () => {
     fetchAllTasks(hasData);
   }, []);
 
-  const uploadFileToDrive = async (file) => {
-    const reader = new FileReader();
-
-    return new Promise((resolve, reject) => {
-      reader.onload = async () => {
-        const base64Data = reader.result;
-
-        try {
-          const res = await fetch(SCRIPT_URL, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/x-www-form-urlencoded",
-            },
-            body: new URLSearchParams({
-              action: "uploadFile",
-              base64Data: base64Data,
-              fileName: file.name,
-              mimeType: file.type,
-              folderId: FOLDER_ID,
-            }).toString(),
-          });
-
-          const data = await res.json();
-
-          if (data.success && data.fileUrl) {
-            resolve(data.fileUrl);
-          } else {
-            toast.error("❌ File upload failed");
-            resolve("");
-          }
-        } catch (err) {
-          console.error("Upload error:", err);
-          toast.error("❌ Upload failed due to network error");
-          resolve("");
-        }
-      };
-
-      reader.onerror = () => {
-        reject("❌ Failed to read file");
-      };
-
-      reader.readAsDataURL(file);
-    });
+  const uploadFile = async (file, prefix = "store") => {
+    try {
+      const url = await uploadFileToSupabase(file, prefix);
+      return url;
+    } catch (err) {
+      console.error("Supabase Storage error:", err);
+      toast.error(err.message || "❌ File upload failed");
+      return "";
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -303,7 +265,7 @@ const StoreIn = () => {
       setSubmitLoading(true);
       let productImageUrl = "";
       if (formData.productImage) {
-        productImageUrl = await uploadFileToDrive(formData.productImage);
+        productImageUrl = await uploadFile(formData.productImage, "store_product");
       }
 
       const todayIST = getTodayIST();
@@ -396,9 +358,9 @@ const StoreIn = () => {
 
     try {
       setBillUploadLoading(true);
-      const billUrl = await uploadFileToDrive(newBillFile);
+      const billUrl = await uploadFile(newBillFile, "store_bill");
       if (!billUrl) {
-        toast.error("❌ Failed to upload bill to Drive");
+        toast.error("❌ Failed to upload bill to Supabase Storage");
         return;
       }
 
@@ -420,17 +382,48 @@ const StoreIn = () => {
             "Content-Type": "application/x-www-form-urlencoded",
           },
           body: new URLSearchParams(payload).toString(),
-        });
+        }).catch((err) => console.error("Sheet bill update err:", err));
 
         await updateRepairTaskInSupabase(taskForBillUpdate.taskNo, {
           "Bill Image": billUrl,
-        }).catch((err) => console.error("Supabase bill update err:", err));
+        });
       }
 
-      toast.success("✅ Bill image updated successfully!");
+      // Update Zustand store and in-memory lists immediately
+      updateRepairTask(taskForBillUpdate.taskNo, {
+        billImage: billUrl,
+        billImageLink: billUrl,
+      });
+
+      setRepairTasks((prev) =>
+        prev.map((t) =>
+          t.taskNo === taskForBillUpdate.taskNo
+            ? { ...t, billImage: billUrl, billImageLink: billUrl }
+            : t
+        )
+      );
+      setHistoryRepairTasks((prev) =>
+        prev.map((t) =>
+          t.taskNo === taskForBillUpdate.taskNo
+            ? { ...t, billImage: billUrl, billImageLink: billUrl }
+            : t
+        )
+      );
+      setPendingRepairTasks((prev) =>
+        prev.map((t) =>
+          t.taskNo === taskForBillUpdate.taskNo
+            ? { ...t, billImage: billUrl, billImageLink: billUrl }
+            : t
+        )
+      );
+
+      // Invalidate cache and re-fetch to ensure sync
+      invalidateRepairTasksCache();
+
+      toast.success("✅ Bill image replaced successfully!");
       setIsBillModalOpen(false);
       setNewBillFile(null);
-      await fetchAllTasks();
+      await fetchAllTasks(true);
     } catch (err) {
       console.error("Bill update error:", err);
       toast.error("❌ Failed to update bill image");
@@ -665,6 +658,7 @@ const StoreIn = () => {
                 <TableHead className="min-w-[140px]">Part Name</TableHead>
                 <TableHead className="min-w-[140px]">Vendor Name</TableHead>
                 <TableHead className="min-w-[130px]">Received Quantity</TableHead>
+                <TableHead className="min-w-[120px]">Bill No</TableHead>
                 <TableHead className="min-w-[120px]">Bill Image</TableHead>
                 <TableHead className="min-w-[130px]">Product Image</TableHead>
                 <TableHead className="min-w-[120px]">Bill Amount</TableHead>
@@ -674,7 +668,7 @@ const StoreIn = () => {
               <TableBody>
                 {loadingTasks ? (
                   <TableRow>
-                    <TableCell colSpan={12} className="text-center py-12">
+                    <TableCell colSpan={13} className="text-center py-12">
                       <div className="flex flex-col items-center justify-center">
                         <div className="w-9 h-9 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                         <p className="mt-3 text-sm text-gray-500 font-medium">Loading tasks...</p>
@@ -683,7 +677,7 @@ const StoreIn = () => {
                   </TableRow>
                 ) : filteredHistoryTasks.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={12} className="text-center py-12 text-gray-500">
+                    <TableCell colSpan={13} className="text-center py-12 text-gray-500">
                       No history tasks found
                     </TableCell>
                   </TableRow>
@@ -699,6 +693,7 @@ const StoreIn = () => {
                       <TableCell>{task.machinePartName || "-"}</TableCell>
                       <TableCell>{task.vendorName || "-"}</TableCell>
                       <TableCell>{task.receivedQuantity || "-"}</TableCell>
+                      <TableCell className="font-medium text-gray-800">{task.billNo || "-"}</TableCell>
                       <TableCell>
                         <div className="flex items-center space-x-1.5">
                           {(() => {

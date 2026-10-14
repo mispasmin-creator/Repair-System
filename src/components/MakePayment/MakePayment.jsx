@@ -378,7 +378,7 @@ const MakePayment = () => {
       if (!isBackground) setLoadingTasks(true);
 
       // Start the Advance sheet request in parallel with the Repair System one
-      const advancePromise = fetchAdvancePayments();
+      const advancePromise = fetchAdvancePayments(user?.firmName);
       advancePromise.catch(() => {});
 
       const rawTasks = await fetchRepairTasksSvc(user?.firmName);
@@ -470,12 +470,7 @@ const MakePayment = () => {
       let advHistory = [];
       let advWithParentFlag = [];
       try {
-        const advanceTasks = await advancePromise;
-        const userFirm = (user?.firmName || "").toLowerCase();
-        const isAllFirm = !userFirm || userFirm === "all";
-        const firmFiltered = isAllFirm
-          ? advanceTasks
-          : advanceTasks.filter((t) => (t.firmName || "").toLowerCase() === userFirm);
+        const firmFiltered = await advancePromise;
 
         // Mark child tasks for advance payments too (Firm Name + Bill No. based grouping as Normal)
         advWithParentFlag = firmFiltered.map((task) => {

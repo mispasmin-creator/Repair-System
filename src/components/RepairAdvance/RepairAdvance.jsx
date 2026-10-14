@@ -14,6 +14,9 @@ import {
 import { mockRepairTasks } from "../../data/mockData";
 import { useAuth } from "../../context/AuthContext";
 import useDataStore from "../../store/dataStore";
+import { matchesFirm } from "../../services/supabaseRepairService";
+import { uploadFileToSupabase } from "../../services/storageService";
+import toast from "react-hot-toast";
 
 const RepairAdvance = () => {
   const { user } = useAuth();
@@ -124,12 +127,9 @@ const RepairAdvance = () => {
       // Planned2	,Actual2	,Delay2,	Received Quantity,	Bill Match,	Product Image,
 
       const userFirmName = user?.firmName || "";
-      const isAllFirm = !userFirmName || userFirmName.toLowerCase() === "all";
-
-      const filtered = formattedTasks.filter((task) => {
-        if (isAllFirm) return true;
-        return (task.firmName || "").toLowerCase() === userFirmName.toLowerCase();
-      });
+      const filtered = formattedTasks.filter((task) =>
+        matchesFirm(task.firmName, userFirmName)
+      );
 
       setTasks(filtered);
       setRepairTasks(filtered);
@@ -176,6 +176,17 @@ const RepairAdvance = () => {
   //   }
   // };
 
+  const uploadFile = async (file, prefix = "repair_advance") => {
+    if (!file) return "";
+    try {
+      return await uploadFileToSupabase(file, prefix);
+    } catch (err) {
+      console.error("Supabase Storage error:", err);
+      toast.error(err.message || "❌ Upload failed");
+      return "";
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -183,7 +194,7 @@ const RepairAdvance = () => {
       setSubmitLoading(true);
       let billImageUrl = "";
       if (formData.productImage) {
-        billImageUrl = await uploadFileToDrive(formData.productImage);
+        billImageUrl = await uploadFile(formData.productImage, "advance_product");
       }
 
       const payload = {

@@ -2,9 +2,9 @@ import React from 'react';
 
 const MetricCard = ({ title, value, icon: Icon, gradient, trend }) => {
   return (
-    <div className={`p-6 rounded-2xl shadow-lg bg-gradient-to-br ${gradient} text-white transform hover:-translate-y-1 hover:scale-[1.02] transition-all duration-300 cursor-pointer relative overflow-hidden group`}>
-      {/* Background glow animation effect */}
-      <div className="absolute -right-6 -bottom-6 w-24 h-24 bg-white/10 rounded-full blur-xl group-hover:scale-150 transition-all duration-500" />
+    <div className={`p-6 rounded-2xl shadow-lg bg-gradient-to-br ${gradient} text-white transition-transform duration-150 hover:-translate-y-0.5 cursor-pointer relative overflow-hidden group`}>
+      {/* Background glow effect */}
+      <div className="absolute -right-6 -bottom-6 w-24 h-24 bg-white/10 rounded-full" />
       
       <div className="flex items-center justify-between relative z-10">
         <div>

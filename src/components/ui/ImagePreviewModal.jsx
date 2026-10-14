@@ -9,7 +9,7 @@ const ImagePreviewModal = ({ isOpen, onClose, imageUrl, title = "Image Preview" 
   const driveViewUrl = getDrivePreviewUrl(imageUrl);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-fadeIn">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 animate-fadeIn">
       <div className="relative flex flex-col max-w-4xl w-full max-h-[90vh] bg-white rounded-xl shadow-2xl overflow-hidden">
         {/* Modal Header */}
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-200 bg-gray-50">

@@ -19,6 +19,7 @@ import { fetchRepairTasks as fetchRepairTasksSvc } from "../../services/repairSe
 import { fetchAdvancePayments, updateAdvancePayment, getTodayIST, isAdvanceRow } from "../../services/advancePaymentService";
 import ImagePreviewModal from "../ui/ImagePreviewModal";
 import { openDrivePreview } from "../../utils/driveUtils";
+import { uploadFileToSupabase } from "../../services/storageService";
 
 const CheckMachine = () => {
   const { user } = useAuth();
@@ -123,7 +124,7 @@ const CheckMachine = () => {
       if (!isBackground) setLoadingTasks(true);
 
       // Start the Advance sheet request in parallel with the Repair System one
-      const advancePromise = fetchAdvancePayments();
+      const advancePromise = fetchAdvancePayments(user?.firmName);
       advancePromise.catch(() => {});
 
       // Use shared service — returns objects keyed by sheet header names (Row 6)
@@ -232,12 +233,7 @@ const CheckMachine = () => {
       let advHistory = [];
       let advWithParentFlag = [];
       try {
-        const advanceTasks = await advancePromise;
-        const userFirm = (user?.firmName || "").toLowerCase();
-        const isAllFirm = !userFirm || userFirm === "all";
-        const firmFiltered = isAllFirm
-          ? advanceTasks
-          : advanceTasks.filter((t) => (t.firmName || "").toLowerCase() === userFirm);
+        const firmFiltered = await advancePromise;
 
         // Mark child tasks for advance payments too (Firm Name + Bill No. based grouping as Normal)
         advWithParentFlag = firmFiltered.map((task) => {
@@ -340,49 +336,15 @@ const CheckMachine = () => {
     fetchBillTypes();
   }, []);
 
-  const uploadFileToDrive = async (file) => {
-    const reader = new FileReader();
-
-    return new Promise((resolve, reject) => {
-      reader.onload = async () => {
-        const base64Data = reader.result;
-
-        try {
-          const res = await fetch(SCRIPT_URL, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/x-www-form-urlencoded",
-            },
-            body: new URLSearchParams({
-              action: "uploadFile",
-              base64Data: base64Data,
-              fileName: file.name,
-              mimeType: file.type,
-              folderId: FOLDER_ID,
-            }).toString(),
-          });
-
-          const data = await res.json();
-
-          if (data.success && data.fileUrl) {
-            resolve(data.fileUrl);
-          } else {
-            toast.error("❌ File upload failed");
-            resolve("");
-          }
-        } catch (err) {
-          console.error("Upload error:", err);
-          toast.error("❌ Upload failed due to network error");
-          resolve("");
-        }
-      };
-
-      reader.onerror = () => {
-        reject("❌ Failed to read file");
-      };
-
-      reader.readAsDataURL(file);
-    });
+  const uploadFile = async (file, prefix = "check_bill") => {
+    try {
+      const url = await uploadFileToSupabase(file, prefix);
+      return url;
+    } catch (err) {
+      console.error("Supabase Storage error:", err);
+      toast.error(err.message || "❌ File upload failed");
+      return "";
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -392,7 +354,7 @@ const CheckMachine = () => {
       setLoaderSubmit(true);
       let billImageUrl = "";
       if (formData.billImage) {
-        billImageUrl = await uploadFileToDrive(formData.billImage);
+        billImageUrl = await uploadFile(formData.billImage, "bill");
       }
 
       const nowFormatted = getTodayIST();

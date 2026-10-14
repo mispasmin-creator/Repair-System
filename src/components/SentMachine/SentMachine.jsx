@@ -14,6 +14,7 @@ import { useAuth } from "../../context/AuthContext";
 import useDataStore from "../../store/dataStore";
 import toast from "react-hot-toast";
 import { fetchRepairTasks as fetchRepairTasksSvc } from "../../services/repairService";
+import { uploadFileToSupabase } from "../../services/storageService";
 
 const createEmptyVendorForm = (defaultName = "") => ({
   vendorName: defaultName,
@@ -209,48 +210,16 @@ const SentMachine = () => {
     }
   }, [storePaymentTypes]);
 
-  const uploadFileToDrive = async (file) => {
+  const uploadFile = async (file, prefix = "transport") => {
     if (!file) return "";
-    const reader = new FileReader();
-
-    return new Promise((resolve, reject) => {
-      reader.onload = async () => {
-        const base64Data = reader.result;
-        try {
-          const res = await fetch(SCRIPT_URL, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/x-www-form-urlencoded",
-            },
-            body: new URLSearchParams({
-              action: "uploadFile",
-              base64Data: base64Data,
-              fileName: file.name,
-              mimeType: file.type,
-              folderId: FOLDER_ID,
-            }).toString(),
-          });
-
-          const data = await res.json();
-          if (data.success && data.fileUrl) {
-            resolve(data.fileUrl);
-          } else {
-            toast.error("File upload failed");
-            resolve("");
-          }
-        } catch (err) {
-          console.error("Upload error:", err);
-          toast.error("Upload failed due to network error");
-          resolve("");
-        }
-      };
-
-      reader.onerror = () => {
-        reject("Failed to read file");
-      };
-
-      reader.readAsDataURL(file);
-    });
+    try {
+      const url = await uploadFileToSupabase(file, prefix);
+      return url;
+    } catch (err) {
+      console.error("Supabase Storage error:", err);
+      toast.error(err.message || "File upload failed");
+      return "";
+    }
   };
 
   const updateVendorForm = (index, field, value) => {
@@ -337,7 +306,7 @@ const SentMachine = () => {
       let imageUrl = "";
       const imgToUpload = selectedVendor.transportingImage || vendorForms.find((v) => v.transportingImage)?.transportingImage;
       if (imgToUpload) {
-        imageUrl = await uploadFileToDrive(imgToUpload);
+        imageUrl = await uploadFile(imgToUpload, "transport");
       }
 
       const nowTimestamp = new Date().toLocaleString("en-GB", {

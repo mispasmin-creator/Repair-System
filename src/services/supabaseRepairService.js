@@ -46,7 +46,7 @@ const toNumOrNull = (val) => {
   return isNaN(n) ? null : n;
 };
 
-const matchesFirm = (firmValue, userFirmName) => {
+export const matchesFirm = (firmValue, userFirmName) => {
   const isAllFirm = !userFirmName || userFirmName.toLowerCase() === "all";
   if (isAllFirm) return true;
 
@@ -55,8 +55,12 @@ const matchesFirm = (firmValue, userFirmName) => {
     .map((f) => f.trim().toLowerCase())
     .filter(Boolean);
 
+  if (allowedFirms.includes("all")) return true;
+
   const taskFirm = (firmValue || "").toLowerCase().trim();
-  return allowedFirms.includes(taskFirm) || allowedFirms.includes("all");
+  if (!taskFirm) return false;
+
+  return allowedFirms.includes(taskFirm) || taskFirm === "all";
 };
 
 /**
@@ -267,22 +271,47 @@ export const updateRepairTaskInSupabase = async (taskNo, fields = {}) => {
   // Check Machine
   const isCheckMachineUpdate =
     fields["Actual 2"] ||
+    fields["Bill Image"] !== undefined ||
     (fields["Bill No."] && !fields["Actual 3"] && !fields["Received Quantity"]);
 
   if (isCheckMachineUpdate) {
-    const cmUpdate = {
-      task_no: cleanTaskNo,
-      planned_date: toISOOrNull(fields["Planned 2"]),
-      actual_date: toISOOrNull(fields["Actual 2"]),
-      bill_no: fields["Bill No."] || null,
-      bill_date: toISOOrNull(fields["Actual 2"])?.slice(0, 10) || null,
-      type_of_bill: fields["Type of Bill"] || null,
-      total_bill_amount: toNumOrNull(fields["Total Bill Amount"]),
-    };
     if (fields["Bill Image"] !== undefined) {
-      cmUpdate.bill_image_url = fields["Bill Image"] || null;
+      const { data: existing } = await supabase
+        .from("check_machine")
+        .select("id")
+        .eq("task_no", cleanTaskNo)
+        .maybeSingle();
+
+      if (existing) {
+        await supabase
+          .from("check_machine")
+          .update({ bill_image_url: fields["Bill Image"] || null })
+          .eq("task_no", cleanTaskNo);
+      } else {
+        await supabase
+          .from("check_machine")
+          .upsert(
+            { task_no: cleanTaskNo, bill_image_url: fields["Bill Image"] || null },
+            { onConflict: "task_no" }
+          );
+      }
     }
-    await supabase.from("check_machine").upsert(cmUpdate, { onConflict: "task_no" });
+
+    if (fields["Actual 2"] || fields["Bill No."]) {
+      const cmUpdate = {
+        task_no: cleanTaskNo,
+        planned_date: toISOOrNull(fields["Planned 2"]),
+        actual_date: toISOOrNull(fields["Actual 2"]),
+        bill_no: fields["Bill No."] || null,
+        bill_date: toISOOrNull(fields["Actual 2"])?.slice(0, 10) || null,
+        type_of_bill: fields["Type of Bill"] || null,
+        total_bill_amount: toNumOrNull(fields["Total Bill Amount"]),
+      };
+      if (fields["Bill Image"] !== undefined) {
+        cmUpdate.bill_image_url = fields["Bill Image"] || null;
+      }
+      await supabase.from("check_machine").upsert(cmUpdate, { onConflict: "task_no" });
+    }
   }
 
   // Store In
@@ -374,7 +403,7 @@ export const updateRepairTaskInSupabase = async (taskNo, fields = {}) => {
 /**
  * Fetches all advance payments directly from Supabase.
  */
-export const fetchAdvancePaymentsFromSupabase = async () => {
+export const fetchAdvancePaymentsFromSupabase = async (userFirmName = "") => {
   const { data: advanceRows, error } = await supabase
     .from("repair_advance")
     .select("*")
@@ -465,6 +494,7 @@ export const fetchAdvancePaymentsFromSupabase = async () => {
       // Step 4: Check Machine
       plannedCheckMachine: formatDateIST(row.planned_check_machine),
       actualCheckMachineDate: formatDateIST(row.actual_check_machine_date),
+      billNo: row.bill_no || "",
       billDate: formatDateIST(row.bill_date),
       billImageLink: row.bill_image_link || "",
       checkedBy: row.checked_by || "",
@@ -489,6 +519,8 @@ export const fetchAdvancePaymentsFromSupabase = async () => {
       accountsRemark: row.accounts_remark || "",
     };
   });
+
+  return allRows.filter((t) => matchesFirm(t.firmName, userFirmName));
 };
 
 /**
@@ -523,9 +555,13 @@ export const updateAdvancePaymentInSupabase = async (repairTaskNo, fields = {}) 
   // Step 4: Check Machine
   if (fields["Planned Check Machine"] !== undefined) record.planned_check_machine = toISOOrNull(fields["Planned Check Machine"]);
   if (fields["Actual Check Machine Date"] !== undefined) record.actual_check_machine_date = toISOOrNull(fields["Actual Check Machine Date"]);
-  if (fields["Bill No."] !== undefined) record.bill_no = fields["Bill No."];
+  if (fields["Bill No."] !== undefined || fields["Bill No"] !== undefined) {
+    record.bill_no = fields["Bill No."] || fields["Bill No"];
+  }
   if (fields["Bill Date"] !== undefined) record.bill_date = toISOOrNull(fields["Bill Date"])?.slice(0, 10) || null;
-  if (fields["Bill Image Link"] !== undefined) record.bill_image_link = fields["Bill Image Link"];
+  if (fields["Bill Image Link"] !== undefined || fields["Bill Image"] !== undefined) {
+    record.bill_image_link = fields["Bill Image Link"] || fields["Bill Image"];
+  }
   if (fields["Checked By"] !== undefined) record.checked_by = fields["Checked By"];
 
   // Step 5: Store In
