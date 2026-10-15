@@ -228,6 +228,7 @@ const Posting = () => {
           department: row["Department"] || "",
           location: row["Location"] || "",
           vendorName: row["Vendor Name"] || "",
+          paymentType: row["Payment Type"] || row["Approved Payment Term"] || (isAdvanceRow(row) ? "Advance" : "Credit"),
           isAdvancePayment: isAdvanceRow(row),
           actual1: row["Actual 1"] || "",
           actual2: row["Actual 2"] || "",
@@ -595,6 +596,7 @@ const Posting = () => {
                 <TableHead className="min-w-[130px] whitespace-nowrap">Firm Name</TableHead>
                 <TableHead className="min-w-[130px] whitespace-nowrap">Department</TableHead>
                 <TableHead className="min-w-[140px] whitespace-nowrap">Vendor Name</TableHead>
+                <TableHead className="min-w-[120px] whitespace-nowrap">Payment Type</TableHead>
                 <TableHead className="min-w-[120px] whitespace-nowrap">Bill No / Advance Amt</TableHead>
                 <TableHead className="min-w-[140px] whitespace-nowrap">Total Bill Amount</TableHead>
                 <TableHead className="min-w-[150px] whitespace-nowrap">Transportation Charges</TableHead>
@@ -603,7 +605,7 @@ const Posting = () => {
               <TableBody>
                 {loadingTasks ? (
                   <TableRow>
-                    <TableCell colSpan={12} className="text-center py-12">
+                    <TableCell colSpan={13} className="text-center py-12">
                       <div className="flex flex-col items-center justify-center">
                         <div className="w-9 h-9 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                         <p className="mt-3 text-sm text-gray-500 font-medium">Loading tasks...</p>
@@ -612,7 +614,7 @@ const Posting = () => {
                   </TableRow>
                 ) : filteredPendingTasks.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={12} className="text-center py-12 text-gray-500">
+                    <TableCell colSpan={13} className="text-center py-12 text-gray-500">
                       No pending posting tasks found
                     </TableCell>
                   </TableRow>
@@ -662,6 +664,7 @@ const Posting = () => {
                       <TableCell className="whitespace-nowrap">{task.firmName || "-"}</TableCell>
                       <TableCell className="whitespace-nowrap">{task.department || "-"}</TableCell>
                       <TableCell className="whitespace-nowrap">{task.vendorName || "-"}</TableCell>
+                      <TableCell className="whitespace-nowrap">{task.paymentType || "-"}</TableCell>
                       <TableCell className="whitespace-nowrap">
                         {task.isAdvance
                           ? (task.toBePaidAmount ? `₹${Number(task.toBePaidAmount).toLocaleString()}` : "-")
@@ -700,6 +703,7 @@ const Posting = () => {
                 <TableHead className="min-w-[130px] whitespace-nowrap">Firm Name</TableHead>
                 <TableHead className="min-w-[130px] whitespace-nowrap">Department</TableHead>
                 <TableHead className="min-w-[140px] whitespace-nowrap">Vendor Name</TableHead>
+                <TableHead className="min-w-[120px] whitespace-nowrap">Payment Type</TableHead>
                 <TableHead className="min-w-[120px] whitespace-nowrap">Bill No</TableHead>
                 <TableHead className="min-w-[130px] whitespace-nowrap">Total Bill Amount</TableHead>
                 <TableHead className="min-w-[150px] whitespace-nowrap">Transportation Charges</TableHead>
@@ -711,7 +715,7 @@ const Posting = () => {
               <TableBody>
                 {loadingTasks ? (
                   <TableRow>
-                    <TableCell colSpan={13} className="text-center py-12">
+                    <TableCell colSpan={14} className="text-center py-12">
                       <div className="flex flex-col items-center justify-center">
                         <div className="w-9 h-9 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                         <p className="mt-3 text-sm text-gray-500 font-medium">Loading tasks...</p>
@@ -720,7 +724,7 @@ const Posting = () => {
                   </TableRow>
                 ) : filteredHistoryTasks.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={13} className="text-center py-12 text-gray-500">
+                    <TableCell colSpan={14} className="text-center py-12 text-gray-500">
                       No history posting tasks found
                     </TableCell>
                   </TableRow>
@@ -749,6 +753,7 @@ const Posting = () => {
                       <TableCell className="whitespace-nowrap">{task.firmName || "-"}</TableCell>
                       <TableCell className="whitespace-nowrap">{task.department || "-"}</TableCell>
                       <TableCell className="whitespace-nowrap">{task.vendorName || "-"}</TableCell>
+                      <TableCell className="whitespace-nowrap">{task.paymentType || "-"}</TableCell>
                       <TableCell className="whitespace-nowrap">{task.billNo || "-"}</TableCell>
                       <TableCell className="whitespace-nowrap font-medium text-gray-900">
                         {formatCurrency(getDisplayTotalAmount(task))}

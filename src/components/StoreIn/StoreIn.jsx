@@ -657,6 +657,7 @@ const StoreIn = () => {
                 <TableHead className="min-w-[120px]">Serial No</TableHead>
                 <TableHead className="min-w-[140px]">Part Name</TableHead>
                 <TableHead className="min-w-[140px]">Vendor Name</TableHead>
+                <TableHead className="min-w-[120px]">Payment Type</TableHead>
                 <TableHead className="min-w-[130px]">Received Quantity</TableHead>
                 <TableHead className="min-w-[120px]">Bill No</TableHead>
                 <TableHead className="min-w-[120px]">Bill Image</TableHead>
@@ -668,7 +669,7 @@ const StoreIn = () => {
               <TableBody>
                 {loadingTasks ? (
                   <TableRow>
-                    <TableCell colSpan={13} className="text-center py-12">
+                    <TableCell colSpan={14} className="text-center py-12">
                       <div className="flex flex-col items-center justify-center">
                         <div className="w-9 h-9 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                         <p className="mt-3 text-sm text-gray-500 font-medium">Loading tasks...</p>
@@ -677,7 +678,7 @@ const StoreIn = () => {
                   </TableRow>
                 ) : filteredHistoryTasks.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={13} className="text-center py-12 text-gray-500">
+                    <TableCell colSpan={14} className="text-center py-12 text-gray-500">
                       No history tasks found
                     </TableCell>
                   </TableRow>
@@ -692,6 +693,7 @@ const StoreIn = () => {
                       <TableCell>{task.serialNo || "-"}</TableCell>
                       <TableCell>{task.machinePartName || "-"}</TableCell>
                       <TableCell>{task.vendorName || "-"}</TableCell>
+                      <TableCell>{task.paymentType || "-"}</TableCell>
                       <TableCell>{task.receivedQuantity || "-"}</TableCell>
                       <TableCell className="font-medium text-gray-800">{task.billNo || "-"}</TableCell>
                       <TableCell>

@@ -140,11 +140,14 @@ const Dashboard = ({ setActiveTab }) => {
 
       const formattedTasks = (sheetTasks || []).map((t) => {
         const rawStatus = (t["Status"] || "").trim().toLowerCase();
-        const billAmt = parseSafeNumber(t["Total Bill Amount"]) || parseSafeNumber(t["Amount"]) || parseSafeNumber(t["Transportation Charges"]) || 0;
+        const billAmt = parseSafeNumber(t["Total Bill Amount"]) || parseSafeNumber(t["Amount"]) || 0;
+        const transportAmt = parseSafeNumber(t["Transportation Charges"]) || parseSafeNumber(t["(Transportation Charges)"]) || 0;
+        const totalCost = billAmt + transportAmt;
+        const status = (rawStatus === "complete" || rawStatus === "completed") ? "Completed" : "Pending";
 
         return {
           status: status,
-          totalBillRepair: billAmt,
+          totalBillRepair: totalCost,
           department: t["Department"] || "General",
           paymentType: t["Payment Type"] || "Normal",
           vendorName: t["Vendor Name"] || t["Approved Vendor Name"] || "N/A",

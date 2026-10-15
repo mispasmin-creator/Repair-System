@@ -583,6 +583,9 @@ const Accounts = () => {
                 <th className="px-4 py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[140px]">
                   Vendor Name
                 </th>
+                <th className="px-4 py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[120px]">
+                  Payment Type
+                </th>
                 <th className="px-4 py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[130px]">
                   Store In Date
                 </th>
@@ -609,7 +612,7 @@ const Accounts = () => {
             <tbody className="divide-y divide-gray-200 bg-white">
               {loadingTasks ? (
                 <tr>
-                  <td colSpan={16} className="text-center py-12">
+                  <td colSpan={17} className="text-center py-12">
                     <div className="flex flex-col items-center justify-center">
                       <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                       <p className="mt-3 text-sm text-gray-500 font-medium">Loading accounts tasks...</p>
@@ -618,7 +621,7 @@ const Accounts = () => {
                 </tr>
               ) : filteredTasks.length === 0 ? (
                 <tr>
-                  <td colSpan={16} className="text-center py-12 text-gray-500">
+                  <td colSpan={17} className="text-center py-12 text-gray-500">
                     No tasks found in this tab
                   </td>
                 </tr>
@@ -668,6 +671,9 @@ const Accounts = () => {
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">
                         {task.vendorName || "-"}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">
+                        {task.paymentType || "-"}
                       </td>
                       <td className="px-4 py-3 text-sm text-emerald-700 font-medium whitespace-nowrap">
                         {task.actualStoreIn || "-"}

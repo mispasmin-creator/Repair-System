@@ -71,7 +71,8 @@ const Indent = () => {
         .from("indent")
         .select(`
           *,
-          accounts (status_1)
+          accounts (status_1),
+          sent_to_vendor (payment_type_1)
         `)
         .order("created_at", { ascending: false });
 
@@ -102,6 +103,7 @@ const Indent = () => {
           department: row.department || "",
           location: row.location || "",
           imageLink: row.machine_image_url || "",
+          paymentType: (Array.isArray(row.sent_to_vendor) ? row.sent_to_vendor[0]?.payment_type_1 : row.sent_to_vendor?.payment_type_1) || "-",
           status: status,
         };
       });
@@ -299,6 +301,7 @@ const Indent = () => {
               <TableHead className="min-w-[100px]">UOM</TableHead>
               <TableHead className="min-w-[100px]">Quantity</TableHead>
               <TableHead className="min-w-[130px]">Machine Image</TableHead>
+              <TableHead className="min-w-[120px]">Payment Type</TableHead>
               <TableHead className="min-w-[100px]">Priority</TableHead>
               <TableHead className="min-w-[110px]">Start Date</TableHead>
               <TableHead className="min-w-[110px]">End Date</TableHead>
@@ -307,7 +310,7 @@ const Indent = () => {
             <TableBody>
               {loadingTasks ? (
                 <TableRow>
-                  <TableCell colSpan={14} className="text-center py-8">
+                  <TableCell colSpan={15} className="text-center py-8">
                     <div className="flex flex-col items-center justify-center">
                       <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                       <p className="mt-4 text-gray-600">Loading tasks...</p>
@@ -316,7 +319,7 @@ const Indent = () => {
                 </TableRow>
               ) : filteredTasks.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={14} className="text-center py-8">
+                  <TableCell colSpan={15} className="text-center py-8">
                     <p className="text-gray-500">No tasks found</p>
                   </TableCell>
                 </TableRow>
@@ -384,6 +387,9 @@ const Indent = () => {
                       ) : (
                         <span className="text-gray-400 text-sm">No Image</span>
                       )}
+                    </TableCell>
+                    <TableCell className="min-w-[120px]">
+                      {task.paymentType || "-"}
                     </TableCell>
                     <TableCell className="min-w-[100px]">
                       <span

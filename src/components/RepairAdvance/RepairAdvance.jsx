@@ -298,6 +298,7 @@ const RepairAdvance = () => {
               <TableHead>Machine Name</TableHead>
               <TableHead>Part Name</TableHead>
               <TableHead>Vendor Name</TableHead>
+              <TableHead>Payment Type</TableHead>
               <TableHead>Received Qty</TableHead>
               <TableHead>Bill Match</TableHead>
             </TableHeader>
@@ -321,6 +322,7 @@ const RepairAdvance = () => {
                   <TableCell>{task.machineName}</TableCell>
                   <TableCell>{task.machinePartName}</TableCell>
                   <TableCell>{task.vendorName || "-"}</TableCell>
+                  <TableCell>{task.paymentType || "-"}</TableCell>
                   <TableCell>{task.receivedQuantity || "-"}</TableCell>
                   <TableCell>
                     <span
