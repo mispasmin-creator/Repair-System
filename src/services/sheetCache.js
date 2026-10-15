@@ -31,10 +31,12 @@ const asResponse = (data) =>
     headers: { "Content-Type": "application/json" },
   });
 
+import { fetchMasterDataFromSupabase } from "./masterService";
+
 /**
- * Builds Google Visualization table format from Master JSON
+ * Builds Google Visualization table format from Master data (Supabase or fallback)
  */
-const buildMasterResponse = () => {
+const buildMasterResponse = async () => {
   const cols = [
     { label: "Indentor Name " },
     { label: "Authorized Name" },
@@ -48,16 +50,18 @@ const buildMasterResponse = () => {
     { label: "Transporter Name" },
   ];
 
-  const indentors = masterData["Indentor Name "] || [];
-  const auth = masterData["Authorized Name"] || [];
-  const machines = masterData["Machine Name"] || [];
-  const depts = masterData["Department"] || [];
-  const uoms = masterData["UOM"] || [];
-  const firms = masterData["Firm Name"] || [];
-  const pTypes = masterData["Payment Type"] || ["Advance", "Full", "Cash"];
-  const bTypes = masterData["Type of Bill"] || ["Common", "Independent"];
-  const vendors = masterData["Vendor Name"] || [];
-  const transporters = masterData["Transporter Name"] || ["Self", "Boby Cargo", "Gagan Roadways", "OM Logistics", "V-Trans"];
+  const mData = await fetchMasterDataFromSupabase();
+
+  const indentors = mData.indentor_name || [];
+  const auth = mData.authorized_name || [];
+  const machines = mData.machine_name || [];
+  const depts = mData.department || [];
+  const uoms = mData.uom || [];
+  const firms = mData.firm_name || [];
+  const pTypes = mData.payment_type || ["Advance", "Full", "Cash"];
+  const bTypes = mData.type_of_bill || ["Common", "Independent"];
+  const vendors = mData.vendor_name || [];
+  const transporters = mData.transporter_name || ["Self", "Boby Cargo", "Gagan Roadways", "OM Logistics", "V-Trans"];
 
   const maxLen = Math.max(
     indentors.length,
@@ -104,7 +108,8 @@ export const cachedFetch = async (url) => {
 
   // 1. Master sheet
   if (urlStr.includes("sheet=Master") || urlStr.includes("Master")) {
-    return asResponse(buildMasterResponse());
+    const masterObj = await buildMasterResponse();
+    return asResponse(masterObj);
   }
 
   // 2. Users / Login sheet

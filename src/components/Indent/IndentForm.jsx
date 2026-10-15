@@ -6,7 +6,7 @@ import toast from "react-hot-toast";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../services/supabaseClient";
 import { uploadFileToSupabase } from "../../services/storageService";
-import masterData from "../../data/masterData.json";
+import { fetchMasterDataFromSupabase, addMasterItem } from "../../services/masterService";
 
 const IndentForm = ({ onSubmit, onCancel, taskList }) => {
   const { user } = useAuth();
@@ -112,12 +112,14 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
       const sortAlpha = (list = []) =>
         [...list].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base", numeric: true }));
 
-      setDoerName(sortAlpha(masterData["Indentor Name "] || []));
-      setGivenByData(sortAlpha(masterData["Authorized Name"] || []));
-      setMachineNameMasterData(sortAlpha(masterData["Machine Name"] || []));
-      setDepartmentData(sortAlpha(masterData["Department"] || []));
-      setUomData(sortAlpha(masterData["UOM"] || []));
-      setFirmNameData(sortAlpha(masterData["Firm Name"] || ["Pmmpl", "Purab", "Refrasynth", "Rkl", "Refratech"]));
+      const mData = await fetchMasterDataFromSupabase();
+
+      setDoerName(sortAlpha(mData.indentor_name || []));
+      setGivenByData(sortAlpha(mData.authorized_name || []));
+      setMachineNameMasterData(sortAlpha(mData.machine_name || []));
+      setDepartmentData(sortAlpha(mData.department || []));
+      setUomData(sortAlpha(mData.uom || []));
+      setFirmNameData(sortAlpha(mData.firm_name || ["Pmmpl", "Purab", "Refrasynth", "Rkl", "Refratech"]));
       setPriorityData(["Critical", "High", "Medium", "Low"]);
       setTaskStatusData(["Pending", "Complete"]);
     } catch (err) {
@@ -409,9 +411,13 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
 
       toast.success(`✅ Task ${assignedTaskNo} assigned successfully!`);
 
-      // If user added a NEW machine name, append to dropdown
+      // If user added a NEW machine name, append to dropdown and persist to Supabase Master
       if (isAddingMachine && selectedMachine) {
-        setMachineNameMasterData((prev) => [...prev, selectedMachine]);
+        const cleanName = selectedMachine.trim();
+        setMachineNameMasterData((prev) => [...prev, cleanName]);
+        addMasterItem("machine_name", cleanName).catch((err) =>
+          console.warn("Failed to persist new machine to master table:", err)
+        );
       }
 
       // Clear form state

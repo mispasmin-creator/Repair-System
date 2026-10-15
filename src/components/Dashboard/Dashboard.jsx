@@ -22,7 +22,7 @@ import { BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveCo
 import { useAuth } from "../../context/AuthContext";
 import useDataStore from "../../store/dataStore";
 import { fetchRepairSheet } from "../../services/repairService";
-import masterData from "../../data/masterData.json";
+import { fetchMasterDataFromSupabase, addMasterItem } from "../../services/masterService";
 import Button from "../ui/Button";
 import toast from "react-hot-toast";
 
@@ -169,9 +169,10 @@ const Dashboard = ({ setActiveTab }) => {
       if (!isBackground) {
         setLoadingMaster(true);
       }
-      const loadedVendors = masterData["Vendor Name"] || [];
-      const loadedTransporters = masterData["Transporter Name"] || ["Self", "Boby Cargo", "Gagan Roadways", "OM Logistics", "V-Trans"];
-      const loadedPaymentTypes = masterData["Payment Type"] || ["Advance", "Full", "Cash"];
+      const data = await fetchMasterDataFromSupabase(isBackground);
+      const loadedVendors = data.vendor_name || [];
+      const loadedTransporters = data.transporter_name || ["Self", "Boby Cargo", "Gagan Roadways", "OM Logistics", "V-Trans"];
+      const loadedPaymentTypes = data.payment_type || ["Advance", "Full", "Cash"];
 
       setVendors(loadedVendors);
       setTransporters(loadedTransporters);
@@ -189,28 +190,15 @@ const Dashboard = ({ setActiveTab }) => {
 
     try {
       setMasterSubmitting(true);
-      const formPayload = new FormData();
-      formPayload.append("sheetName", "Master");
-      formPayload.append("action", "insert");
+      const category = masterType === "vendor" ? "vendor_name" : "transporter_name";
+      const result = await addMasterItem(category, masterValue.trim());
 
-      if (masterType === "vendor") {
-        formPayload.append("Vendor Name", masterValue.trim());
-      } else {
-        formPayload.append("Transporter Name", masterValue.trim());
-      }
-
-      const response = await fetch(`${SCRIPT_URL}?headerRow=1`, {
-        method: "POST",
-        body: formPayload,
-      });
-
-      const result = await response.json();
-      if (result.success || response.ok) {
+      if (result.success) {
         toast.success(`Successfully added ${masterType === "vendor" ? "Vendor" : "Transporter"}!`);
         setMasterValue("");
-        fetchMasterData();
+        fetchMasterData(true);
       } else {
-        toast.error("Failed to add to master lists");
+        toast.error("Failed to add to master lists: " + (result.error || ""));
       }
     } catch (error) {
       console.error("Error submitting master:", error);
