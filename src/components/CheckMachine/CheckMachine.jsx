@@ -17,7 +17,6 @@ import useDataStore from "../../store/dataStore";
 import toast from "react-hot-toast";
 import { fetchRepairTasks as fetchRepairTasksSvc } from "../../services/repairService";
 import { fetchAdvancePayments, updateAdvancePayment, getTodayIST, isAdvanceRow } from "../../services/advancePaymentService";
-import ImagePreviewModal from "../ui/ImagePreviewModal";
 import { openDrivePreview } from "../../utils/driveUtils";
 import { uploadFileToSupabase } from "../../services/storageService";
 
@@ -39,11 +38,10 @@ const CheckMachine = () => {
   const [selectedTask, setSelectedTask] = useState(null);
   const [loadingTasks, setLoadingTasks] = useState(false);
   const [loaderSubmit, setLoaderSubmit] = useState(false);
-  const [previewImage, setPreviewImage] = useState({ isOpen: false, url: "", title: "" });
 
-  const handleViewImage = (url, title = "Image Preview") => {
+  const handleViewImage = (url) => {
     if (!url) return;
-    setPreviewImage({ isOpen: true, url, title });
+    openDrivePreview(url);
   };
 
   // Common Bill linking states
@@ -1387,14 +1385,6 @@ const CheckMachine = () => {
           </div>
         </div>
       </Modal>
-
-      {/* In-app Image Viewer Modal */}
-      <ImagePreviewModal
-        isOpen={previewImage.isOpen}
-        onClose={() => setPreviewImage({ isOpen: false, url: "", title: "" })}
-        imageUrl={previewImage.url}
-        title={previewImage.title}
-      />
     </div>
   );
 };

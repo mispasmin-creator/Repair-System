@@ -54,15 +54,19 @@ const MakePayment = () => {
   const handleOpenForm = (task) => {
     const firmKey = (task.firmName || "").toLowerCase().trim();
     const baseUrl = FIRM_FORM_URLS[firmKey] || FIRM_FORM_URLS.refrasynth;
-    const taskNumber = task.taskNo || task.repairTaskNo || "";
+    const taskNumber = [task.taskNo || task.repairTaskNo || "", ...(task.commonTasksLinked || [])]
+      .filter(Boolean)
+      .join(", ");
     const description = task.problem || task.machineName || "";
+    const amount = getDisplayToBePaidAmount(task);
 
     const params = new URLSearchParams({
       "usp": "pp_url",
       "entry.1200639812": taskNumber,
-      "entry.604194301": "Repair FMS",
+      "entry.604194301": task.isAdvance ? "Repair FMS Advance" : "Repair FMS",
       "entry.1358288895": "Yes",
       "entry.1091308719": description,
+      "entry.1486176123": amount ? String(amount) : "",
     });
 
     window.open(`${baseUrl}?${params.toString()}`, "_blank");
@@ -988,23 +992,12 @@ const MakePayment = () => {
                     <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[100px] text-center">Action</th>
                     <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[120px]">Task No</th>
                     <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[130px]">Firm Name</th>
-                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[120px]">Serial No</th>
                     <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[160px]">Machine Name</th>
-                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[150px]">Machine Part Name</th>
-                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[120px]">Department</th>
-                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[110px]">Location</th>
                     <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[140px]">Vendor Name</th>
-                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[160px]">Transportation Charges</th>
-                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[140px]">Weighment Slip</th>
-                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[160px]">Transporting Image</th>
                     <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[130px]">Payment Type</th>
-                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[120px]">How Much</th>
-                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[150px]">Transporter Name</th>
-                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[160px]">Transportation Amount</th>
                     <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[120px]">Bill Image</th>
                     <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[120px]">Bill No.</th>
                     <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[150px]">Advance Amount Paid</th>
-                    <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[130px]">Type of Bill</th>
                     <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[150px]">Total Bill Amount</th>
                     <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[150px]">To Be Paid Amount</th>
                   </tr>
@@ -1012,7 +1005,7 @@ const MakePayment = () => {
                 <tbody className="divide-y divide-gray-200 bg-white">
                   {loadingTasks && pendingRepairPayments.length === 0 ? (
                     <tr>
-                      <td colSpan={21} className="text-center py-12">
+                      <td colSpan={11} className="text-center py-12">
                         <div className="flex flex-col items-center justify-center">
                           <div className="w-9 h-9 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                           <p className="mt-3 text-sm text-gray-500 font-medium">Loading tasks...</p>
@@ -1021,7 +1014,7 @@ const MakePayment = () => {
                     </tr>
                   ) : groupedPending.length === 0 ? (
                     <tr>
-                      <td colSpan={21} className="text-center py-12 text-gray-500">No pending payments found</td>
+                      <td colSpan={11} className="text-center py-12 text-gray-500">No pending payments found</td>
                     </tr>
                   ) : (
                     groupedPending.map((task) => (
@@ -1060,33 +1053,9 @@ const MakePayment = () => {
                           </div>
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">{task.firmName || "-"}</td>
-                        <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{task.serialNo || "-"}</td>
                         <td className="px-4 py-3 text-sm font-medium text-gray-900 whitespace-nowrap">{task.machineName}</td>
-                        <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">{task.machinePartName || "-"}</td>
-                        <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">{task.department || "-"}</td>
-                        <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">{task.location || "-"}</td>
                         <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">{task.vendorName || "-"}</td>
-                        <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">
-                          {task.transportationCharges ? `₹${Number(task.transportationCharges).toLocaleString()}` : "-"}
-                        </td>
-                        <td className="px-4 py-3 text-sm whitespace-nowrap">
-                          {task.weighmentSlip ? (
-                            <button type="button" onClick={() => window.open(task.weighmentSlip, "_blank", "noopener,noreferrer")} className="text-blue-600 underline text-xs hover:text-blue-800 font-medium">View Slip</button>
-                          ) : <span className="text-gray-400 text-xs">-</span>}
-                        </td>
-                        <td className="px-4 py-3 text-sm whitespace-nowrap">
-                          {task.transportingImage ? (
-                            <button type="button" onClick={() => window.open(task.transportingImage, "_blank", "noopener,noreferrer")} className="text-blue-600 underline text-xs hover:text-blue-800 font-medium">View Image</button>
-                          ) : <span className="text-gray-400 text-xs">-</span>}
-                        </td>
                         <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">{task.paymentType || "-"}</td>
-                        <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">
-                          {task.howMuch ? `₹${Number(task.howMuch).toLocaleString()}` : "-"}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">{task.transporterName || "-"}</td>
-                        <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">
-                          {task.transportationAmount ? `₹${Number(task.transportationAmount).toLocaleString()}` : task.howMuch ? `₹${Number(task.howMuch).toLocaleString()}` : "-"}
-                        </td>
                         <td className="px-4 py-3 text-sm whitespace-nowrap">
                           {(() => {
                             const billImageUrl = task.isAdvance ? task.billImageLink : task.billImage;
@@ -1099,7 +1068,6 @@ const MakePayment = () => {
                         <td className="px-4 py-3 text-sm font-medium text-gray-900 whitespace-nowrap">
                           {task.advanceAmountPaid ? `₹${Number(task.advanceAmountPaid).toLocaleString()}` : "-"}
                         </td>
-                        <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">{task.typeOfBill || "-"}</td>
                         <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">
                           {(() => {
                             const amt = getDisplayTotalAmount(task);
