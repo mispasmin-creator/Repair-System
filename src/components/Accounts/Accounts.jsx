@@ -90,6 +90,7 @@ const Accounts = () => {
   const [tasks, setTasks] = useState([]);
   const [loadingTasks, setLoadingTasks] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [selectedFirm, setSelectedFirm] = useState("All");
 
   const [pipelineStats, setPipelineStats] = useState({
     sentPending: 0,
@@ -276,9 +277,14 @@ const Accounts = () => {
     fetchAllTasks();
   }, [user?.firmName]);
 
+  const uniqueFirms = ["All", ...new Set(tasks.map((t) => t.firmName).filter(Boolean))];
+  const firmTasks = tasks.filter(
+    (t) => selectedFirm === "All" || t.firmName === selectedFirm
+  );
+
   // Tab count helper
   const getTabCount = (stepKey) => {
-    return tasks.filter((task) => {
+    return firmTasks.filter((task) => {
       if (stepKey === "completed") {
         return Boolean(task.steps.tally?.actual);
       }
@@ -289,7 +295,7 @@ const Accounts = () => {
     }).length;
   };
 
-  const filteredTasks = tasks.filter((task) => {
+  const filteredTasks = firmTasks.filter((task) => {
     // Completed tab: show entries where Tally (Actual 4) is filled
     if (activeTab === "completed") {
       if (!task.steps.tally?.actual) return false;
@@ -456,53 +462,6 @@ const Accounts = () => {
         </div>
       </div>
 
-      {/* Stage-wise Pending Summary Cards */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-blue-600 animate-pulse"></span>
-            <h2 className="text-sm font-semibold text-gray-800 uppercase tracking-wider">
-              Repair Pipeline Pending Overview (Stage-wise)
-            </h2>
-          </div>
-          <span className="text-xs text-gray-500">Live Stage Summary</span>
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
-          {pipelineStages.map((stg) => {
-            const Icon = stg.icon;
-            return (
-              <div
-                key={stg.id}
-                className={`${stg.bg} ${stg.border} border rounded-xl p-3.5 flex flex-col justify-between transition-all duration-150 hover:shadow-sm`}
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
-                    {stg.step}
-                  </span>
-                  <Icon className={`w-4 h-4 ${stg.color}`} />
-                </div>
-                <div>
-                  <div className="text-xl sm:text-2xl font-black text-gray-900 tracking-tight">
-                    {loadingTasks ? "..." : stg.count}
-                  </div>
-                  <div className="text-xs font-medium text-gray-700 truncate mt-0.5">
-                    {stg.name}
-                  </div>
-                </div>
-                <div className="mt-2.5">
-                  <span
-                    className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold ${stg.badge}`}
-                  >
-                    {stg.count > 0 ? `${stg.count} Pending` : "Clear"}
-                  </span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
       {/* Accounts Main Section */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200">
         {/* Tabs */}
@@ -539,15 +498,28 @@ const Accounts = () => {
 
         {/* Search */}
         <div className="p-4 sm:p-6 border-b border-gray-200 bg-gray-50/50">
-          <div className="relative max-w-md">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-            <input
-              type="text"
-              placeholder="Search by task no, machine, vendor, firm, bill no..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-white"
-            />
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="relative max-w-md w-full">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <input
+                type="text"
+                placeholder="Search by task no, machine, vendor, firm, bill no..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-white"
+              />
+            </div>
+            <select
+              value={selectedFirm}
+              onChange={(e) => setSelectedFirm(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm bg-white"
+            >
+              {uniqueFirms.map((firm) => (
+                <option key={firm} value={firm}>
+                  {firm === "All" ? "All Firms" : firm}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 

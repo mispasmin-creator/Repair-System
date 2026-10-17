@@ -27,6 +27,9 @@ const FIRM_FORM_URLS = {
   refratech: "https://docs.google.com/forms/d/e/1FAIpQLScTunRezHE3TKtNpXjISVWjnywDwUcT6F62DYtkLlgXL6MMaQ/viewform",
 };
 
+// Options in the Payment Type dropdown of the payment modal
+const PAYMENT_MODES = ["Bank Transfer", "Cash", "Cheque", "Credit Card"];
+
 const MakePayment = () => {
   const { user } = useAuth();
   const {
@@ -57,7 +60,7 @@ const MakePayment = () => {
     const taskNumber = [task.taskNo || task.repairTaskNo || "", ...(task.commonTasksLinked || [])]
       .filter(Boolean)
       .join(", ");
-    const description = task.problem || task.machineName || "";
+    const payTo = (task.vendorName || "").trim();
     const amount = getDisplayToBePaidAmount(task);
 
     const params = new URLSearchParams({
@@ -65,7 +68,7 @@ const MakePayment = () => {
       "entry.1200639812": taskNumber,
       "entry.604194301": task.isAdvance ? "Repair FMS Advance" : "Repair FMS",
       "entry.1358288895": "Yes",
-      "entry.1091308719": description,
+      "entry.1091308719": payTo,
       "entry.1486176123": amount ? String(amount) : "",
     });
 
@@ -366,7 +369,7 @@ const MakePayment = () => {
     const displayToBePaid = getDisplayToBePaidAmount(task);
     setFormData({
       totalBillAmount: displayTotal ? displayTotal.toString() : (task.toBePaidAmount?.toString() || ""),
-      paymentType: task.paymentType || "",
+      paymentType: PAYMENT_MODES.includes(task.paymentType) ? task.paymentType : "",
       toBePaidAmount: displayToBePaid ? displayToBePaid.toString() : (task.toBePaidAmount?.toString() || ""),
       utrChequeNo: "",
     });
@@ -1340,10 +1343,9 @@ const MakePayment = () => {
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
                 <option value="">Select Payment Type</option>
-                <option value="Bank Transfer">Bank Transfer</option>
-                <option value="Cash">Cash</option>
-                <option value="Cheque">Cheque</option>
-                <option value="Credit Card">Credit Card</option>
+                {PAYMENT_MODES.map((mode) => (
+                  <option key={mode} value={mode}>{mode}</option>
+                ))}
               </select>
             </div>
 

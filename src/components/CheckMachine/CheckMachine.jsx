@@ -516,6 +516,24 @@ const CheckMachine = () => {
   const billAlreadyCaptured =
     !!(selectedTask?.isAdvance && selectedTask?.billNo && selectedTask.billNo !== "-");
 
+  const toNum = (v) => parseFloat((v ?? "").toString().replace(/[^0-9.-]+/g, "")) || 0;
+
+  // Advance rows have no "How Much" / "Total Bill Amount" columns: the advance
+  // amount is `advanceAmountPaid`, and the bill total is the sum of "To Be Paid"
+  // across every advance task sharing the same Firm Name + Bill No.
+  const getAdvanceBillTotal = (task) => {
+    if (!task) return 0;
+    const firm = (task.firmName || "").toLowerCase().trim();
+    const group = repairTasks.filter(
+      (t) => t.isAdvance && t.billNo === task.billNo && (t.firmName || "").toLowerCase().trim() === firm
+    );
+    const rows = group.length > 0 ? group : [task];
+    return rows.reduce((sum, t) => sum + toNum(t.toBePaidAmount), 0);
+  };
+  const advanceAmount = selectedTask?.isAdvance
+    ? toNum(selectedTask.advanceAmountPaid) || toNum(selectedTask.toBePaidAmount)
+    : toNum(selectedTask?.howMuch);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -981,7 +999,7 @@ const CheckMachine = () => {
                 </label>
                 <input
                   type="text"
-                  value={selectedTask?.howMuch || ""}
+                  value={advanceAmount || ""}
                   readOnly
                   className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-500"
                 />
@@ -1037,7 +1055,21 @@ const CheckMachine = () => {
                 </p>
                 <p><span className="text-gray-600">Bill No:</span> <strong>{selectedTask?.billNo}</strong></p>
                 <p><span className="text-gray-600">Type of Bill:</span> <strong>{selectedTask?.typeOfBill || "-"}</strong></p>
-                <p><span className="text-gray-600">Total Bill Amount:</span> <strong>₹{Number(selectedTask?.totalBillAmount || 0).toLocaleString()}</strong></p>
+                <p>
+                  <span className="text-gray-600">Bill Image:</span>{" "}
+                  {selectedTask?.billImageLink ? (
+                    <button
+                      type="button"
+                      onClick={() => handleViewImage(selectedTask.billImageLink)}
+                      className="text-blue-600 underline font-medium hover:text-blue-800"
+                    >
+                      View Bill
+                    </button>
+                  ) : (
+                    <span className="text-gray-400 italic">No Bill Image</span>
+                  )}
+                </p>
+                <p><span className="text-gray-600">Total Bill Amount:</span> <strong>₹{(selectedTask?.isAdvance ? getAdvanceBillTotal(selectedTask) : toNum(selectedTask?.totalBillAmount)).toLocaleString()}</strong></p>
               </div>
             )}
 

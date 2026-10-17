@@ -472,7 +472,7 @@ export const fetchAdvancePaymentsFromSupabase = async (userFirmName = "") => {
       toBePaidAmount: toBePaid,
       billNo: row.bill_no || "",
       typeOfBill: row.type_of_bill || "",
-      totalBillAmount: row.total_bill_amount !== null ? String(row.total_bill_amount) : "",
+      totalBillAmount: row.total_bill_amount != null ? String(row.total_bill_amount) : "",
 
       // Management Approval
       managementApprovalDate,

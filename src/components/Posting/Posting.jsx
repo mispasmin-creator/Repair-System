@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { cachedFetch } from "../../services/sheetCache";
-import { Search, Filter, ClipboardCheck, Calendar, CheckCircle2, ExternalLink, Zap, Layers, X } from "lucide-react";
+import { Search, Filter, ClipboardCheck, Calendar, CheckCircle2, ExternalLink, Layers, X } from "lucide-react";
 import Button from "../ui/Button";
 import Modal from "../ui/Modal";
 import {
@@ -589,7 +589,6 @@ const Posting = () => {
             <Table containerClassName="max-h-[calc(100vh-260px)] overflow-y-auto">
               <TableHeader className="sticky top-0 z-10 bg-gray-50">
                 <TableHead className="min-w-[170px] text-center whitespace-nowrap">Action</TableHead>
-                <TableHead className="min-w-[100px] whitespace-nowrap">Type</TableHead>
                 <TableHead className="min-w-[120px] whitespace-nowrap">Task Number</TableHead>
                 <TableHead className="min-w-[150px] whitespace-nowrap">Machine Name</TableHead>
                 <TableHead className="min-w-[130px] whitespace-nowrap">Serial No</TableHead>
@@ -605,7 +604,7 @@ const Posting = () => {
               <TableBody>
                 {loadingTasks ? (
                   <TableRow>
-                    <TableCell colSpan={13} className="text-center py-12">
+                    <TableCell colSpan={12} className="text-center py-12">
                       <div className="flex flex-col items-center justify-center">
                         <div className="w-9 h-9 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                         <p className="mt-3 text-sm text-gray-500 font-medium">Loading tasks...</p>
@@ -614,7 +613,7 @@ const Posting = () => {
                   </TableRow>
                 ) : filteredPendingTasks.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={13} className="text-center py-12 text-gray-500">
+                    <TableCell colSpan={12} className="text-center py-12 text-gray-500">
                       No pending posting tasks found
                     </TableCell>
                   </TableRow>
@@ -630,17 +629,6 @@ const Posting = () => {
                           <ClipboardCheck className="w-3.5 h-3.5 mr-1" />
                           Process
                         </Button>
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap">
-                        {task.isAdvance ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-bold rounded-full bg-orange-100 text-orange-700 border border-orange-200">
-                            <Zap className="w-3 h-3" /> ADVANCE
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center px-2 py-0.5 text-[11px] font-semibold rounded-full bg-blue-100 text-blue-700">
-                            NORMAL
-                          </span>
-                        )}
                       </TableCell>
                       <TableCell className="font-medium text-blue-600 whitespace-nowrap">
                         <div className="flex flex-col gap-1">
