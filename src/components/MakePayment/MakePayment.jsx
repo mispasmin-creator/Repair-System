@@ -17,6 +17,7 @@ import toast from "react-hot-toast";
 import { fetchRepairTasks as fetchRepairTasksSvc } from "../../services/repairService";
 import { fetchAdvancePayments, updateAdvancePayment, getTodayIST, getNowIST, isAdvanceRow } from "../../services/advancePaymentService";
 import { openDrivePreview } from "../../utils/driveUtils";
+import { getNextPaymentNo } from "../../services/supabaseRepairService";
 
 // Google Form URLs mapped by firm name
 const FIRM_FORM_URLS = {
@@ -48,6 +49,7 @@ const MakePayment = () => {
   const [selectedTask, setSelectedTask] = useState(null);
   const [loadingTasks, setLoadingTasks] = useState(false);
   const [submitLoading, setSubmitLoading] = useState(false);
+  const [nextPaymentNo, setNextPaymentNo] = useState("");
 
   const [searchTerm, setSearchTerm] = useState("");
   const [showFilters, setShowFilters] = useState(false);
@@ -372,6 +374,8 @@ const MakePayment = () => {
       toBePaidAmount: displayToBePaid ? displayToBePaid.toString() : (task.toBePaidAmount?.toString() || ""),
       utrChequeNo: "",
     });
+    setNextPaymentNo("");
+    getNextPaymentNo().then(setNextPaymentNo).catch(() => setNextPaymentNo(""));
     setIsModalOpen(true);
   };
 
@@ -404,6 +408,7 @@ const MakePayment = () => {
           department: row["Department"] || "",
           vendorName: row["Vendor Name"] || "",
           paymentType: row["Payment Type"] || "",
+          paymentNo: row["Payment No"] || "",
           isAdvancePayment: isAdvanceRow(row),
           howMuch: row["How Much"] || "",
           billImage: row["Bill Image"] || "",
@@ -607,6 +612,8 @@ const MakePayment = () => {
       setSubmitLoading(true);
       const nowIST = getNowIST();
       const todayIST = getTodayIST();
+      // Latest number DB se (do log ek saath submit karein to bhi number na takraye)
+      const paymentNo = await getNextPaymentNo();
 
       if (selectedTask.isAdvance) {
         // ── ADVANCE TASK: Update "Repair FMS Advance Payment" sheet (Step 3) ──
@@ -630,6 +637,7 @@ const MakePayment = () => {
               "Advance Payment UTR / Cheque No": formData.utrChequeNo || "",
               "Advance Amount Paid": rowAmt || "",
               "Payment Done By": user?.name || "",
+              "Payment No": paymentNo,
             });
           })
         );
@@ -651,13 +659,6 @@ const MakePayment = () => {
         }
       } else {
         // ── NORMAL TASK: Insert into Repair FMS Advance Payment + update Repair System ──
-        const lastPaymentNo = repairPayments
-          .filter((p) => p.paymentNo?.startsWith("PN-"))
-          .map((p) => parseInt(p.paymentNo.replace("PN-", ""), 10))
-          .filter((n) => !isNaN(n))
-          .sort((a, b) => b - a)[0] || 0;
-        const nextPaymentNo = `PN-${String(lastPaymentNo + 1).padStart(3, "0")}`;
-
         // Step 1: Insert into Repair FMS Advance Payment sheet
         const insertPayload = {
           action: "insert1",
@@ -693,6 +694,7 @@ const MakePayment = () => {
               sheetName: "Repair System",
               taskNo: tNo,
               "Actual 4": todayIST,
+              "Payment No": paymentNo,
             };
             return fetch(SCRIPT_URL, {
               method: "POST",
@@ -1239,7 +1241,7 @@ const MakePayment = () => {
               </label>
               <input
                 type="text"
-                value={"PN-001" || ""}
+                value={nextPaymentNo || "..."}
                 readOnly
                 className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-500 cursor-not-allowed"
               />

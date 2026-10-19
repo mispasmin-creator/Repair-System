@@ -152,6 +152,7 @@ export const mapSupabaseTaskToSheetFormat = (item) => {
     "Planned 4": formatDateIST(mp?.planned_date),
     "Actual 4": formatDateIST(mp?.actual_date),
     "UTR / Cheque No": mp?.payment_utr_no || "",
+    "Payment No": mp?.payment_no || "",
 
     // Step 7: Accounts
     "Planned 5": formatDateIST(acc?.planned_1 || si?.actual_date),
@@ -212,6 +213,23 @@ export const fetchRepairTasksFromSupabase = async (userFirmName = "") => {
 
   const tasks = (indents || []).map(mapSupabaseTaskToSheetFormat);
   return tasks.filter((t) => matchesFirm(t["Firm Name"], userFirmName));
+};
+
+/**
+ * Agla Payment No (PN-001 se shuru). make_payment aur repair_advance dono ke
+ * payment_no me se sabse bada number dekhkar +1 karta hai.
+ */
+export const getNextPaymentNo = async () => {
+  const [mp, adv] = await Promise.all([
+    supabase.from("make_payment").select("payment_no"),
+    supabase.from("repair_advance").select("payment_no"),
+  ]);
+  const all = [...(mp.data || []), ...(adv.data || [])];
+  const max = all.reduce((m, r) => {
+    const mt = String(r.payment_no || "").match(/^PN-(\d+)$/i);
+    return mt ? Math.max(m, parseInt(mt[1], 10)) : m;
+  }, 0);
+  return `PN-${String(max + 1).padStart(3, "0")}`;
 };
 
 /**
@@ -400,6 +418,7 @@ export const updateRepairTaskInSupabase = async (taskNo, fields = {}) => {
         actual_date: toISOOrNull(fields["Actual 4"]),
         payment_type: fields["Payment Type"] || "Final",
         payment_utr_no: fields["UTR / Cheque No"] || "PAID",
+        ...(fields["Payment No"] ? { payment_no: fields["Payment No"] } : {}),
         amount_paid: toNumOrNull(fields["To Be Paid Amount"] || fields["Total Bill Amount"]) || 0,
       },
       { onConflict: "task_no" }
@@ -513,6 +532,7 @@ export const fetchAdvancePaymentsFromSupabase = async (userFirmName = "") => {
       actualPaymentDate: formatDateIST(row.actual_payment_date),
       advancePaymentUTR: row.advance_payment_utr || "",
       advanceAmountPaid: row.advance_amount_paid !== null ? String(row.advance_amount_paid) : "",
+      paymentNo: row.payment_no || "",
       paymentDoneBy: row.payment_done_by || "",
 
       // Step 4: Check Machine
@@ -575,6 +595,7 @@ export const updateAdvancePaymentInSupabase = async (repairTaskNo, fields = {}) 
   if (fields["Advance Payment UTR / Cheque No"] !== undefined) record.advance_payment_utr = fields["Advance Payment UTR / Cheque No"];
   if (fields["Advance Amount Paid"] !== undefined) record.advance_amount_paid = toNumOrNull(fields["Advance Amount Paid"]);
   if (fields["Payment Done By"] !== undefined) record.payment_done_by = fields["Payment Done By"];
+  if (fields["Payment No"] !== undefined) record.payment_no = fields["Payment No"];
 
   // Step 4: Check Machine
   if (fields["Planned Check Machine"] !== undefined) record.planned_check_machine = toISOOrNull(fields["Planned Check Machine"]);

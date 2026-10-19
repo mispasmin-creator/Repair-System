@@ -273,7 +273,10 @@ const Accounts = () => {
     fetchAllTasks();
   }, [user?.firmName]);
 
-  const uniqueFirms = ["All", ...new Set(tasks.map((t) => t.firmName).filter(Boolean))];
+  const uniqueFirms = [
+    "All",
+    ...new Set(tasks.map((t) => t.firmName).filter((f) => f && f !== "All")),
+  ];
   const firmTasks = tasks.filter(
     (t) => selectedFirm === "All" || t.firmName === selectedFirm
   );
@@ -522,12 +525,12 @@ const Accounts = () => {
         {/* Table */}
         <div className="overflow-auto max-h-[calc(100vh-320px)]">
           <table className="min-w-full divide-y divide-gray-200 text-left text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
+            <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-30">
               <tr>
-                <th className="px-4 py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[100px] text-center">
+                <th className="sticky top-0 left-0 z-30 bg-gray-50 w-[110px] min-w-[110px] max-w-[110px] px-4 py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap text-center">
                   Action
                 </th>
-                <th className="px-4 py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[120px]">
+                <th className="sticky top-0 left-[110px] z-30 bg-gray-50 min-w-[120px] px-4 py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap border-r border-gray-200">
                   Task No
                 </th>
                 <th className="px-4 py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[130px]">
@@ -601,7 +604,7 @@ const Accounts = () => {
                       key={task.taskNo || idx}
                       className="hover:bg-blue-50/40 transition-colors duration-150"
                     >
-                      <td className="px-4 py-3 text-sm whitespace-nowrap text-center">
+                      <td className="sticky left-0 z-10 bg-white w-[110px] min-w-[110px] max-w-[110px] px-4 py-3 text-sm whitespace-nowrap text-center">
                         {activeTab === "completed" ? (
                           <span className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-700 text-xs font-semibold rounded-lg">
                             ✓ Done
@@ -616,7 +619,7 @@ const Accounts = () => {
                           </button>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-sm font-semibold text-blue-600 whitespace-nowrap">
+                      <td className="sticky left-[110px] z-10 bg-white min-w-[120px] px-4 py-3 text-sm font-semibold text-blue-600 whitespace-nowrap border-r border-gray-200">
                         {task.taskNo || "-"}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">
