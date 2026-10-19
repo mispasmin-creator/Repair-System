@@ -104,11 +104,11 @@ const MakePayment = () => {
 
   const historyWithFirm = useMemo(() => {
     return historyRepairPayments.map(payment => {
-      const task = taskMap.get(payment.repairTaskNo);
+      const task = taskMap.get(payment.repairTaskNo || payment.taskNo);
       return {
         ...payment,
-        firmName: task?.firmName || "",
-        priority: task?.priority || ""
+        firmName: payment.firmName || task?.firmName || "",
+        priority: payment.priority || task?.priority || ""
       };
     });
   }, [historyRepairPayments, taskMap]);

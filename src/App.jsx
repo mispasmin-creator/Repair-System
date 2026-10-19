@@ -104,6 +104,24 @@ function AppContent() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  // Desktop par sidebar chhota (sirf icons) / bada karne ke liye; choice yaad rakhta hai.
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem("sidebarCollapsed") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const toggleSidebar = () =>
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem("sidebarCollapsed", next ? "1" : "0");
+      } catch {
+        // storage unavailable
+      }
+      return next;
+    });
 
   const renderContent = () => {
     switch (activeTab) {
@@ -149,7 +167,9 @@ function AppContent() {
 
         {/* Sidebar */}
         <div
-          className={`fixed inset-y-0 left-0 transform bg-white shadow-md z-50 w-64 transition-transform duration-150 md:relative md:translate-x-0 ${
+          className={`fixed inset-y-0 left-0 transform bg-white shadow-md z-50 w-64 ${
+            sidebarCollapsed ? "md:w-16" : ""
+          } transition-[transform,width] duration-200 md:relative md:translate-x-0 ${
             sidebarOpen ? "translate-x-0" : "-translate-x-full"
           }`}
         >
@@ -165,6 +185,8 @@ function AppContent() {
 
           {/* Sidebar with click-to-close in mobile */}
           <Sidebar
+            collapsed={sidebarCollapsed}
+            onToggle={toggleSidebar}
             activeTab={activeTab}
             setActiveTab={(tab) => {
               setActiveTab(tab);

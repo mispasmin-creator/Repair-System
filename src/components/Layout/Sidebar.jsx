@@ -12,11 +12,13 @@ import {
   User,
   Users,
   Calculator,
-  ClipboardCheck
+  ClipboardCheck,
+  PanelLeftClose,
+  PanelLeftOpen
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
-const Sidebar = ({ activeTab, setActiveTab }) => {
+const Sidebar = ({ activeTab, setActiveTab, collapsed = false, onToggle }) => {
   const { user, logout } = useAuth();
 
   const menuItems = [
@@ -54,17 +56,29 @@ const Sidebar = ({ activeTab, setActiveTab }) => {
   });
 
   return (
-    <div className="w-64 bg-white shadow-lg h-screen flex flex-col">
-      {/* Logo Header */}
-      <div className="px-5 py-4 border-b border-gray-200 flex-shrink-0">
-        <div className="flex items-center space-x-3">
-          <img src="/logo.png" alt="Logo" className="w-9 h-9 rounded-full object-cover flex-shrink-0" />
-          <h1 className="text-xl font-bold text-gray-800 truncate">Repair App</h1>
+    <div className={`w-64 ${collapsed ? 'md:w-16' : ''} bg-white shadow-lg h-screen flex flex-col transition-[width] duration-200 overflow-hidden`}>
+      {/* Logo Header + ek hi toggle button */}
+      <div className={`px-5 ${collapsed ? 'md:px-2' : ''} py-4 border-b border-gray-200 flex-shrink-0`}>
+        <div className={`flex items-center justify-between gap-2 ${collapsed ? 'md:flex-col md:justify-center' : ''}`}>
+          <div className="flex items-center space-x-3 min-w-0">
+            <img src="/logo.png" alt="Logo" className="w-9 h-9 rounded-full object-cover flex-shrink-0" />
+            <h1 className={`text-xl font-bold text-gray-800 truncate ${collapsed ? 'md:hidden' : ''}`}>Repair App</h1>
+          </div>
+          {onToggle && (
+            <button
+              type="button"
+              onClick={onToggle}
+              title={collapsed ? 'Sidebar kholo' : 'Sidebar chhota karo'}
+              className="hidden md:inline-flex p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-800 transition-colors flex-shrink-0"
+            >
+              {collapsed ? <PanelLeftOpen className="w-5 h-5" /> : <PanelLeftClose className="w-5 h-5" />}
+            </button>
+          )}
         </div>
       </div>
 
       {/* Scrollable Nav */}
-      <nav className="flex-1 overflow-y-auto px-3 py-3"
+      <nav className={`flex-1 overflow-y-auto px-3 ${collapsed ? 'md:px-2' : ''} py-3`}
         style={{ scrollbarWidth: 'thin', scrollbarColor: '#cbd5e1 transparent' }}
       >
         <ul className="space-y-1">
@@ -75,14 +89,14 @@ const Sidebar = ({ activeTab, setActiveTab }) => {
                 <button
                   onClick={() => setActiveTab(item.id)}
                   title={item.label}
-                  className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors duration-100 text-left ${
+                  className={`w-full flex items-center space-x-3 ${collapsed ? 'md:justify-center md:space-x-0' : ''} px-3 py-2 rounded-lg transition-colors duration-100 text-left ${
                     activeTab === item.id
                       ? 'bg-blue-50 text-blue-600 border-r-4 border-blue-600 font-semibold'
                       : 'text-gray-600 hover:bg-gray-50 hover:text-gray-800'
                   }`}
                 >
                   <Icon className="w-4 h-4 flex-shrink-0" />
-                  <span className="text-sm font-medium truncate leading-tight">{item.label}</span>
+                  <span className={`text-sm font-medium truncate leading-tight ${collapsed ? 'md:hidden' : ''}`}>{item.label}</span>
                 </button>
               </li>
             );
@@ -91,12 +105,12 @@ const Sidebar = ({ activeTab, setActiveTab }) => {
       </nav>
 
       {/* User Info */}
-      <div className="px-4 py-3 border-t border-gray-200 flex-shrink-0">
-        <div className="flex items-center space-x-3">
+      <div className={`px-4 ${collapsed ? 'md:px-2' : ''} py-3 border-t border-gray-200 flex-shrink-0`}>
+        <div className={`flex items-center space-x-3 ${collapsed ? 'md:justify-center md:space-x-0' : ''}`}>
           <div className="w-9 h-9 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
             <User className="w-4 h-4 text-white" />
           </div>
-          <div className="min-w-0">
+          <div className={`min-w-0 ${collapsed ? 'md:hidden' : ''}`}>
             <p className="text-sm font-medium text-gray-800 truncate">{user?.name}</p>
             <p className="text-xs text-gray-500 capitalize">{user?.role}</p>
           </div>
@@ -107,10 +121,11 @@ const Sidebar = ({ activeTab, setActiveTab }) => {
       <div className="px-3 pb-4 flex-shrink-0 border-t border-gray-200">
         <button
           onClick={logout}
-          className="w-full flex items-center space-x-3 px-3 py-2 mt-2 text-gray-600 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors duration-100"
+          title="Logout"
+          className={`w-full flex items-center space-x-3 ${collapsed ? 'md:justify-center md:space-x-0' : ''} px-3 py-2 mt-2 text-gray-600 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors duration-100`}
         >
           <LogOut className="w-4 h-4 flex-shrink-0" />
-          <span className="text-sm font-medium">Logout</span>
+          <span className={`text-sm font-medium ${collapsed ? 'md:hidden' : ''}`}>Logout</span>
         </button>
       </div>
     </div>
