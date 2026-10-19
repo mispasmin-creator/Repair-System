@@ -75,6 +75,10 @@ export const mapSupabaseTaskToSheetFormat = (item) => {
   const p = Array.isArray(item.posting) ? item.posting[0] : item.posting;
   const mp = Array.isArray(item.make_payment) ? item.make_payment[0] : item.make_payment;
   const acc = Array.isArray(item.accounts) ? item.accounts[0] : item.accounts;
+  // Audit me "Not Done" (purana naam "Mismatch") = Rectify me jayega, Tally me nahi.
+  const auditNotDone = ["not done", "mismatch", "rejected"].includes(
+    String(acc?.status_1 || "").trim().toLowerCase()
+  );
 
   return {
     "Time Stemp": formatDateIST(item.created_at),
@@ -164,17 +168,19 @@ export const mapSupabaseTaskToSheetFormat = (item) => {
     "Accounts Status 1": acc?.status_1 || "",
     "Accounts Remarks 1": acc?.remarks_1 || "",
 
-    "Accounts Planned 2": formatDateIST(acc?.planned_2),
+    "Accounts Planned 2": formatDateIST(acc?.planned_2 || (acc?.actual_1 && auditNotDone ? acc?.actual_1 : "")),
     "Accounts Actual 2": formatDateIST(acc?.actual_2),
     "Accounts Status 2": acc?.status_2 || "",
     "Accounts Remarks 2": acc?.remarks_2 || "",
 
-    "Accounts Planned 3": formatDateIST(acc?.planned_3),
+    "Accounts Planned 3": formatDateIST(acc?.planned_3 || acc?.actual_2),
     "Accounts Actual 3": formatDateIST(acc?.actual_3),
     "Accounts Status 3": acc?.status_3 || "",
     "Accounts Remarks 3": acc?.remarks_3 || "",
 
-    "Accounts Planned 4": formatDateIST(acc?.planned_4 || (acc?.actual_1 && !acc?.planned_2 ? acc?.actual_1 : "")),
+    "Accounts Planned 4": formatDateIST(
+      acc?.planned_4 || acc?.actual_3 || (acc?.actual_1 && !auditNotDone ? acc?.actual_1 : "")
+    ),
     "Accounts Actual 4": formatDateIST(acc?.actual_4),
     "Accounts Status 4": acc?.status_4 || "",
     "Accounts Remarks 4": acc?.remarks_4 || "",
@@ -209,11 +215,53 @@ export const fetchRepairTasksFromSupabase = async (userFirmName = "") => {
 };
 
 /**
+ * Accounts steps (Audit / Rectify / Reaudit / Tally) sirf `accounts` table me likhta hai.
+ * Dusre step ke tables (sent_to_vendor, check_machine, ...) ko nahi chhuta, kyunki
+ * Accounts ke "Actual 1..4" ke naam un steps ke fields se milte-julte hain.
+ */
+const upsertAccountsRecord = async (cleanTaskNo, fields) => {
+  const accRecord = { task_no: cleanTaskNo };
+  if (fields["Actual 1"] !== undefined) accRecord.actual_1 = toISOOrNull(fields["Actual 1"]);
+  if (fields["Status 1"] !== undefined) accRecord.status_1 = fields["Status 1"];
+  if (fields["Remarks1"] !== undefined) accRecord.remarks_1 = fields["Remarks1"];
+
+  if (fields["Actual 2"] !== undefined) accRecord.actual_2 = toISOOrNull(fields["Actual 2"]);
+  if (fields["Status 2"] !== undefined) accRecord.status_2 = fields["Status 2"];
+  if (fields["Remarks 2"] !== undefined) accRecord.remarks_2 = fields["Remarks 2"];
+
+  if (fields["Actual 3"] !== undefined) accRecord.actual_3 = toISOOrNull(fields["Actual 3"]);
+  if (fields["Status 3"] !== undefined) accRecord.status_3 = fields["Status 3"];
+  if (fields["Remarks 3"] !== undefined) accRecord.remarks_3 = fields["Remarks 3"];
+
+  if (fields["Actual 4"] !== undefined) accRecord.actual_4 = toISOOrNull(fields["Actual 4"]);
+  if (fields["Status 4"] !== undefined) accRecord.status_4 = fields["Status 4"];
+  if (fields["Remarks 4"] !== undefined) accRecord.remarks_4 = fields["Remarks 4"];
+
+  if (accRecord.actual_1 && (accRecord.status_1 === "Done" || accRecord.status_1 === "Complete" || accRecord.status_1 === "Matched" || accRecord.status_1 === "OK")) {
+    accRecord.planned_4 = accRecord.actual_1;
+  } else if (accRecord.actual_1 && (accRecord.status_1 === "Not Done" || accRecord.status_1 === "Mismatch" || accRecord.status_1 === "Rejected")) {
+    accRecord.planned_2 = accRecord.actual_1;
+  }
+
+  const { error } = await supabase.from("accounts").upsert(accRecord, { onConflict: "task_no" });
+  if (error) {
+    console.error("Supabase accounts upsert error:", error);
+    return { success: false, message: error.message };
+  }
+  return { success: true, taskNo: cleanTaskNo };
+};
+
+/**
  * Updates any task step directly in Supabase.
  */
 export const updateRepairTaskInSupabase = async (taskNo, fields = {}) => {
   if (!taskNo) return { success: false };
   const cleanTaskNo = taskNo.trim();
+
+  // Accounts page: sirf accounts table update ho, baaki steps ko mat chhuo.
+  if (fields.sheetName === "Accounts") {
+    return upsertAccountsRecord(cleanTaskNo, fields);
+  }
 
   // Sent to Vendor
   if (fields["Actual 1"] || fields["Vendor Name"] || fields["Vendor Name 1"]) {
@@ -358,9 +406,8 @@ export const updateRepairTaskInSupabase = async (taskNo, fields = {}) => {
     );
   }
 
-  // Accounts
+  // Accounts (dusre pages se aaye Status/Remarks fields ke liye)
   const isAccountsUpdate =
-    fields.sheetName === "Accounts" ||
     fields["Status 1"] ||
     fields["Status 2"] ||
     fields["Status 3"] ||
@@ -371,30 +418,7 @@ export const updateRepairTaskInSupabase = async (taskNo, fields = {}) => {
     fields["Remarks 4"];
 
   if (isAccountsUpdate) {
-    const accRecord = { task_no: cleanTaskNo };
-    if (fields["Actual 1"] !== undefined) accRecord.actual_1 = toISOOrNull(fields["Actual 1"]);
-    if (fields["Status 1"] !== undefined) accRecord.status_1 = fields["Status 1"];
-    if (fields["Remarks1"] !== undefined) accRecord.remarks_1 = fields["Remarks1"];
-
-    if (fields["Actual 2"] !== undefined) accRecord.actual_2 = toISOOrNull(fields["Actual 2"]);
-    if (fields["Status 2"] !== undefined) accRecord.status_2 = fields["Status 2"];
-    if (fields["Remarks 2"] !== undefined) accRecord.remarks_2 = fields["Remarks 2"];
-
-    if (fields["Actual 3"] !== undefined) accRecord.actual_3 = toISOOrNull(fields["Actual 3"]);
-    if (fields["Status 3"] !== undefined) accRecord.status_3 = fields["Status 3"];
-    if (fields["Remarks 3"] !== undefined) accRecord.remarks_3 = fields["Remarks 3"];
-
-    if (fields["Actual 4"] !== undefined) accRecord.actual_4 = toISOOrNull(fields["Actual 4"]);
-    if (fields["Status 4"] !== undefined) accRecord.status_4 = fields["Status 4"];
-    if (fields["Remarks 4"] !== undefined) accRecord.remarks_4 = fields["Remarks 4"];
-
-    if (accRecord.actual_1 && (accRecord.status_1 === "Complete" || accRecord.status_1 === "Matched" || accRecord.status_1 === "OK")) {
-      accRecord.planned_4 = accRecord.actual_1;
-    } else if (accRecord.actual_1 && (accRecord.status_1 === "Mismatch" || accRecord.status_1 === "Rejected")) {
-      accRecord.planned_2 = accRecord.actual_1;
-    }
-
-    await supabase.from("accounts").upsert(accRecord, { onConflict: "task_no" });
+    return upsertAccountsRecord(cleanTaskNo, fields);
   }
 
   return { success: true, taskNo: cleanTaskNo };

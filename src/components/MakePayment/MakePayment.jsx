@@ -28,7 +28,6 @@ const FIRM_FORM_URLS = {
 };
 
 // Options in the Payment Type dropdown of the payment modal
-const PAYMENT_MODES = ["Bank Transfer", "Cash", "Cheque", "Credit Card"];
 
 const MakePayment = () => {
   const { user } = useAuth();
@@ -369,7 +368,7 @@ const MakePayment = () => {
     const displayToBePaid = getDisplayToBePaidAmount(task);
     setFormData({
       totalBillAmount: displayTotal ? displayTotal.toString() : (task.toBePaidAmount?.toString() || ""),
-      paymentType: PAYMENT_MODES.includes(task.paymentType) ? task.paymentType : "",
+      paymentType: task.paymentType || "",
       toBePaidAmount: displayToBePaid ? displayToBePaid.toString() : (task.toBePaidAmount?.toString() || ""),
       utrChequeNo: "",
     });
@@ -599,10 +598,6 @@ const MakePayment = () => {
 
     if (!selectedTask) return;
 
-    if (!formData.paymentType) {
-      toast.error("Please select a payment type");
-      return;
-    }
     if (!formData.toBePaidAmount) {
       toast.error("Please enter the amount to be paid");
       return;
@@ -674,7 +669,7 @@ const MakePayment = () => {
           "Vendor Name ": selectedTask.vendorName || "",
           "Bill No.": selectedTask.billNo || "",
           "Total Bill Amount": formData.totalBillAmount || getDisplayTotalAmount(selectedTask) || selectedTask.totalBillAmount || "",
-          "Payment Type": formData.paymentType,
+          "Payment Type": selectedTask.paymentType || "",
           "To Be Paid Amount": formData.toBePaidAmount,
         };
         const insertResp = await fetch(SCRIPT_URL, {
@@ -1325,28 +1320,6 @@ const MakePayment = () => {
                 required
                 className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-500 cursor-not-allowed"
               />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Payment Type *
-              </label>
-              <select
-                value={formData.paymentType}
-                onChange={(e) =>
-                  setFormData((prev) => ({
-                    ...prev,
-                    paymentType: e.target.value,
-                  }))
-                }
-                required
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value="">Select Payment Type</option>
-                {PAYMENT_MODES.map((mode) => (
-                  <option key={mode} value={mode}>{mode}</option>
-                ))}
-              </select>
             </div>
 
             <div>

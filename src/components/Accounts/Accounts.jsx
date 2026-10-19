@@ -222,11 +222,7 @@ const Accounts = () => {
             remarks: t["Accounts Remarks 3"] || "",
           },
           tally: {
-            planned:
-              t["Accounts Planned 4"] ||
-              (t["Accounts Actual 1"] && !t["Accounts Planned 2"]
-                ? t["Accounts Actual 1"]
-                : ""),
+            planned: t["Accounts Planned 4"] || "",
             actual: t["Accounts Actual 4"] || "",
             status: t["Accounts Status 4"] || "",
             remarks: t["Accounts Remarks 4"] || "",
@@ -748,7 +744,6 @@ const Accounts = () => {
               <option value="Done">Done (Approved)</option>
               {activeTab === "audit" && (
                 <>
-                  <option value="Mismatch">Mismatch (Send to Rectify)</option>
                   <option value="Not Done">Not Done</option>
                 </>
               )}

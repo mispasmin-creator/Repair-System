@@ -250,8 +250,11 @@ if (!window.__sheetCacheWriteHook) {
           await updateAdvancePaymentInSupabase(taskNo, bodyData);
           invalidateAdvancePaymentsCache();
         } else {
-          await updateRepairTaskInSupabase(taskNo, bodyData);
+          const result = await updateRepairTaskInSupabase(taskNo, bodyData);
           invalidateRepairTasksCache();
+          if (result && result.success === false) {
+            return asResponse({ success: false, taskNo, message: result.message || "Supabase update failed" });
+          }
         }
         return asResponse({ success: true, taskNo, message: "Updated in Supabase" });
       }
