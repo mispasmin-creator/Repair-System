@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo } from "react";
 import { cachedFetch } from "../../services/sheetCache";
 import { Search, Filter, Send, Loader2Icon, X, ChevronsUpDown } from "lucide-react";
 import Button from "../ui/Button";
+import { PlannedActualHeads, PlannedActualCells } from "../ui/PlannedActualCells";
 import {
   Table,
   TableHeader,
@@ -519,18 +520,18 @@ const SentMachine = () => {
                 <TableHead className="min-w-[90px] text-center">Action</TableHead>
                 <TableHead className="min-w-[120px]">Task Number</TableHead>
                 <TableHead className="min-w-[130px]">Firm Name</TableHead>
-                <TableHead className="min-w-[110px]">Planned Date</TableHead>
                 <TableHead className="min-w-[150px]">Machine Name</TableHead>
                 <TableHead className="min-w-[120px]">Serial No</TableHead>
                 <TableHead className="min-w-[130px]">Indentor Name</TableHead>
                 <TableHead className="min-w-[120px]">Department</TableHead>
                 <TableHead className="min-w-[150px]">Part Name</TableHead>
                 <TableHead className="min-w-[100px]">Priority</TableHead>
+                <PlannedActualHeads />
               </TableHeader>
               <TableBody>
                 {loadingTasks ? (
                   <TableRow>
-                    <TableCell colSpan={10} className="text-center py-12">
+                    <TableCell colSpan={11} className="text-center py-12">
                       <div className="flex flex-col items-center justify-center">
                         <div className="w-9 h-9 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                         <p className="mt-3 text-sm text-gray-500 font-medium">Loading tasks...</p>
@@ -539,7 +540,7 @@ const SentMachine = () => {
                   </TableRow>
                 ) : displayedPendingTasks.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={10} className="text-center py-12 text-gray-500">
+                    <TableCell colSpan={11} className="text-center py-12 text-gray-500">
                       No pending tasks found
                     </TableCell>
                   </TableRow>
@@ -560,9 +561,6 @@ const SentMachine = () => {
                         {task.taskNo}
                       </TableCell>
                       <TableCell>{task.firmName || "-"}</TableCell>
-                      <TableCell>
-                        {task.planned ? new Date(task.planned).toLocaleDateString() : "-"}
-                      </TableCell>
                       <TableCell className="font-medium text-gray-900">{task.machineName}</TableCell>
                       <TableCell>{task.serialNo}</TableCell>
                       <TableCell>{task.doerName || task.nameOfIndenter || "-"}</TableCell>
@@ -577,6 +575,7 @@ const SentMachine = () => {
                           {task.priority || "Normal"}
                         </span>
                       </TableCell>
+                      <PlannedActualCells planned={task.planned} actual={task.actual} />
                     </TableRow>
                   ))
                 )}
@@ -591,7 +590,6 @@ const SentMachine = () => {
               <TableHeader className="sticky top-0 z-10 bg-gray-50">
                 <TableHead className="min-w-[120px]">Task Number</TableHead>
                 <TableHead className="min-w-[130px]">Firm Name</TableHead>
-                <TableHead className="min-w-[110px]">Planned Date</TableHead>
                 <TableHead className="min-w-[120px]">Serial No</TableHead>
                 <TableHead className="min-w-[150px]">Machine Name</TableHead>
                 <TableHead className="min-w-[130px]">Indentor Name</TableHead>
@@ -605,11 +603,12 @@ const SentMachine = () => {
                 <TableHead className="min-w-[130px]">Machine Image</TableHead>
                 <TableHead className="min-w-[120px]">Payment Type</TableHead>
                 <TableHead className="min-w-[120px]">Payment Amount</TableHead>
+                <PlannedActualHeads />
               </TableHeader>
               <TableBody>
                 {loadingTasks ? (
                   <TableRow>
-                    <TableCell colSpan={16} className="text-center py-12">
+                    <TableCell colSpan={17} className="text-center py-12">
                       <div className="flex flex-col items-center justify-center">
                         <div className="w-9 h-9 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                         <p className="mt-3 text-sm text-gray-500 font-medium">Loading tasks...</p>
@@ -618,7 +617,7 @@ const SentMachine = () => {
                   </TableRow>
                 ) : displayedHistoryTasks.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={16} className="text-center py-12 text-gray-500">
+                    <TableCell colSpan={17} className="text-center py-12 text-gray-500">
                       No history tasks found
                     </TableCell>
                   </TableRow>
@@ -629,9 +628,6 @@ const SentMachine = () => {
                         {task.taskNo}
                       </TableCell>
                       <TableCell>{task.firmName || "-"}</TableCell>
-                      <TableCell>
-                        {task.planned ? new Date(task.planned).toLocaleDateString() : "-"}
-                      </TableCell>
                       <TableCell>{task.serialNo}</TableCell>
                       <TableCell className="font-medium text-gray-900">{task.machineName}</TableCell>
                       <TableCell>{task.doerName || task.nameOfIndenter || "-"}</TableCell>
@@ -669,6 +665,7 @@ const SentMachine = () => {
                           ? `₹${Number(task.amount || task.howMuch).toLocaleString()}`
                           : "-"}
                       </TableCell>
+                      <PlannedActualCells planned={task.planned} actual={task.actual} />
                     </TableRow>
                   ))
                 )}

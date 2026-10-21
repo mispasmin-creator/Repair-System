@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from "react";
+import { CommonTasksRow, buildCommonItems } from "../ui/CommonTasksRow";
+import { PlannedActualHeads, PlannedActualCells } from "../ui/PlannedActualCells";
 import { cachedFetch } from "../../services/sheetCache";
 import { Search, Filter, CheckCircle, Loader2Icon, Layers, X, Check, Zap } from "lucide-react";
 import Button from "../ui/Button";
@@ -47,9 +49,8 @@ const CheckMachine = () => {
   // Common Bill linking states
   const [selectedCommonTasks, setSelectedCommonTasks] = useState([]);
   const [commonSearchTerm, setCommonSearchTerm] = useState("");
-  const [commonDetailModalOpen, setCommonDetailModalOpen] = useState(false);
-  const [commonDetailParentTask, setCommonDetailParentTask] = useState(null);
-  const [commonDetailTasksList, setCommonDetailTasksList] = useState([]);
+  // Common bill wali entry par click karne se usi row ke neeche detail slide hokar khulti hai.
+  const [expandedCommon, setExpandedCommon] = useState({});
 
   const [searchTerm, setSearchTerm] = useState("");
   const [showFilters, setShowFilters] = useState(false);
@@ -495,21 +496,21 @@ const CheckMachine = () => {
     }
   };
 
-  const handleViewCommonTasks = (parentTask) => {
-    setCommonDetailParentTask(parentTask);
-    const linkedTaskNos = parentTask.commonTasksLinked || [];
-    const list = linkedTaskNos.map((tNo) => {
-      const found = repairTasks.find((t) => t.taskNo === tNo);
-      return {
-        taskNo: tNo,
-        machineName: found?.machineName || "-",
-        transporterName: found?.transporterName || parentTask.transporterName || "-",
-        typeOfBill: "Common",
-      };
-    });
-    setCommonDetailTasksList(list);
-    setCommonDetailModalOpen(true);
+  const commonKey = (task) => `${activeTab}-${task.taskNo || task.repairTaskNo}`;
+  const handleViewCommonTasks = (task) =>
+    setExpandedCommon((prev) => ({ ...prev, [commonKey(task)]: !prev[commonKey(task)] }));
+  // Combined entry me row par kahin bhi click karne se detail khulti/band hoti hai
+  // (button, link, input par click ko chhodkar).
+  const handleRowClick = (e, task) => {
+    if (!task.commonTasksLinked?.length) return;
+    if (e.target.closest("button, a, input, select, textarea, label")) return;
+    handleViewCommonTasks(task);
   };
+  const rowProps = (task) => ({
+    onClick: (e) => handleRowClick(e, task),
+    style: task.commonTasksLinked?.length > 0 ? { cursor: "pointer" } : undefined,
+  });
+  const findCommonTask = (tNo) => repairTasks.find((t) => t.taskNo === tNo);
 
   // Advance tasks whose bill was already entered at the Process for Payment
   // step don't need to be asked for it again here.
@@ -627,7 +628,6 @@ const CheckMachine = () => {
                 <TableHead className="min-w-[120px]">Task Number</TableHead>
                 <TableHead className="min-w-[130px]">Firm Name</TableHead>
                 <TableHead className="min-w-[150px]">Machine Name</TableHead>
-                <TableHead className="min-w-[110px]">Planned Date</TableHead>
                 <TableHead className="min-w-[120px]">Serial No</TableHead>
                 <TableHead className="min-w-[130px]">Indentor Name</TableHead>
                 <TableHead className="min-w-[140px]">Vendor</TableHead>
@@ -637,11 +637,12 @@ const CheckMachine = () => {
                 <TableHead className="min-w-[120px]">Advance Amount</TableHead>
                 <TableHead className="min-w-[120px]">Machine Image</TableHead>
                 <TableHead className="min-w-[130px]">Transport Image</TableHead>
+                <PlannedActualHeads />
               </TableHeader>
               <TableBody>
                 {loadingTasks && pendingRepairTasks.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={14} className="text-center py-12">
+                    <TableCell colSpan={15} className="text-center py-12">
                       <div className="flex flex-col items-center justify-center">
                         <div className="w-9 h-9 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                         <p className="mt-3 text-sm text-gray-500 font-medium">Loading tasks...</p>
@@ -650,7 +651,7 @@ const CheckMachine = () => {
                   </TableRow>
                 ) : displayedPendingTasks.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={14} className="text-center py-12 text-gray-500">
+                    <TableCell colSpan={15} className="text-center py-12 text-gray-500">
                       No pending tasks found
                     </TableCell>
                   </TableRow>
@@ -680,7 +681,6 @@ const CheckMachine = () => {
                       </TableCell>
                       <TableCell>{task.firmName || "-"}</TableCell>
                       <TableCell className="font-medium text-gray-900">{task.machineName}</TableCell>
-                      <TableCell>{task.planned1 || "-"}</TableCell>
                       <TableCell>{task.serialNo}</TableCell>
                       <TableCell>{task.doerName}</TableCell>
                       <TableCell>{task.vendorName || "-"}</TableCell>
@@ -716,6 +716,7 @@ const CheckMachine = () => {
                           <span className="text-gray-400 text-xs">-</span>
                         )}
                       </TableCell>
+                      <PlannedActualCells planned={task.isAdvance ? task.plannedCheckMachine : task.planned1} actual={task.isAdvance ? task.actualCheckMachineDate : task.actual1} />
                     </TableRow>
                   ))
                 )}
@@ -732,7 +733,6 @@ const CheckMachine = () => {
                 <TableHead className="min-w-[130px]">Firm Name</TableHead>
                 <TableHead className="min-w-[150px]">Machine Name</TableHead>
                 <TableHead className="min-w-[120px]">Serial No</TableHead>
-                <TableHead className="min-w-[110px]">Planned Date</TableHead>
                 <TableHead className="min-w-[130px]">Indentor Name</TableHead>
                 <TableHead className="min-w-[140px]">Vendor Name</TableHead>
                 <TableHead className="min-w-[100px]">Lead Time</TableHead>
@@ -746,11 +746,12 @@ const CheckMachine = () => {
                 <TableHead className="min-w-[120px]">Machine Image</TableHead>
                 <TableHead className="min-w-[130px]">Transport Image</TableHead>
                 <TableHead className="min-w-[120px]">Bill Image</TableHead>
+                <PlannedActualHeads />
               </TableHeader>
               <TableBody>
                 {loadingTasks && historyRepairTasks.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={18} className="text-center py-12">
+                    <TableCell colSpan={19} className="text-center py-12">
                       <div className="flex flex-col items-center justify-center">
                         <div className="w-9 h-9 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                         <p className="mt-3 text-sm text-gray-500 font-medium">Loading tasks...</p>
@@ -759,116 +760,127 @@ const CheckMachine = () => {
                   </TableRow>
                 ) : displayedHistoryTasks.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={18} className="text-center py-12 text-gray-500">
+                    <TableCell colSpan={19} className="text-center py-12 text-gray-500">
                       No history tasks found
                     </TableCell>
                   </TableRow>
                 ) : (
                   displayedHistoryTasks.map((task) => (
-                    <TableRow key={task.taskNo || Math.random()}>
-                      <TableCell className="font-medium text-blue-600">
-                        <div className="flex flex-col items-start gap-1">
-                          <span>{task.taskNo}</span>
-                          {task.commonTasksLinked && task.commonTasksLinked.length > 0 && (
+                    <React.Fragment key={task.taskNo || Math.random()}>
+                      <TableRow {...rowProps(task)}>
+                        <TableCell className="font-medium text-blue-600">
+                          <div className="flex flex-col items-start gap-1">
+                            <span>{task.taskNo}</span>
+                            {task.commonTasksLinked && task.commonTasksLinked.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => handleViewCommonTasks(task)}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 transition-colors shadow-xs"
+                                title="Click to view linked common tasks"
+                              >
+                                <Layers className="w-3 h-3 text-indigo-600" />
+                                {task.commonTasksLinked.length} Common
+                              </button>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>{task.firmName || "-"}</TableCell>
+                        <TableCell className="font-medium text-gray-900">{task.machineName}</TableCell>
+                        <TableCell>{task.serialNo}</TableCell>
+                        <TableCell>{task.doerName}</TableCell>
+                        <TableCell>{task.vendorName || "-"}</TableCell>
+                        <TableCell>{task.leadTimeToDeliverDays ? `${task.leadTimeToDeliverDays} Days` : "-"}</TableCell>
+                        <TableCell>{task.paymentType || "-"}</TableCell>
+                        <TableCell>{task.howMuch ? `₹${Number(task.howMuch).toLocaleString()}` : "-"}</TableCell>
+                        <TableCell>{task.tranporterName || task.transporterName || "-"}</TableCell>
+                        <TableCell className="font-medium text-gray-900">
+                          {(() => {
+                            const amt = task.isAdvance ? getAdvanceBillTotal(task) : toNum(task.toBePaidAmount);
+                            return amt ? `₹${amt.toLocaleString()}` : "-";
+                          })()}
+                        </TableCell>
+                        <TableCell>{task.billNo || "-"}</TableCell>
+                        <TableCell>
+                          <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${(task.typeOfBill || "").toLowerCase() === "common"
+                              ? "bg-purple-100 text-purple-800"
+                              : (task.typeOfBill || "").toLowerCase() === "independent"
+                                ? "bg-blue-100 text-blue-800"
+                                : "bg-gray-100 text-gray-800"
+                            }`}>
+                            {task.typeOfBill || "-"}
+                          </span>
+                          {task.commonParentTask && (
+                            <span className="block text-[11px] text-gray-500 mt-0.5">
+                              Under: <strong className="text-gray-700">{task.commonParentTask}</strong>
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {(() => {
+                            const amt = task.isAdvance ? getAdvanceBillTotal(task) : toNum(task.totalBillAmount);
+                            return amt ? `₹${amt.toLocaleString()}` : "-";
+                          })()}
+                        </TableCell>
+                        <TableCell>
+                          {task.machineImageUrl ? (
                             <button
                               type="button"
-                              onClick={() => handleViewCommonTasks(task)}
-                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 transition-colors shadow-xs"
-                              title="Click to view linked common tasks"
+                              className="text-blue-600 underline text-xs hover:text-blue-800 font-medium cursor-pointer"
+                              onClick={() =>
+                                handleViewImage(
+                                  task.machineImageUrl,
+                                  `Machine Photo (Indent) — ${task.taskNo}`
+                                )
+                              }
                             >
-                              <Layers className="w-3 h-3 text-indigo-600" />
-                              {task.commonTasksLinked.length} Common
+                              View Machine
                             </button>
+                          ) : (
+                            <span className="text-gray-400 text-xs">-</span>
                           )}
-                        </div>
-                      </TableCell>
-                      <TableCell>{task.firmName || "-"}</TableCell>
-                      <TableCell className="font-medium text-gray-900">{task.machineName}</TableCell>
-                      <TableCell>{task.serialNo}</TableCell>
-                      <TableCell>{task.planned1 || "-"}</TableCell>
-                      <TableCell>{task.doerName}</TableCell>
-                      <TableCell>{task.vendorName || "-"}</TableCell>
-                      <TableCell>{task.leadTimeToDeliverDays ? `${task.leadTimeToDeliverDays} Days` : "-"}</TableCell>
-                      <TableCell>{task.paymentType || "-"}</TableCell>
-                      <TableCell>{task.howMuch ? `₹${Number(task.howMuch).toLocaleString()}` : "-"}</TableCell>
-                      <TableCell>{task.tranporterName || task.transporterName || "-"}</TableCell>
-                      <TableCell className="font-medium text-gray-900">
-                        {task.toBePaidAmount ? `₹${Number(task.toBePaidAmount).toLocaleString()}` : "-"}
-                      </TableCell>
-                      <TableCell>{task.billNo || "-"}</TableCell>
-                      <TableCell>
-                        <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${(task.typeOfBill || "").toLowerCase() === "common"
-                            ? "bg-purple-100 text-purple-800"
-                            : (task.typeOfBill || "").toLowerCase() === "independent"
-                              ? "bg-blue-100 text-blue-800"
-                              : "bg-gray-100 text-gray-800"
-                          }`}>
-                          {task.typeOfBill || "-"}
-                        </span>
-                        {task.commonParentTask && (
-                          <span className="block text-[11px] text-gray-500 mt-0.5">
-                            Under: <strong className="text-gray-700">{task.commonParentTask}</strong>
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {task.totalBillAmount ? `₹${Number(task.totalBillAmount).toLocaleString()}` : "-"}
-                      </TableCell>
-                      <TableCell>
-                        {task.machineImageUrl ? (
-                          <button
-                            type="button"
-                            className="text-blue-600 underline text-xs hover:text-blue-800 font-medium cursor-pointer"
-                            onClick={() =>
-                              handleViewImage(
-                                task.machineImageUrl,
-                                `Machine Photo (Indent) — ${task.taskNo}`
-                              )
-                            }
-                          >
-                            View Machine
-                          </button>
-                        ) : (
-                          <span className="text-gray-400 text-xs">-</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {task.transportingImage ? (
-                          <button
-                            type="button"
-                            className="text-blue-600 underline text-xs hover:text-blue-800 font-medium cursor-pointer"
-                            onClick={() =>
-                              handleViewImage(
-                                task.transportingImage,
-                                `Transport Photo (Sent To Vendor) — ${task.taskNo}`
-                              )
-                            }
-                          >
-                            View Transport
-                          </button>
-                        ) : (
-                          <span className="text-gray-400 text-xs">-</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {task.billImage ? (
-                          <button
-                            type="button"
-                            className="text-blue-600 underline text-sm hover:text-blue-800 font-medium cursor-pointer"
-                            onClick={() =>
-                              handleViewImage(
-                                task.billImage,
-                                `Bill Image — ${task.taskNo}`
-                              )
-                            }
-                          >
-                            View Bill
-                          </button>
-                        ) : (
-                          <span className="text-gray-400 text-xs">No Bill</span>
-                        )}
-                      </TableCell>
-                    </TableRow>
+                        </TableCell>
+                        <TableCell>
+                          {task.transportingImage ? (
+                            <button
+                              type="button"
+                              className="text-blue-600 underline text-xs hover:text-blue-800 font-medium cursor-pointer"
+                              onClick={() =>
+                                handleViewImage(
+                                  task.transportingImage,
+                                  `Transport Photo (Sent To Vendor) — ${task.taskNo}`
+                                )
+                              }
+                            >
+                              View Transport
+                            </button>
+                          ) : (
+                            <span className="text-gray-400 text-xs">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {(task.isAdvance ? task.billImageLink : task.billImage) ? (
+                            <button
+                              type="button"
+                              className="text-blue-600 underline text-sm hover:text-blue-800 font-medium cursor-pointer"
+                              onClick={() =>
+                                handleViewImage(
+                                  task.isAdvance ? task.billImageLink : task.billImage,
+                                  `Bill Image — ${task.taskNo}`
+                                )
+                              }
+                            >
+                              View Bill
+                            </button>
+                          ) : (
+                            <span className="text-gray-400 text-xs">No Bill</span>
+                          )}
+                        </TableCell>
+                        <PlannedActualCells planned={task.isAdvance ? task.plannedCheckMachine : task.planned1} actual={task.isAdvance ? task.actualCheckMachineDate : task.actual1} />
+                      </TableRow>
+                      {expandedCommon[commonKey(task)] && task.commonTasksLinked?.length > 0 && (
+                        <CommonTasksRow colSpan={19} parent={task} items={buildCommonItems(task, findCommonTask)} />
+                      )}
+                    </React.Fragment>
                   ))
                 )}
               </TableBody>
@@ -1344,79 +1356,6 @@ const CheckMachine = () => {
         </form>
       </Modal>
 
-      {/* Common Bill Tasks Detail Modal */}
-      <Modal
-        isOpen={commonDetailModalOpen}
-        onClose={() => setCommonDetailModalOpen(false)}
-        title={`Common Bill Tasks for ${commonDetailParentTask?.taskNo || ""}`}
-        size="lg"
-      >
-        <div className="space-y-4">
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-            <div>
-              <span className="text-gray-500 font-medium">Independent Task: </span>
-              <strong className="text-blue-700 text-base">{commonDetailParentTask?.taskNo}</strong>
-              <span className="text-gray-600 ml-2 font-medium">({commonDetailParentTask?.machineName})</span>
-            </div>
-            <div className="text-xs text-gray-600">
-              Bill No: <strong className="text-gray-900">{commonDetailParentTask?.billNo || "-"}</strong>
-            </div>
-          </div>
-
-          <div className="border border-gray-200 rounded-lg overflow-hidden">
-            <table className="min-w-full divide-y divide-gray-200 text-sm">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-2.5 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
-                    Repair Task Number
-                  </th>
-                  <th className="px-4 py-2.5 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
-                    Machine Name
-                  </th>
-                  <th className="px-4 py-2.5 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
-                    Transporter Name *
-                  </th>
-                  <th className="px-4 py-2.5 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
-                    Type of Bill
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 bg-white">
-                {commonDetailTasksList.length === 0 ? (
-                  <tr>
-                    <td colSpan={4} className="px-4 py-6 text-center text-gray-500 text-sm">
-                      No linked common tasks found.
-                    </td>
-                  </tr>
-                ) : (
-                  commonDetailTasksList.map((item, idx) => (
-                    <tr key={idx} className="hover:bg-gray-50/75 transition-colors">
-                      <td className="px-4 py-2.5 font-bold text-blue-600">{item.taskNo}</td>
-                      <td className="px-4 py-2.5 font-medium text-gray-800">{item.machineName}</td>
-                      <td className="px-4 py-2.5 text-gray-600">{item.transporterName || "-"}</td>
-                      <td className="px-4 py-2.5">
-                        <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-800">
-                          {item.typeOfBill}
-                        </span>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="flex justify-end pt-2 border-t border-gray-100">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => setCommonDetailModalOpen(false)}
-            >
-              Close
-            </Button>
-          </div>
-        </div>
-      </Modal>
     </div>
   );
 };

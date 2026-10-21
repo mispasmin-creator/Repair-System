@@ -1,4 +1,6 @@
 import React, { useEffect, useState, useMemo } from "react";
+import { CommonTasksRow, buildCommonItems } from "../ui/CommonTasksRow";
+import { PlannedActualHeads, PlannedActualCells } from "../ui/PlannedActualCells";
 import { cachedFetch } from "../../services/sheetCache";
 import { Search, Filter, Package, ExternalLink, Zap } from "lucide-react";
 import Button from "../ui/Button";
@@ -78,27 +80,23 @@ const MakePayment = () => {
   const [selectedPaymentType, setSelectedPaymentType] = useState("All");
   const [selectedPriority, setSelectedPriority] = useState("All");
 
-  const [commonDetailModalOpen, setCommonDetailModalOpen] = useState(false);
-  const [commonDetailParentTask, setCommonDetailParentTask] = useState(null);
-  const [commonDetailTasksList, setCommonDetailTasksList] = useState([]);
-
-  const handleViewCommonTasks = (parentTask) => {
-    setCommonDetailParentTask(parentTask);
-    const linkedTaskNos = parentTask.commonTasksLinked || [];
-    const list = linkedTaskNos.map((tNo) => {
-      const found = repairTasks.find((t) => t.taskNo === tNo || t.repairTaskNo === tNo);
-      return {
-        taskNo: tNo,
-        machineName: found?.machineName || "-",
-        firmName: found?.firmName || parentTask.firmName || "-",
-        serialNo: found?.serialNo || "-",
-        vendorName: found?.vendorName || parentTask.vendorName || "-",
-        toBePaidAmount: found?.toBePaidAmount || "-",
-      };
-    });
-    setCommonDetailTasksList(list);
-    setCommonDetailModalOpen(true);
+  // Common bill wali entry par click karne se usi row ke neeche detail slide hokar khulti hai.
+  const [expandedCommon, setExpandedCommon] = useState({});
+  const commonKey = (task) => `${activeTab}-${task.taskNo || task.repairTaskNo}`;
+  const handleViewCommonTasks = (task) =>
+    setExpandedCommon((prev) => ({ ...prev, [commonKey(task)]: !prev[commonKey(task)] }));
+  // Combined entry me row par kahin bhi click karne se detail khulti/band hoti hai
+  // (button, link, input par click ko chhodkar).
+  const handleRowClick = (e, task) => {
+    if (!task.commonTasksLinked?.length) return;
+    if (e.target.closest("button, a, input, select, textarea, label")) return;
+    handleViewCommonTasks(task);
   };
+  const rowProps = (task) => ({
+    onClick: (e) => handleRowClick(e, task),
+    style: task.commonTasksLinked?.length > 0 ? { cursor: "pointer" } : undefined,
+  });
+  const findCommonTask = (tNo) => repairTasks.find((t) => t.taskNo === tNo || t.repairTaskNo === tNo);
 
   const taskMap = useMemo(() => new Map(repairTasks.map(t => [t.taskNo, t])), [repairTasks]);
 
@@ -658,51 +656,35 @@ const MakePayment = () => {
           toast.error("❌ Failed to update advance payment");
         }
       } else {
-        // ── NORMAL TASK: Insert into Repair FMS Advance Payment + update Repair System ──
-        // Step 1: Insert into Repair FMS Advance Payment sheet
-        const insertPayload = {
-          action: "insert1",
-          sheetName: "Repair FMS Advance Payment",
-          Timestamp: nowIST,
-          "Repair Task No": selectedTask.taskNo,
-          "Serial No": selectedTask.serialNo || "",
-          "Machine Name": selectedTask.machineName || "",
-          "Vendor Name ": selectedTask.vendorName || "",
-          "Bill No.": selectedTask.billNo || "",
-          "Total Bill Amount": formData.totalBillAmount || getDisplayTotalAmount(selectedTask) || selectedTask.totalBillAmount || "",
-          "Payment Type": selectedTask.paymentType || "",
-          "To Be Paid Amount": formData.toBePaidAmount,
-        };
-        const insertResp = await fetch(SCRIPT_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: new URLSearchParams(insertPayload).toString(),
-        });
-        const insertResult = await insertResp.json();
-
-        if (!insertResult.success) {
-          toast.error("❌ Failed to record payment: " + (insertResult.message || "Unknown error"));
-          return;
-        }
-
-        // Step 2: Update Actual 4 in Repair System sheet for main task AND all linked tasks
+        // ── NORMAL TASK: payment sirf `make_payment` me jaati hai ──
+        // (Pehle yahan "Repair FMS Advance Payment" me extra insert hota tha, jisse
+        //  Supabase ke repair_advance me galat row ban jati thi aur task advance flow me chala jata tha.)
+        // Common bill me paisa ek hi baar gina jaye: main task me poori amount, linked tasks me 0.
         const tasksToUpdate = [selectedTask.taskNo, ...(selectedTask.commonTasksLinked || [])];
-        await Promise.allSettled(
-          tasksToUpdate.map((tNo) => {
+        const results = await Promise.all(
+          tasksToUpdate.map(async (tNo, idx) => {
             const updatePayload = {
               action: "update1",
               sheetName: "Repair System",
               taskNo: tNo,
               "Actual 4": todayIST,
               "Payment No": paymentNo,
+              "Payment Type": selectedTask.paymentType || "",
+              "To Be Paid Amount": idx === 0 ? String(formData.toBePaidAmount) : "0",
             };
-            return fetch(SCRIPT_URL, {
+            const resp = await fetch(SCRIPT_URL, {
               method: "POST",
               headers: { "Content-Type": "application/x-www-form-urlencoded" },
               body: new URLSearchParams(updatePayload).toString(),
             });
+            return resp.json();
           })
         );
+        const failed = results.find((r) => !r?.success);
+        if (failed) {
+          toast.error("❌ Failed to record payment: " + (failed.message || "Unknown error"));
+          return;
+        }
 
         const commonBillCount = selectedTask?.commonTasksLinked?.length || 0;
         if (commonBillCount > 0) {
@@ -1000,12 +982,13 @@ const MakePayment = () => {
                     <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[150px]">Advance Amount Paid</th>
                     <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[150px]">Total Bill Amount</th>
                     <th className="px-4 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[150px]">To Be Paid Amount</th>
+                    <PlannedActualHeads raw />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 bg-white">
                   {loadingTasks && pendingRepairPayments.length === 0 ? (
                     <tr>
-                      <td colSpan={11} className="text-center py-12">
+                      <td colSpan={13} className="text-center py-12">
                         <div className="flex flex-col items-center justify-center">
                           <div className="w-9 h-9 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                           <p className="mt-3 text-sm text-gray-500 font-medium">Loading tasks...</p>
@@ -1014,73 +997,79 @@ const MakePayment = () => {
                     </tr>
                   ) : groupedPending.length === 0 ? (
                     <tr>
-                      <td colSpan={11} className="text-center py-12 text-gray-500">No pending payments found</td>
+                      <td colSpan={13} className="text-center py-12 text-gray-500">No pending payments found</td>
                     </tr>
                   ) : (
                     groupedPending.map((task) => (
-                      <tr key={task.taskNo || Math.random()} className={`hover:bg-blue-50/40 transition-colors duration-150 ${task.commonTasksLinked?.length > 0 ? 'bg-blue-50/20' : ''}`}>
-                        <td className="px-4 py-3 text-sm whitespace-nowrap text-center">
-                          <div className="flex items-center justify-center gap-2">
-                            <Button size="sm" onClick={() => handleMaterialClick(task)} className="flex items-center">
-                              <Package className="w-3.5 h-3.5 mr-1" />
-                              Material
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              onClick={() => handleOpenForm(task)}
-                              className="flex items-center text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200"
-                              title="Open Google Form"
-                            >
-                              <ExternalLink className="w-3.5 h-3.5 mr-1" />
-                              Form
-                            </Button>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-sm font-medium text-blue-600 whitespace-nowrap">
-                          <div className="flex flex-col gap-1">
-                            <span>{task.taskNo || "-"}</span>
-                            {task.commonTasksLinked?.length > 0 && (
-                              <button
-                                type="button"
-                                onClick={() => handleViewCommonTasks(task)}
-                                className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full bg-green-100 text-green-700 hover:bg-green-200 border border-green-300 w-fit cursor-pointer transition-colors"
-                                title="Click to view linked common tasks"
+                      <React.Fragment key={task.taskNo || Math.random()}>
+                        <tr {...rowProps(task)} className={`hover:bg-blue-50/40 transition-colors duration-150 ${task.commonTasksLinked?.length > 0 ? 'bg-blue-50/20' : ''}`}>
+                          <td className="px-4 py-3 text-sm whitespace-nowrap text-center">
+                            <div className="flex items-center justify-center gap-2">
+                              <Button size="sm" onClick={() => handleMaterialClick(task)} className="flex items-center">
+                                <Package className="w-3.5 h-3.5 mr-1" />
+                                Material
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => handleOpenForm(task)}
+                                className="flex items-center text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200"
+                                title="Open Google Form"
                               >
-                                🔗 {task.commonTasksLinked.length} Common
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">{task.firmName || "-"}</td>
-                        <td className="px-4 py-3 text-sm font-medium text-gray-900 whitespace-nowrap">{task.machineName}</td>
-                        <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">{task.vendorName || "-"}</td>
-                        <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">{task.paymentType || "-"}</td>
-                        <td className="px-4 py-3 text-sm whitespace-nowrap">
-                          {(() => {
-                            const billImageUrl = task.isAdvance ? task.billImageLink : task.billImage;
-                            return billImageUrl ? (
-                              <button type="button" onClick={() => openDrivePreview(billImageUrl)} className="text-blue-600 underline text-sm hover:text-blue-800 font-medium">View Bill</button>
-                            ) : <span className="text-gray-400 text-xs">No Bill</span>;
-                          })()}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">{task.billNo || "-"}</td>
-                        <td className="px-4 py-3 text-sm font-medium text-gray-900 whitespace-nowrap">
-                          {task.advanceAmountPaid ? `₹${Number(task.advanceAmountPaid).toLocaleString()}` : "-"}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">
-                          {(() => {
-                            const amt = getDisplayTotalAmount(task);
-                            return amt ? `₹${Number(amt).toLocaleString()}` : "-";
-                          })()}
-                        </td>
-                        <td className="px-4 py-3 text-sm font-medium text-gray-900 whitespace-nowrap">
-                          {(() => {
-                            const amt = getDisplayToBePaidAmount(task) || task.toBePaidAmount;
-                            return amt ? `₹${Number(amt).toLocaleString()}` : "-";
-                          })()}
-                        </td>
-                      </tr>
+                                <ExternalLink className="w-3.5 h-3.5 mr-1" />
+                                Form
+                              </Button>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-sm font-medium text-blue-600 whitespace-nowrap">
+                            <div className="flex flex-col gap-1">
+                              <span>{task.taskNo || "-"}</span>
+                              {task.commonTasksLinked?.length > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleViewCommonTasks(task)}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full bg-green-100 text-green-700 hover:bg-green-200 border border-green-300 w-fit cursor-pointer transition-colors"
+                                  title="Click to view linked common tasks"
+                                >
+                                  🔗 {task.commonTasksLinked.length} Common
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">{task.firmName || "-"}</td>
+                          <td className="px-4 py-3 text-sm font-medium text-gray-900 whitespace-nowrap">{task.machineName}</td>
+                          <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">{task.vendorName || "-"}</td>
+                          <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">{task.paymentType || "-"}</td>
+                          <td className="px-4 py-3 text-sm whitespace-nowrap">
+                            {(() => {
+                              const billImageUrl = task.isAdvance ? task.billImageLink : task.billImage;
+                              return billImageUrl ? (
+                                <button type="button" onClick={() => openDrivePreview(billImageUrl)} className="text-blue-600 underline text-sm hover:text-blue-800 font-medium">View Bill</button>
+                              ) : <span className="text-gray-400 text-xs">No Bill</span>;
+                            })()}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">{task.billNo || "-"}</td>
+                          <td className="px-4 py-3 text-sm font-medium text-gray-900 whitespace-nowrap">
+                            {task.advanceAmountPaid ? `₹${Number(task.advanceAmountPaid).toLocaleString()}` : "-"}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">
+                            {(() => {
+                              const amt = getDisplayTotalAmount(task);
+                              return amt ? `₹${Number(amt).toLocaleString()}` : "-";
+                            })()}
+                          </td>
+                          <td className="px-4 py-3 text-sm font-medium text-gray-900 whitespace-nowrap">
+                            {(() => {
+                              const amt = getDisplayToBePaidAmount(task) || task.toBePaidAmount;
+                              return amt ? `₹${Number(amt).toLocaleString()}` : "-";
+                            })()}
+                          </td>
+                          <PlannedActualCells raw planned={task.isAdvance ? task.plannedPayment : task.planned4} actual={task.isAdvance ? task.actualPaymentDate : task.actual4} />
+                        </tr>
+                        {expandedCommon[commonKey(task)] && task.commonTasksLinked?.length > 0 && (
+                          <CommonTasksRow colSpan={13} parent={task} items={buildCommonItems(task, findCommonTask)} />
+                        )}
+                      </React.Fragment>
                     ))
                   )}
                 </tbody>
@@ -1106,11 +1095,12 @@ const MakePayment = () => {
                 <TableHead className="min-w-[130px]">To Be Paid Amount</TableHead>
                 <TableHead className="min-w-[120px]">Bill Image</TableHead>
                 <TableHead className="min-w-[120px]">Bill Match</TableHead>
+                <PlannedActualHeads />
               </TableHeader>
               <TableBody>
                 {loadingTasks && historyRepairPayments.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={12} className="text-center py-12">
+                    <TableCell colSpan={14} className="text-center py-12">
                       <div className="flex flex-col items-center justify-center">
                         <div className="w-9 h-9 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                         <p className="mt-3 text-sm text-gray-500 font-medium">Loading payment history...</p>
@@ -1119,77 +1109,83 @@ const MakePayment = () => {
                   </TableRow>
                 ) : groupedHistory.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={12} className="text-center py-12 text-gray-500">
+                    <TableCell colSpan={14} className="text-center py-12 text-gray-500">
                       No payment history found
                     </TableCell>
                   </TableRow>
                 ) : (
                   groupedHistory.map((task, index) => (
-                    <TableRow key={index}>
-                      <TableCell className="font-medium text-blue-600">
-                        {task.paymentNo || task.taskNo}
-                      </TableCell>
-                      <TableCell className="font-medium text-blue-600">
-                        <div className="flex flex-col gap-1">
-                          <span>{task.repairTaskNo || task.taskNo}</span>
-                          {task.commonTasksLinked?.length > 0 && (
-                            <button
-                              type="button"
-                              onClick={() => handleViewCommonTasks(task)}
-                              className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full bg-green-100 text-green-700 hover:bg-green-200 border border-green-300 w-fit cursor-pointer transition-colors"
-                              title="Click to view linked common tasks"
-                            >
-                              🔗 {task.commonTasksLinked.length} Common
-                            </button>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>{task.firmName || "-"}</TableCell>
-                      <TableCell>{task.serialNo}</TableCell>
-                      <TableCell className="font-medium text-gray-900">{task.machineName}</TableCell>
-                      <TableCell>{task.vendorName || "-"}</TableCell>
-                      <TableCell>{task.billNo || "-"}</TableCell>
-                      <TableCell className="font-medium text-gray-900">
-                        {task.advanceAmountPaid ? `₹${Number(task.advanceAmountPaid).toLocaleString()}` : "-"}
-                      </TableCell>
-                      <TableCell>
-                        {(() => {
-                          const amt = getDisplayTotalAmount(task);
-                          return amt ? `₹${Number(amt).toLocaleString()}` : "-";
-                        })()}
-                      </TableCell>
-                      <TableCell>{task.paymentType || "-"}</TableCell>
-                      <TableCell className="font-medium text-gray-900">
-                        {task.toBePaidAmount ? `₹${Number(task.toBePaidAmount).toLocaleString()}` : "-"}
-                      </TableCell>
-                      <TableCell>
-                        {(() => {
-                          const billImageUrl = task.isAdvance ? task.billImageLink : task.billImage;
-                          return billImageUrl ? (
-                            <button
-                              type="button"
-                              className="text-blue-600 underline text-sm hover:text-blue-800 font-medium"
-                              onClick={() => openDrivePreview(billImageUrl)}
-                            >
-                              View Bill
-                            </button>
-                          ) : (
-                            <span className="text-gray-400 text-xs">No Bill</span>
-                          );
-                        })()}
-                      </TableCell>
-                      <TableCell>
-                        <span
-                          className={`px-2.5 py-1 text-xs font-medium rounded-full ${
-                            task.billMatch === "Yes"
-                              ? "bg-green-100 text-green-800"
-                              : "bg-red-100 text-red-800"
-                          }`}
-                        >
-                          {task.billMatch === "Yes" ? "Matched" : "Not Matched"}
-                        </span>
-                      </TableCell>
-                    </TableRow>
+                    <React.Fragment key={index}>
+                      <TableRow {...rowProps(task)}>
+                        <TableCell className="font-medium text-blue-600">
+                          {task.paymentNo || task.taskNo}
+                        </TableCell>
+                        <TableCell className="font-medium text-blue-600">
+                          <div className="flex flex-col gap-1">
+                            <span>{task.repairTaskNo || task.taskNo}</span>
+                            {task.commonTasksLinked?.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => handleViewCommonTasks(task)}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full bg-green-100 text-green-700 hover:bg-green-200 border border-green-300 w-fit cursor-pointer transition-colors"
+                                title="Click to view linked common tasks"
+                              >
+                                🔗 {task.commonTasksLinked.length} Common
+                              </button>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>{task.firmName || "-"}</TableCell>
+                        <TableCell>{task.serialNo}</TableCell>
+                        <TableCell className="font-medium text-gray-900">{task.machineName}</TableCell>
+                        <TableCell>{task.vendorName || "-"}</TableCell>
+                        <TableCell>{task.billNo || "-"}</TableCell>
+                        <TableCell className="font-medium text-gray-900">
+                          {task.advanceAmountPaid ? `₹${Number(task.advanceAmountPaid).toLocaleString()}` : "-"}
+                        </TableCell>
+                        <TableCell>
+                          {(() => {
+                            const amt = getDisplayTotalAmount(task);
+                            return amt ? `₹${Number(amt).toLocaleString()}` : "-";
+                          })()}
+                        </TableCell>
+                        <TableCell>{task.paymentType || "-"}</TableCell>
+                        <TableCell className="font-medium text-gray-900">
+                          {task.toBePaidAmount ? `₹${Number(task.toBePaidAmount).toLocaleString()}` : "-"}
+                        </TableCell>
+                        <TableCell>
+                          {(() => {
+                            const billImageUrl = task.isAdvance ? task.billImageLink : task.billImage;
+                            return billImageUrl ? (
+                              <button
+                                type="button"
+                                className="text-blue-600 underline text-sm hover:text-blue-800 font-medium"
+                                onClick={() => openDrivePreview(billImageUrl)}
+                              >
+                                View Bill
+                              </button>
+                            ) : (
+                              <span className="text-gray-400 text-xs">No Bill</span>
+                            );
+                          })()}
+                        </TableCell>
+                        <TableCell>
+                          <span
+                            className={`px-2.5 py-1 text-xs font-medium rounded-full ${
+                              task.billMatch === "Yes"
+                                ? "bg-green-100 text-green-800"
+                                : "bg-red-100 text-red-800"
+                            }`}
+                          >
+                            {task.billMatch === "Yes" ? "Matched" : "Not Matched"}
+                          </span>
+                        </TableCell>
+                        <PlannedActualCells planned={task.isAdvance ? task.plannedPayment : task.planned4} actual={task.isAdvance ? task.actualPaymentDate : task.actual4} />
+                      </TableRow>
+                      {expandedCommon[commonKey(task)] && task.commonTasksLinked?.length > 0 && (
+                        <CommonTasksRow colSpan={14} parent={task} items={buildCommonItems(task, findCommonTask)} />
+                      )}
+                    </React.Fragment>
                   ))
                 )}
               </TableBody>
@@ -1358,74 +1354,6 @@ const MakePayment = () => {
         </form>
       </Modal>
 
-      {/* Linked Common Tasks Detail Modal */}
-      <Modal
-        isOpen={commonDetailModalOpen}
-        onClose={() => setCommonDetailModalOpen(false)}
-        title={`Linked Common Tasks for ${commonDetailParentTask?.taskNo || commonDetailParentTask?.repairTaskNo || ""}`}
-        size="lg"
-      >
-        <div className="space-y-4">
-          <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-lg text-xs space-y-1">
-            <p>
-              <span className="font-bold text-blue-800">Main Task:</span>{" "}
-              <span className="font-semibold text-blue-900">{commonDetailParentTask?.taskNo || commonDetailParentTask?.repairTaskNo}</span>
-              {" | "}
-              <span className="text-gray-700">Machine: {commonDetailParentTask?.machineName}</span>
-              {" | "}
-              <span className="text-gray-700">Firm: {commonDetailParentTask?.firmName || "-"}</span>
-            </p>
-            <p>
-              <span className="font-bold text-gray-700">Bill No:</span> {commonDetailParentTask?.billNo || "-"}
-              {" | "}
-              <span className="font-bold text-gray-700">To Be Paid Amount:</span> ₹{commonDetailParentTask?.toBePaidAmount || "-"}
-            </p>
-          </div>
-
-          <div className="overflow-x-auto border border-gray-200 rounded-lg">
-            <table className="min-w-full divide-y divide-gray-200 text-xs">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-3 py-2 text-left font-semibold text-gray-600 uppercase">Task No</th>
-                  <th className="px-3 py-2 text-left font-semibold text-gray-600 uppercase">Machine Name</th>
-                  <th className="px-3 py-2 text-left font-semibold text-gray-600 uppercase">Firm Name</th>
-                  <th className="px-3 py-2 text-left font-semibold text-gray-600 uppercase">Serial No</th>
-                  <th className="px-3 py-2 text-left font-semibold text-gray-600 uppercase">Vendor Name</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200 bg-white">
-                {commonDetailTasksList.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="px-3 py-4 text-center text-gray-500">
-                      No linked tasks found.
-                    </td>
-                  </tr>
-                ) : (
-                  commonDetailTasksList.map((item, idx) => (
-                    <tr key={idx} className="hover:bg-gray-50">
-                      <td className="px-3 py-2 font-bold text-blue-600">{item.taskNo}</td>
-                      <td className="px-3 py-2 font-medium text-gray-800">{item.machineName}</td>
-                      <td className="px-3 py-2 text-gray-700">{item.firmName}</td>
-                      <td className="px-3 py-2 text-gray-600">{item.serialNo}</td>
-                      <td className="px-3 py-2 text-gray-700">{item.vendorName}</td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="flex justify-end pt-2 border-t border-gray-200">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => setCommonDetailModalOpen(false)}
-            >
-              Close
-            </Button>
-          </div>
-        </div>
-      </Modal>
     </div>
   );
 };

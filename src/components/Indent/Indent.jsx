@@ -3,6 +3,7 @@ import { supabase } from "../../services/supabaseClient";
 import { Plus, Search, Filter } from "lucide-react";
 import Button from "../ui/Button";
 import Modal from "../ui/Modal";
+import { PlannedActualHeads, PlannedActualCells } from "../ui/PlannedActualCells";
 import {
   Table,
   TableHeader,
@@ -84,6 +85,7 @@ const Indent = () => {
 
         return {
           id: row.id || `task-${index}`,
+          plannedDate: row.planned_sent_date || "",
           timestamp: row.created_at ? new Date(row.created_at).toLocaleString("en-GB", { timeZone: "Asia/Kolkata" }) : "",
           taskNo: row.task_no || "",
           firmName: row.firm_name || "",
@@ -306,11 +308,12 @@ const Indent = () => {
               <TableHead className="min-w-[110px]">Start Date</TableHead>
               <TableHead className="min-w-[110px]">End Date</TableHead>
               <TableHead className="min-w-[100px]">Status</TableHead>
+              <PlannedActualHeads />
             </TableHeader>
             <TableBody>
               {loadingTasks ? (
                 <TableRow>
-                  <TableCell colSpan={15} className="text-center py-8">
+                  <TableCell colSpan={17} className="text-center py-8">
                     <div className="flex flex-col items-center justify-center">
                       <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                       <p className="mt-4 text-gray-600">Loading tasks...</p>
@@ -319,7 +322,7 @@ const Indent = () => {
                 </TableRow>
               ) : filteredTasks.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={15} className="text-center py-8">
+                  <TableCell colSpan={17} className="text-center py-8">
                     <p className="text-gray-500">No tasks found</p>
                   </TableCell>
                 </TableRow>
@@ -411,6 +414,7 @@ const Indent = () => {
                         {task.status || "N/A"}
                       </span>
                     </TableCell>
+                    <PlannedActualCells planned={task.plannedDate} actual={task.timestamp} />
                   </TableRow>
                 ))
               )}

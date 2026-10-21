@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Search, Filter, ShieldCheck, Loader2Icon, Clock, CheckCircle2 } from "lucide-react";
 import Button from "../ui/Button";
+import { PlannedActualHeads, PlannedActualCells } from "../ui/PlannedActualCells";
 import Modal from "../ui/Modal";
 import {
   Table,
@@ -165,6 +166,7 @@ const ManagementApproval = () => {
         transportationCharges: row["Transportation Charges"] || "",
         paymentType: row["Payment Type"] || "",
         howMuch: row["How Much"] || "",
+        managementPendingDate: row["Management Pending Date"] || "",
         managementApprovalDate: row["Management Approval Date"] || "",
         managementRemark: row["Management Remark"] || "",
 
@@ -464,12 +466,12 @@ const ManagementApproval = () => {
                 <TableHead className="min-w-[130px]">Advance Amount</TableHead>
                 <TableHead className="min-w-[100px]">Priority</TableHead>
                 <TableHead className="min-w-[140px]">Sent Date</TableHead>
-                <TableHead className="min-w-[140px]">Pending Since</TableHead>
+                <PlannedActualHeads />
               </TableHeader>
               <TableBody>
                 {loadingTasks ? (
                   <TableRow>
-                    <TableCell colSpan={14} className="text-center py-12">
+                    <TableCell colSpan={15} className="text-center py-12">
                       <div className="flex flex-col items-center justify-center">
                         <div className="w-9 h-9 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                         <p className="mt-3 text-sm text-gray-500 font-medium">Loading tasks...</p>
@@ -478,7 +480,7 @@ const ManagementApproval = () => {
                   </TableRow>
                 ) : displayedPendingTasks.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={14} className="text-center py-12 text-gray-500">
+                    <TableCell colSpan={15} className="text-center py-12 text-gray-500">
                       No pending approvals found
                     </TableCell>
                   </TableRow>
@@ -521,7 +523,7 @@ const ManagementApproval = () => {
                         </span>
                       </TableCell>
                       <TableCell>{task.actual || "-"}</TableCell>
-                      <TableCell>{task.managementPendingDate || "-"}</TableCell>
+                      <PlannedActualCells planned={task.managementPendingDate} actual={task.managementApprovalDate} />
                     </TableRow>
                   ))
                 )}
@@ -546,13 +548,13 @@ const ManagementApproval = () => {
                 <TableHead className="min-w-[120px]">Payment Type</TableHead>
                 <TableHead className="min-w-[130px]">Advance Amount</TableHead>
                 <TableHead className="min-w-[100px]">Priority</TableHead>
-                <TableHead className="min-w-[150px]">Approved Date</TableHead>
                 <TableHead className="min-w-[200px]">Management Remark</TableHead>
+                <PlannedActualHeads />
               </TableHeader>
               <TableBody>
                 {loadingTasks ? (
                   <TableRow>
-                    <TableCell colSpan={13} className="text-center py-12">
+                    <TableCell colSpan={14} className="text-center py-12">
                       <div className="flex flex-col items-center justify-center">
                         <div className="w-9 h-9 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                         <p className="mt-3 text-sm text-gray-500 font-medium">Loading tasks...</p>
@@ -561,7 +563,7 @@ const ManagementApproval = () => {
                   </TableRow>
                 ) : displayedHistoryTasks.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={13} className="text-center py-12 text-gray-500">
+                    <TableCell colSpan={14} className="text-center py-12 text-gray-500">
                       No approval history found
                     </TableCell>
                   </TableRow>
@@ -593,13 +595,8 @@ const ManagementApproval = () => {
                           {task.priority || "Normal"}
                         </span>
                       </TableCell>
-                      <TableCell>
-                        <span className="flex items-center text-green-700 font-medium text-sm">
-                          <CheckCircle2 className="w-4 h-4 mr-1 text-green-500" />
-                          {task.managementApprovalDate}
-                        </span>
-                      </TableCell>
                       <TableCell>{task.managementRemark || "-"}</TableCell>
+                      <PlannedActualCells planned={task.managementPendingDate} actual={task.managementApprovalDate} />
                     </TableRow>
                   ))
                 )}

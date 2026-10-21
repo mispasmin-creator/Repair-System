@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Search, Filter, Package, Loader2Icon, Zap, Upload, FileText, CheckCircle2 } from "lucide-react";
 import Button from "../ui/Button";
+import { PlannedActualHeads, PlannedActualCells } from "../ui/PlannedActualCells";
 import Modal from "../ui/Modal";
 import {
   Table,
@@ -568,7 +569,6 @@ const StoreIn = () => {
                 <TableHead className="min-w-[130px]">Firm Name</TableHead>
                 <TableHead className="min-w-[150px]">Machine Name</TableHead>
                 <TableHead className="min-w-[120px]">Serial No</TableHead>
-                <TableHead className="min-w-[110px]">Planned Date</TableHead>
                 <TableHead className="min-w-[130px]">Indentor Name</TableHead>
                 <TableHead className="min-w-[140px]">Vendor Name</TableHead>
                 <TableHead className="min-w-[100px]">Lead Time</TableHead>
@@ -578,11 +578,12 @@ const StoreIn = () => {
                 <TableHead className="min-w-[120px]">Bill No</TableHead>
                 <TableHead className="min-w-[120px]">Total Bill Amount</TableHead>
                 <TableHead className="min-w-[120px]">To Be Paid</TableHead>
+                <PlannedActualHeads />
               </TableHeader>
               <TableBody>
                 {loadingTasks ? (
                   <TableRow>
-                    <TableCell colSpan={15} className="text-center py-12">
+                    <TableCell colSpan={16} className="text-center py-12">
                       <div className="flex flex-col items-center justify-center">
                         <div className="w-9 h-9 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                         <p className="mt-3 text-sm text-gray-500 font-medium">Loading tasks...</p>
@@ -591,7 +592,7 @@ const StoreIn = () => {
                   </TableRow>
                 ) : filteredPendingTasks.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={15} className="text-center py-12 text-gray-500">
+                    <TableCell colSpan={16} className="text-center py-12 text-gray-500">
                       No pending tasks found
                     </TableCell>
                   </TableRow>
@@ -614,7 +615,6 @@ const StoreIn = () => {
                       <TableCell>{task.firmName || "-"}</TableCell>
                       <TableCell className="font-medium text-gray-900">{task.machineName || "-"}</TableCell>
                       <TableCell>{task.serialNo || "-"}</TableCell>
-                      <TableCell>{task.planned2 || "-"}</TableCell>
                       <TableCell>{task.doerName || "-"}</TableCell>
                       <TableCell>{task.vendorName || "-"}</TableCell>
                       <TableCell>{task.leadTimeToDeliverDays ? `${task.leadTimeToDeliverDays} Days` : "-"}</TableCell>
@@ -639,6 +639,7 @@ const StoreIn = () => {
                       <TableCell>{task.billNo || "-"}</TableCell>
                       <TableCell>{formatCurrency(getDisplayTotalAmount(task))}</TableCell>
                       <TableCell className="font-medium text-gray-900">{formatCurrency(task.toBePaidAmount)}</TableCell>
+                      <PlannedActualCells planned={task.isAdvance ? task.plannedStoreIn : task.planned2} actual={task.isAdvance ? task.actualStoreInDate : task.actual2} />
                     </TableRow>
                   ))
                 )}
@@ -665,11 +666,12 @@ const StoreIn = () => {
                 <TableHead className="min-w-[120px]">Bill Amount</TableHead>
                 <TableHead className="min-w-[120px]">To Be Paid</TableHead>
                 <TableHead className="min-w-[120px]">Bill Match</TableHead>
+                <PlannedActualHeads />
               </TableHeader>
               <TableBody>
                 {loadingTasks ? (
                   <TableRow>
-                    <TableCell colSpan={14} className="text-center py-12">
+                    <TableCell colSpan={16} className="text-center py-12">
                       <div className="flex flex-col items-center justify-center">
                         <div className="w-9 h-9 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                         <p className="mt-3 text-sm text-gray-500 font-medium">Loading tasks...</p>
@@ -678,7 +680,7 @@ const StoreIn = () => {
                   </TableRow>
                 ) : filteredHistoryTasks.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={14} className="text-center py-12 text-gray-500">
+                    <TableCell colSpan={16} className="text-center py-12 text-gray-500">
                       No history tasks found
                     </TableCell>
                   </TableRow>
@@ -748,6 +750,7 @@ const StoreIn = () => {
                           {task.billMatch === "Yes" ? "Matched" : "Not Matched"}
                         </span>
                       </TableCell>
+                      <PlannedActualCells planned={task.isAdvance ? task.plannedStoreIn : task.planned2} actual={task.isAdvance ? task.actualStoreInDate : task.actual2} />
                     </TableRow>
                   ))
                 )}

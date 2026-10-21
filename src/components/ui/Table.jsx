@@ -28,9 +28,9 @@ export const TableBody = ({ children, className = '' }) => {
   );
 };
 
-export const TableRow = ({ children, className = '' }) => {
+export const TableRow = ({ children, className = '', ...rest }) => {
   return (
-    <tr className={`hover:bg-blue-50/50 ${className}`}>
+    <tr className={`hover:bg-blue-50/50 ${className}`} {...rest}>
       {children}
     </tr>
   );
