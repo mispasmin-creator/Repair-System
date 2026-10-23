@@ -275,9 +275,12 @@ const CheckMachine = () => {
             return prerequisiteComplete && !t.actualCheckMachineDate && !t.isChildTask;
           }
         );
-        advHistory = advWithParentFlag.filter(
-          (t) => t.actualPaymentDate && t.actualCheckMachineDate && !t.isChildTask
-        );
+        advHistory = advWithParentFlag.filter((t) => {
+          const prerequisiteComplete = usesDirectStoreInFlow(t.firmName)
+            ? t.managementApprovalDate
+            : t.actualPaymentDate;
+          return prerequisiteComplete && t.actualCheckMachineDate && !t.isChildTask;
+        });
       } catch (advErr) {
         console.warn("Could not fetch advance tasks for CheckMachine:", advErr);
       }

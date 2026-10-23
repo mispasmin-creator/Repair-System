@@ -15,7 +15,12 @@ import { useAuth } from "../../context/AuthContext";
 import useDataStore from "../../store/dataStore";
 import toast from "react-hot-toast";
 import { notifyPendingCountsChanged } from "../../utils/pendingCountEvents";
-import { fetchRepairTasks as fetchRepairTasksSvc } from "../../services/repairService";
+import {
+  fetchRepairTasks as fetchRepairTasksSvc,
+  invalidateRepairTasksCache,
+} from "../../services/repairService";
+import { updateRepairTaskInSupabase } from "../../services/supabaseRepairService";
+import { hasCompletedManagementApproval } from "../../utils/firmFlow";
 
 const ManagementApproval = () => {
   const { user } = useAuth();
@@ -170,6 +175,7 @@ const ManagementApproval = () => {
         managementPendingDate: row["Management Pending Date"] || "",
         managementApprovalDate: row["Management Approval Date"] || "",
         managementRemark: row["Management Remark"] || "",
+        managementCompleted: hasCompletedManagementApproval(row),
 
         // 3-Vendor Comparison Fields
         vendorName1: row["Vendor Name 1"] || "",
@@ -204,11 +210,10 @@ const ManagementApproval = () => {
       setAllTasks(formattedTasks);
       setRepairTasks(formattedTasks);
 
-      // ✅ PENDING: Actual 1 bhari ho + Management Approval Date KHALI ho
-      setPendingTasks(formattedTasks.filter((t) => t.actual && !t.managementApprovalDate));
+      // A later completed stage also proves Management Approval is complete.
+      setPendingTasks(formattedTasks.filter((t) => t.actual && !t.managementCompleted));
 
-      // ✅ HISTORY: Management Approval Date bhari ho
-      setHistoryTasks(formattedTasks.filter((t) => t.managementApprovalDate));
+      setHistoryTasks(formattedTasks.filter((t) => t.managementCompleted));
 
     } catch (err) {
       console.error("Error fetching tasks:", err);
@@ -322,6 +327,21 @@ const ManagementApproval = () => {
             console.error("Error inserting into Repair FMS Advance Payment:", advErr);
           }
         }
+
+        const supabaseResult = await updateRepairTaskInSupabase(selectedTask.taskNo, {
+          "Management Pending Date": selectedTask.managementPendingDate,
+          "Management Approval Date": approvalDate,
+          "Management Remark": remark,
+          "Approved Vendor Name": chosenVendor.vendorName,
+          "Approved Payment Term": chosenVendor.paymentType || "",
+          "Advance Payment 1": chosenVendor.advancePayment || "",
+          ThreePartyStatus: "Approved",
+          "Firm Name": selectedTask.firmName || "",
+        });
+        if (!supabaseResult.success) {
+          throw new Error(supabaseResult.message || "Supabase Management Approval sync failed");
+        }
+        invalidateRepairTasksCache();
 
         toast.success(`Task ${selectedTask.taskNo} approved successfully!`);
         notifyPendingCountsChanged();

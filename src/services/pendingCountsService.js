@@ -1,6 +1,10 @@
 import { fetchRepairTasks } from "./repairService";
 import { fetchAdvancePayments, isAdvanceRow } from "./advancePaymentService";
-import { usesDirectStoreInFlow } from "../utils/firmFlow";
+import {
+  hasCompletedManagementApproval,
+  hasCompletedSentToVendor,
+  usesDirectStoreInFlow,
+} from "../utils/firmFlow";
 
 const hasValue = (value) => Boolean(String(value || "").trim());
 
@@ -29,11 +33,11 @@ export const computePendingCounts = (rawTasks = [], advanceTasks = []) => {
   );
 
   const sentPending = rawTasks.filter(
-    (task) => hasValue(task["Planned 1"]) && !hasValue(task["Actual 1"])
+    (task) => hasValue(task["Planned 1"]) && !hasCompletedSentToVendor(task)
   ).length;
 
   const managementPending = rawTasks.filter(
-    (task) => hasValue(task["Actual 1"]) && !hasValue(task["Management Approval Date"])
+    (task) => hasValue(task["Actual 1"]) && !hasCompletedManagementApproval(task)
   ).length;
 
   const normalCheckPending = normalFlowTasks.filter(
@@ -113,4 +117,3 @@ export const fetchPendingCounts = async (userFirmName = "") => {
 
   return computePendingCounts(rawTasks, advanceTasks);
 };
-

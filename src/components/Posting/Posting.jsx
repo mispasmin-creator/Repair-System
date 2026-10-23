@@ -300,7 +300,10 @@ const Posting = () => {
       );
       // Normal history: Posting done - hide child tasks
       const normalHistory = tasksWithParentFlag.filter(
-        (t) => t.actualPosting && !t.isChildTask
+        (t) =>
+          !usesDirectStoreInFlow(t.firmName) &&
+          t.actualPosting &&
+          !t.isChildTask
       );
 
       // ── Advance tasks from Repair FMS Advance Payment sheet ──────────────
@@ -344,7 +347,11 @@ const Posting = () => {
             !t.isChildTask
         );
         advHistory = advWithParentFlag.filter(
-          (t) => t.managementApprovalDate && t.actualPosting && !t.isChildTask
+          (t) =>
+            !usesDirectStoreInFlow(t.firmName) &&
+            t.managementApprovalDate &&
+            t.actualPosting &&
+            !t.isChildTask
         );
       } catch (advErr) {
         console.warn("Could not fetch advance tasks for posting:", advErr);

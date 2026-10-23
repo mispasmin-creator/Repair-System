@@ -25,7 +25,7 @@ import {
   updateRepairTaskInSupabase,
 } from "../../services/supabaseRepairService";
 import { openDrivePreview } from "../../utils/driveUtils";
-import { usesDirectStoreInFlow } from "../../utils/firmFlow";
+import { computePendingCounts } from "../../services/pendingCountsService";
 import { notifyPendingCountsChanged } from "../../utils/pendingCountEvents";
 import CommonTasksRow from "../ui/CommonTasksRow";
 import { buildCommonItems } from "../../utils/commonTasks";
@@ -126,91 +126,16 @@ const Accounts = () => {
 
   // Compute pending counts for all 7 pipeline stages
   const computePipelineStats = (allRawTasks, advList = []) => {
-    const isAdv = (t) =>
-      (t["Payment Type"] || t["Vendor 1 Payment Type"] || "").toLowerCase() === "advance";
-
-    // 1. Sent to Vendor: Planned 1 present, Actual 1 empty
-    const sentPending = allRawTasks.filter((t) => t["Planned 1"] && !t["Actual 1"]).length;
-
-    // 2. Management Approval: Actual 1 done, Mgmt Approval Date empty
-    const mgmtPending = allRawTasks.filter(
-      (t) => t["Actual 1"] && !t["Management Approval Date"]
-    ).length;
-
-    // 3. Check Machine:
-    // Normal: Mgmt approval done, Check Machine empty
-    // Advance: Advance payment done (Actual 4), Check Machine empty
-    const checkPending = allRawTasks.filter((t) => {
-      if (isAdv(t)) {
-        if (usesDirectStoreInFlow(t["Firm Name"] || t.firmName)) {
-          return Boolean(t["Management Approval Date"]) && !t["Actual 2"];
-        }
-        return Boolean(t["Actual 4"]) && !t["Actual 2"];
-      }
-      return Boolean(t["Management Approval Date"]) && !t["Actual 2"];
-    }).length;
-
-    // 4. Process for Payment (Posting):
-    // Normal: Check Machine done (Actual 2), Posting empty
-    // Advance: Mgmt approval done, Posting empty
-    const postingPending = allRawTasks.filter((t) => {
-      if (isAdv(t)) {
-        if (usesDirectStoreInFlow(t["Firm Name"] || t.firmName)) return false;
-        return Boolean(t["Management Approval Date"]) && !t["Actual Posting"];
-      }
-      if (usesDirectStoreInFlow(t["Firm Name"] || t.firmName)) return false;
-      return Boolean(t["Actual 2"]) && !t["Actual Posting"];
-    }).length;
-
-    // 5. Make Payment:
-    // Normal: Posting done (Actual Posting), Payment empty (Actual 4)
-    // Advance: Pending advance records in repair_advance
-    const normalPaymentPending = allRawTasks.filter(
-      (t) =>
-        !isAdv(t) &&
-        !usesDirectStoreInFlow(t["Firm Name"] || t.firmName) &&
-        Boolean(t["Actual Posting"]) &&
-        !t["Actual 4"]
-    ).length;
-    const advPaymentPending = (advList || []).filter((a) => {
-      if (usesDirectStoreInFlow(a.firmName)) return false;
-      const isPaid = Boolean(
-        a.utr_no || a.payment_utr_no || (a.status && a.status.toLowerCase() === "approved")
-      );
-      return !isPaid;
-    }).length;
-    const paymentPending = normalPaymentPending + advPaymentPending;
-
-    // 6. Store In:
-    // Normal: direct-flow firms need Check Machine; other firms need payment
-    // Advance: Check Machine done (Actual 2), Store In empty (Actual 3)
-    const storeInPending = allRawTasks.filter((t) => {
-      if (isAdv(t)) {
-        return Boolean(t["Actual 2"]) && !t["Actual 3"];
-      }
-      if (usesDirectStoreInFlow(t["Firm Name"] || t.firmName)) {
-        return Boolean(t["Actual 2"]) && !t["Actual 3"];
-      }
-      return Boolean(t["Actual 4"]) && !t["Actual 3"];
-    }).length;
-
-    // 7. Accounts:
-    // Store In completed (Actual 3), Accounts Tally (Accounts Actual 4) empty
-    const accountsPending = allRawTasks.filter(
-      (t) =>
-        Boolean(t["Actual 3"]) &&
-        !t["Accounts Actual 4"] &&
-        !t["Common Parent Task"]
-    ).length;
+    const counts = computePendingCounts(allRawTasks, advList);
 
     return {
-      sentPending,
-      mgmtPending,
-      checkPending,
-      postingPending,
-      paymentPending,
-      storeInPending,
-      accountsPending,
+      sentPending: counts["sent-machine"],
+      mgmtPending: counts["management-approval"],
+      checkPending: counts["check-machine"],
+      postingPending: counts.posting,
+      paymentPending: counts["make-payment"],
+      storeInPending: counts["store-in"],
+      accountsPending: counts.accounts,
     };
   };
 

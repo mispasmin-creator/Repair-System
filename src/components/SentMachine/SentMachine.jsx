@@ -15,8 +15,13 @@ import { useAuth } from "../../context/AuthContext";
 import useDataStore from "../../store/dataStore";
 import toast from "react-hot-toast";
 import { notifyPendingCountsChanged } from "../../utils/pendingCountEvents";
-import { fetchRepairTasks as fetchRepairTasksSvc } from "../../services/repairService";
+import {
+  fetchRepairTasks as fetchRepairTasksSvc,
+  invalidateRepairTasksCache,
+} from "../../services/repairService";
 import { uploadFileToSupabase } from "../../services/storageService";
+import { updateRepairTaskInSupabase } from "../../services/supabaseRepairService";
+import { hasCompletedSentToVendor } from "../../utils/firmFlow";
 
 const createEmptyVendorForm = (defaultName = "") => ({
   vendorName: defaultName,
@@ -145,16 +150,16 @@ const SentMachine = () => {
         amount: row["Amount"] || "",
         basicAmount: row["Basic Amount"] || "",
         gstPercent: row["GST %"] || "",
+        sentCompleted: hasCompletedSentToVendor(row),
       }));
 
       setTasks(formattedTasks);
       setRepairTasks(formattedTasks);
 
-      // Pending: Planned 1 filled + Actual 1 empty
-      setPendingTasks(formattedTasks.filter((t) => t.planned && !t.actual));
+      // A downstream completed stage also proves Sent to Vendor is complete.
+      setPendingTasks(formattedTasks.filter((t) => t.planned && !t.sentCompleted));
 
-      // History: Both filled
-      setHistoryTasks(formattedTasks.filter((t) => t.planned && t.actual));
+      setHistoryTasks(formattedTasks.filter((t) => t.planned && t.sentCompleted));
     } catch (err) {
       console.error("Error fetching tasks:", err);
       toast.error("Failed to fetch tasks");
@@ -385,6 +390,25 @@ const SentMachine = () => {
 
       const result = await response.json();
       if (result.success) {
+        const supabaseResult = await updateRepairTaskInSupabase(selectedTask.taskNo, {
+          "Planned 1": selectedTask.planned,
+          "Actual 1": nowFormatted,
+          "Vendor Name": selectedVendor.vendorName,
+          "(Transporter Name)": selectedVendor.transporterName || "",
+          "Transportation Charges": selectedVendor.transportationCharges || "",
+          "Weighment Slip": selectedVendor.weighmentSlip || "",
+          "Transporting Image With Machine": imageUrl || "",
+          "Lead Time To Deliver ( In No. Of Days)": selectedVendor.leadTimeToDeliver || "",
+          "Payment Type": selectedVendor.paymentType || "",
+          "How Much":
+            (selectedVendor.paymentType || "").toLowerCase() === "advance"
+              ? selectedVendor.advancePayment
+              : "",
+        });
+        if (!supabaseResult.success) {
+          throw new Error(supabaseResult.message || "Supabase Sent to Vendor sync failed");
+        }
+        invalidateRepairTasksCache();
         toast.success(`Task ${selectedTask.taskNo} submitted successfully`);
         notifyPendingCountsChanged();
         setIsModalOpen(false);

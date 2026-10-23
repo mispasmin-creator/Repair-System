@@ -287,7 +287,7 @@ export const updateRepairTaskInSupabase = async (taskNo, fields = {}) => {
 
   // Sent to Vendor
   if (fields["Actual 1"] || fields["Vendor Name"] || fields["Vendor Name 1"]) {
-    await supabase.from("sent_to_vendor").upsert(
+    const { error } = await supabase.from("sent_to_vendor").upsert(
       {
         task_no: cleanTaskNo,
         planned_date: toISOOrNull(fields["Planned 1"]),
@@ -303,6 +303,10 @@ export const updateRepairTaskInSupabase = async (taskNo, fields = {}) => {
       },
       { onConflict: "task_no" }
     );
+    if (error) {
+      console.error("Supabase Sent to Vendor upsert error:", error);
+      return { success: false, message: error.message };
+    }
   }
 
   // Management Approval
@@ -311,7 +315,7 @@ export const updateRepairTaskInSupabase = async (taskNo, fields = {}) => {
     const advAmount = toNumOrNull(fields["Advance Payment 1"] || fields["How Much"]) || 0;
     const vendorName = fields["Approved Vendor Name"] || fields["Vendor Name"] || "Approved";
 
-    await supabase.from("management_approval").upsert(
+    const { error: approvalError } = await supabase.from("management_approval").upsert(
       {
         task_no: cleanTaskNo,
         planned_date: toISOOrNull(fields["Management Pending Date"]),
@@ -324,9 +328,13 @@ export const updateRepairTaskInSupabase = async (taskNo, fields = {}) => {
       },
       { onConflict: "task_no" }
     );
+    if (approvalError) {
+      console.error("Supabase Management Approval upsert error:", approvalError);
+      return { success: false, message: approvalError.message };
+    }
 
     if (paymentTerm.toLowerCase().includes("advance")) {
-      await supabase.from("repair_advance").upsert(
+      const { error: advanceError } = await supabase.from("repair_advance").upsert(
         {
           repair_task_no: cleanTaskNo,
           vendor_name: vendorName,
@@ -335,6 +343,10 @@ export const updateRepairTaskInSupabase = async (taskNo, fields = {}) => {
         },
         { onConflict: "repair_task_no" }
       );
+      if (advanceError) {
+        console.error("Supabase Repair Advance upsert error:", advanceError);
+        return { success: false, message: advanceError.message };
+      }
     }
   }
 

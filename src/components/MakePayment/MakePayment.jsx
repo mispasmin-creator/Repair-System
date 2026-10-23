@@ -488,7 +488,12 @@ const MakePayment = () => {
         )
         .map((t) => ({ ...t, isAdvance: false }));
       const normalHistory = tasksWithParentFlag
-        .filter((task) => task.actual4 && !task.isChildTask)
+        .filter(
+          (task) =>
+            !usesDirectStoreInFlow(task.firmName) &&
+            task.actual4 &&
+            !task.isChildTask
+        )
         .map((t) => ({ ...t, isAdvance: false }));
 
       // Advance Step 3 pending: Same logic - Actual Posting filled + Actual Payment Date empty
@@ -539,7 +544,13 @@ const MakePayment = () => {
           )
           .map((t) => ({ ...t, isAdvance: true }));
         advHistory = advWithParentFlag
-          .filter((t) => t.actualPosting && t.actualPaymentDate && !t.isChildTask)
+          .filter(
+            (t) =>
+              !usesDirectStoreInFlow(t.firmName) &&
+              t.actualPosting &&
+              t.actualPaymentDate &&
+              !t.isChildTask
+          )
           .map((t) => ({ ...t, isAdvance: true }));
       } catch (advErr) {
         console.warn("Could not fetch advance tasks for MakePayment:", advErr);
