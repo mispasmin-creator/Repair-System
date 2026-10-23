@@ -8,25 +8,6 @@ const money = (v) => {
 };
 
 /**
- * Common bill ke linked tasks ki list banata hai.
- * findTask(taskNo) -> us task ka object (ya undefined).
- */
-export const buildCommonItems = (parent, findTask) =>
-  (parent.commonTasksLinked || []).map((tNo) => {
-    const found = findTask(tNo) || {};
-    return {
-      taskNo: tNo,
-      machineName: found.machineName || "-",
-      serialNo: found.serialNo || "-",
-      vendorName: found.vendorName || parent.vendorName || "-",
-      billNo: found.billNo || parent.billNo || "-",
-      toBePaid: found.toBePaidAmount,
-      billImage: (found.isAdvance ? found.billImageLink : found.billImage) ||
-        (parent.isAdvance ? parent.billImageLink : parent.billImage) || "",
-    };
-  });
-
-/**
  * Entry ke theek neeche slide hokar khulne wali row.
  * <tr> hai, isliye table ke <tbody> ke andar hi lagana hai.
  */
@@ -47,7 +28,7 @@ export const CommonTasksRow = ({ colSpan, parent, items }) => (
               <table className="min-w-full divide-y divide-gray-100 text-xs">
                 <thead className="bg-indigo-50/70">
                   <tr>
-                    {["Task No", "Machine Name", "Serial No", "Vendor", "Bill No", "To Be Paid", "Bill Image"].map((h) => (
+                    {["Task No", "Machine Name", "Serial No", "Vendor", "Bill No", "Transportation Charges", "Total Bill", "To Be Paid", "Bill Image"].map((h) => (
                       <th key={h} className="px-3 py-2 text-left font-semibold text-gray-600 uppercase whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
@@ -60,6 +41,8 @@ export const CommonTasksRow = ({ colSpan, parent, items }) => (
                       <td className="px-3 py-2 text-gray-600 whitespace-nowrap">{it.serialNo}</td>
                       <td className="px-3 py-2 text-gray-800 whitespace-nowrap">{it.vendorName}</td>
                       <td className="px-3 py-2 text-gray-800 whitespace-nowrap">{it.billNo}</td>
+                      <td className="px-3 py-2 font-medium text-amber-700 whitespace-nowrap">{money(it.transportationCharges)}</td>
+                      <td className="px-3 py-2 font-medium text-gray-900 whitespace-nowrap">{money(it.totalBillAmount)}</td>
                       <td className="px-3 py-2 font-medium text-gray-900 whitespace-nowrap">{money(it.toBePaid)}</td>
                       <td className="px-3 py-2 whitespace-nowrap">
                         {it.billImage ? (

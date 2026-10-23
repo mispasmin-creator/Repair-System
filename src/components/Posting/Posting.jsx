@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { CommonTasksRow, buildCommonItems } from "../ui/CommonTasksRow";
+import { CommonTasksRow } from "../ui/CommonTasksRow";
+import { buildCommonItems } from "../../utils/commonTasks";
 import { cachedFetch } from "../../services/sheetCache";
 import { Search, Filter, ClipboardCheck, CheckCircle2, ExternalLink, Layers, X } from "lucide-react";
 import Button from "../ui/Button";

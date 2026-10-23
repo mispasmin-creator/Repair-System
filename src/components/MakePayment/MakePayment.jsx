@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo } from "react";
-import { CommonTasksRow, buildCommonItems } from "../ui/CommonTasksRow";
+import { CommonTasksRow } from "../ui/CommonTasksRow";
+import { buildCommonItems } from "../../utils/commonTasks";
 import { PlannedActualHeads, PlannedActualCells } from "../ui/PlannedActualCells";
 import { cachedFetch } from "../../services/sheetCache";
 import { Search, Filter, Package, ExternalLink, Zap } from "lucide-react";
@@ -317,10 +318,16 @@ const MakePayment = () => {
     return combined > 0 ? combined : (ownAmt > 0 ? ownAmt : "");
   };
 
-  // For a task, returns the Total Bill Amount to display:
-  // Prioritizes task.totalBillAmount if non-zero, then checks siblings, then falls back to combined sum of toBePaidAmount.
+  // For a task, returns the Total Bill Amount to display. Normal repair tasks
+  // include transportation in the shared grand-total field prepared by the
+  // Supabase mapper; advance records continue to use their existing totals.
   const getDisplayTotalAmount = (task) => {
     if (!task) return "";
+    const grandTotal = parseFloat(
+      (task.totalBillWithTransportation || "0").toString().replace(/[^0-9.-]+/g, "")
+    ) || 0;
+    if (grandTotal > 0) return grandTotal;
+
     const rawVal = parseFloat((task.totalBillAmount || "0").toString().replace(/[^0-9.-]+/g, "")) || 0;
     if (rawVal > 0) return rawVal;
 
@@ -407,6 +414,7 @@ const MakePayment = () => {
           priority: row["Priority"] || "",
           department: row["Department"] || "",
           vendorName: row["Vendor Name"] || "",
+          transportationCharges: row["Transportation Charges"] || "",
           paymentType: row["Payment Type"] || "",
           paymentNo: row["Payment No"] || "",
           isAdvancePayment: isAdvanceRow(row),
@@ -415,6 +423,7 @@ const MakePayment = () => {
           billNo: row["Bill No."] || "",
           typeOfBill: row["Type of Bill"] || "",
           totalBillAmount: row["Total Bill Amount"] || "",
+          totalBillWithTransportation: row["Total Bill With Transportation"] || "",
           toBePaidAmount: row["To Be Paid Amount"] || "",
           actualPosting: row["Actual Posting"] || "",
           planned4: row["Planned 4"] || "",

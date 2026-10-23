@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { CommonTasksRow, buildCommonItems } from "../ui/CommonTasksRow";
+import { CommonTasksRow } from "../ui/CommonTasksRow";
+import { buildCommonItems } from "../../utils/commonTasks";
 import { PlannedActualHeads, PlannedActualCells } from "../ui/PlannedActualCells";
 import { cachedFetch } from "../../services/sheetCache";
 import { Search, Filter, CheckCircle, Loader2Icon, Layers, X, Check, Zap } from "lucide-react";
@@ -365,9 +366,16 @@ const CheckMachine = () => {
 
     try {
       setLoaderSubmit(true);
-      let billImageUrl = "";
+      let billImageUrl = selectedTask?.isAdvance
+        ? selectedTask?.billImageLink || ""
+        : selectedTask?.billImage || "";
       if (formData.billImage) {
         billImageUrl = await uploadFile(formData.billImage, "bill");
+        if (!billImageUrl) return;
+      }
+      if (!billAlreadyCaptured && !billImageUrl) {
+        toast.error("Please select a bill image and wait for it to upload successfully");
+        return;
       }
 
       const nowFormatted = getTodayIST();
@@ -437,6 +445,17 @@ const CheckMachine = () => {
 
       if (result.success) {
 
+        // Keep Supabase (the app's read source) in sync with the Sheet write.
+        await updateRepairTaskInSupabase(selectedTask.taskNo, {
+          "Planned 2": selectedTask.planned1,
+          "Actual 2": nowFormatted,
+          "Bill Image": billImageUrl,
+          "Bill No.": formData.billNo,
+          "Type of Bill": formData.typeOfBill,
+          "Total Bill Amount": formData.totalBillAmount,
+          ...(usesDirectStoreInFlow(selectedTask.firmName) ? { "Planned 3": nowFormatted } : {}),
+        });
+
         // Also update all linked child tasks for common bill
         if (selectedCommonTasks && selectedCommonTasks.length > 0) {
           for (const childTaskNo of selectedCommonTasks) {
@@ -469,21 +488,19 @@ const CheckMachine = () => {
                 },
                 body: new URLSearchParams(childPayload).toString(),
               });
-              if (usesDirectStoreInFlow(childObj?.firmName)) {
-                await updateRepairTaskInSupabase(childTaskNo, {
-                  "Planned 3": nowFormatted,
-                });
-              }
+              await updateRepairTaskInSupabase(childTaskNo, {
+                "Planned 2": childObj?.planned1,
+                "Actual 2": nowFormatted,
+                "Bill Image": billImageUrl,
+                "Bill No.": formData.billNo,
+                "Type of Bill": "Common",
+                "Total Bill Amount": "0",
+                ...(usesDirectStoreInFlow(childObj?.firmName) ? { "Planned 3": nowFormatted } : {}),
+              });
             } catch (childErr) {
               console.error(`Error updating common child task ${childTaskNo}:`, childErr);
             }
           }
-        }
-
-        if (usesDirectStoreInFlow(selectedTask.firmName)) {
-          await updateRepairTaskInSupabase(selectedTask.taskNo, {
-            "Planned 3": nowFormatted,
-          });
         }
 
         // Update the Zustand store
@@ -1307,6 +1324,7 @@ const CheckMachine = () => {
               <input
                 type="file"
                 accept="image/*"
+                required={!selectedTask?.billImage}
                 onChange={(e) =>
                   setFormData((prev) => ({
                     ...prev,

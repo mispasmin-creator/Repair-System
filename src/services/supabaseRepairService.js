@@ -5,6 +5,9 @@
  */
 
 import { supabase } from "./supabaseClient.js";
+import { attachCommonBillMetadata } from "../utils/commonBill.js";
+
+export { attachCommonBillMetadata } from "../utils/commonBill.js";
 
 const formatDateIST = (isoStr) => {
   if (!isoStr) return "";
@@ -153,6 +156,7 @@ export const mapSupabaseTaskToSheetFormat = (item) => {
     "Actual 4": formatDateIST(mp?.actual_date),
     "UTR / Cheque No": mp?.payment_utr_no || "",
     "Payment No": mp?.payment_no || "",
+    "To Be Paid Amount": formatCurrency(mp?.amount_paid),
 
     // Step 7: Accounts
     "Planned 5": formatDateIST(acc?.planned_1 || si?.actual_date),
@@ -211,7 +215,7 @@ export const fetchRepairTasksFromSupabase = async (userFirmName = "") => {
     throw error;
   }
 
-  const tasks = (indents || []).map(mapSupabaseTaskToSheetFormat);
+  const tasks = attachCommonBillMetadata((indents || []).map(mapSupabaseTaskToSheetFormat));
   return tasks.filter((t) => matchesFirm(t["Firm Name"], userFirmName));
 };
 

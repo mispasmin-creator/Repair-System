@@ -21,6 +21,8 @@ import { openDrivePreview } from "../../utils/driveUtils";
 import { uploadFileToSupabase } from "../../services/storageService";
 import { usesDirectStoreInFlow } from "../../utils/firmFlow";
 import { notifyPendingCountsChanged } from "../../utils/pendingCountEvents";
+import CommonTasksRow from "../ui/CommonTasksRow";
+import { buildCommonItems } from "../../utils/commonTasks";
 
 const StoreIn = () => {
   const { user } = useAuth();
@@ -52,6 +54,7 @@ const StoreIn = () => {
   const [taskForBillUpdate, setTaskForBillUpdate] = useState(null);
   const [newBillFile, setNewBillFile] = useState(null);
   const [billUploadLoading, setBillUploadLoading] = useState(false);
+  const [expandedCommon, setExpandedCommon] = useState({});
 
   const [showFilters, setShowFilters] = useState(false);
   const [selectedFirm, setSelectedFirm] = useState("All");
@@ -153,6 +156,7 @@ const StoreIn = () => {
           billNo: row["Bill No."] || "",
           typeOfBill: row["Type of Bill"] || "",
           totalBillAmount: row["Total Bill Amount"] || "",
+          totalBillWithTransportation: row["Total Bill With Transportation"] || "",
           toBePaidAmount: row["To Be Paid Amount"] || "",
           planned2:
             row["Planned 3"] ||
@@ -457,6 +461,9 @@ const StoreIn = () => {
   // Always prioritizes task.totalBillAmount if available.
   const getDisplayTotalAmount = (task) => {
     if (!task) return "";
+    if (task.totalBillWithTransportation && task.totalBillWithTransportation !== "-") {
+      return task.totalBillWithTransportation;
+    }
     if (task.totalBillAmount && task.totalBillAmount !== "-") return task.totalBillAmount;
     const ownAmt = parseFloat((task.toBePaidAmount || "0").toString().replace(/[^0-9.-]+/g, "")) || 0;
     const linkedAmt = (task.commonTasksLinked || []).reduce((sum, childNo) => {
@@ -467,6 +474,21 @@ const StoreIn = () => {
     const combined = ownAmt + linkedAmt;
     return combined > 0 ? combined : "";
   };
+
+  const commonKey = (task) => task.taskNo || task.repairTaskNo || "";
+  const toggleCommonTasks = (task) => {
+    if (!task.commonTasksLinked?.length) return;
+    const key = commonKey(task);
+    setExpandedCommon((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+  const rowProps = (task) => ({
+    onClick: (event) => {
+      if (event.target.closest("button, a, input, select, textarea, label")) return;
+      toggleCommonTasks(task);
+    },
+    className: task.commonTasksLinked?.length ? "cursor-pointer bg-indigo-50/20" : "",
+  });
+  const findCommonTask = (taskNo) => repairTasks.find((task) => task.taskNo === taskNo);
 
   return (
     <div className="space-y-6">
@@ -613,7 +635,8 @@ const StoreIn = () => {
                   </TableRow>
                 ) : (
                   filteredPendingTasks.map((task) => (
-                    <TableRow key={task.id || task.taskNo}>
+                    <React.Fragment key={task.id || task.taskNo}>
+                    <TableRow {...rowProps(task)}>
                       <TableCell className="text-center">
                         <Button
                           size="sm"
@@ -625,7 +648,17 @@ const StoreIn = () => {
                         </Button>
                       </TableCell>
                       <TableCell className="font-medium text-blue-600">
-                        {task.taskNo || "-"}
+                        <div>{task.taskNo || "-"}</div>
+                        {task.commonTasksLinked?.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => toggleCommonTasks(task)}
+                            aria-expanded={Boolean(expandedCommon[commonKey(task)])}
+                            className="mt-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800"
+                          >
+                            🔗 {task.commonTasksLinked.length} Common
+                          </button>
+                        )}
                       </TableCell>
                       <TableCell>{task.firmName || "-"}</TableCell>
                       <TableCell className="font-medium text-gray-900">{task.machineName || "-"}</TableCell>
@@ -656,6 +689,10 @@ const StoreIn = () => {
                       <TableCell className="font-medium text-gray-900">{formatCurrency(task.toBePaidAmount)}</TableCell>
                       <PlannedActualCells planned={task.isAdvance ? task.plannedStoreIn : task.planned2} actual={task.isAdvance ? task.actualStoreInDate : task.actual2} />
                     </TableRow>
+                    {expandedCommon[commonKey(task)] && task.commonTasksLinked?.length > 0 && (
+                      <CommonTasksRow colSpan={16} parent={task} items={buildCommonItems(task, findCommonTask)} />
+                    )}
+                    </React.Fragment>
                   ))
                 )}
               </TableBody>
@@ -701,9 +738,20 @@ const StoreIn = () => {
                   </TableRow>
                 ) : (
                   filteredHistoryTasks.map((task) => (
-                    <TableRow key={task.id || task.taskNo}>
+                    <React.Fragment key={task.id || task.taskNo}>
+                    <TableRow {...rowProps(task)}>
                       <TableCell className="font-medium text-blue-600">
-                        {task.taskNo || "-"}
+                        <div>{task.taskNo || "-"}</div>
+                        {task.commonTasksLinked?.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => toggleCommonTasks(task)}
+                            aria-expanded={Boolean(expandedCommon[commonKey(task)])}
+                            className="mt-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800"
+                          >
+                            🔗 {task.commonTasksLinked.length} Common
+                          </button>
+                        )}
                       </TableCell>
                       <TableCell>{task.firmName || "-"}</TableCell>
                       <TableCell className="font-medium text-gray-900">{task.machineName || "-"}</TableCell>
@@ -767,6 +815,10 @@ const StoreIn = () => {
                       </TableCell>
                       <PlannedActualCells planned={task.isAdvance ? task.plannedStoreIn : task.planned2} actual={task.isAdvance ? task.actualStoreInDate : task.actual2} />
                     </TableRow>
+                    {expandedCommon[commonKey(task)] && task.commonTasksLinked?.length > 0 && (
+                      <CommonTasksRow colSpan={16} parent={task} items={buildCommonItems(task, findCommonTask)} />
+                    )}
+                    </React.Fragment>
                   ))
                 )}
               </TableBody>

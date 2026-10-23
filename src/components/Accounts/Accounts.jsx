@@ -16,11 +16,19 @@ import Button from "../ui/Button";
 import { PlannedActualHeads, PlannedActualCells } from "../ui/PlannedActualCells";
 import Modal from "../ui/Modal";
 import { useAuth } from "../../context/AuthContext";
-import { fetchRepairTasks as fetchRepairTasksSvc } from "../../services/repairService";
-import { fetchAdvancePaymentsFromSupabase } from "../../services/supabaseRepairService";
+import {
+  fetchRepairTasks as fetchRepairTasksSvc,
+  invalidateRepairTasksCache,
+} from "../../services/repairService";
+import {
+  fetchAdvancePaymentsFromSupabase,
+  updateRepairTaskInSupabase,
+} from "../../services/supabaseRepairService";
 import { openDrivePreview } from "../../utils/driveUtils";
 import { usesDirectStoreInFlow } from "../../utils/firmFlow";
 import { notifyPendingCountsChanged } from "../../utils/pendingCountEvents";
+import CommonTasksRow from "../ui/CommonTasksRow";
+import { buildCommonItems } from "../../utils/commonTasks";
 
 // Steps in Accounts workflow
 const STEPS = [
@@ -91,6 +99,8 @@ const Accounts = () => {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState(STEPS[0].key);
   const [tasks, setTasks] = useState([]);
+  const [allTasks, setAllTasks] = useState([]);
+  const [expandedCommon, setExpandedCommon] = useState({});
   const [loadingTasks, setLoadingTasks] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedFirm, setSelectedFirm] = useState("All");
@@ -187,7 +197,10 @@ const Accounts = () => {
     // 7. Accounts:
     // Store In completed (Actual 3), Accounts Tally (Accounts Actual 4) empty
     const accountsPending = allRawTasks.filter(
-      (t) => Boolean(t["Actual 3"]) && !t["Accounts Actual 4"]
+      (t) =>
+        Boolean(t["Actual 3"]) &&
+        !t["Accounts Actual 4"] &&
+        !t["Common Parent Task"]
     ).length;
 
     return {
@@ -271,13 +284,19 @@ const Accounts = () => {
           billNo: t["Bill No."] || t["Bill No"],
           typeOfBill: t["Type of Bill"],
           totalBillAmount: t["Total Bill Amount"],
+          totalBillWithTransportation: t["Total Bill With Transportation"],
           toBePaidAmount: t["To Be Paid Amount"],
+          commonTasksLinked: Array.isArray(t["Common Bill Tasks"])
+            ? t["Common Bill Tasks"]
+            : [],
+          commonParentTask: t["Common Parent Task"] || "",
           actualStoreIn: t["Actual 3"],
           steps,
         };
       });
 
-      setTasks(formatted);
+      setAllTasks(formatted);
+      setTasks(formatted.filter((task) => !task.commonParentTask));
     } catch (err) {
       console.error("Error fetching Accounts data:", err);
     } finally {
@@ -342,6 +361,14 @@ const Accounts = () => {
     setIsModalOpen(true);
   };
 
+  const commonKey = (task) => task.taskNo || task.repairTaskNo || "";
+  const toggleCommonTasks = (task) => {
+    if (!task.commonTasksLinked?.length) return;
+    const key = commonKey(task);
+    setExpandedCommon((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+  const findCommonTask = (taskNo) => allTasks.find((task) => task.taskNo === taskNo);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
@@ -350,7 +377,6 @@ const Accounts = () => {
       const payload = {
         action: "update1",
         sheetName: "Accounts",
-        taskNo: selectedTask.taskNo,
         [activeStep.actualHeader]: new Date().toLocaleDateString("en-GB", {
           timeZone: "Asia/Kolkata",
         }),
@@ -358,20 +384,29 @@ const Accounts = () => {
         [activeStep.remarksHeader]: formData.remarks,
       };
 
-      const response = await fetch(SCRIPT_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams(payload).toString(),
-      });
+      const taskNos = [selectedTask.taskNo, ...(selectedTask.commonTasksLinked || [])];
+      const results = await Promise.all(
+        taskNos.map(async (taskNo) => {
+          const taskPayload = { ...payload, taskNo };
+          const response = await fetch(SCRIPT_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: new URLSearchParams(taskPayload).toString(),
+          });
+          const sheetResult = await response.json();
+          if (!sheetResult.success) return sheetResult;
+          return updateRepairTaskInSupabase(taskNo, taskPayload);
+        })
+      );
 
-      const result = await response.json();
-
-      if (result.success) {
+      if (results.every((result) => result?.success)) {
+        invalidateRepairTasksCache();
         notifyPendingCountsChanged();
         setIsModalOpen(false);
         fetchAllTasks();
       } else {
-        alert("❌ Failed to update: " + (result.message || result.error));
+        const failed = results.find((result) => !result?.success) || {};
+        alert("❌ Failed to update: " + (failed.message || failed.error || "Unknown error"));
       }
     } catch (error) {
       console.error("Submit error:", error);
@@ -571,6 +606,9 @@ const Accounts = () => {
                 <th className="px-4 py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[140px]">
                   Vendor Name
                 </th>
+                <th className="px-4 py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[160px]">
+                  Transportation Charges
+                </th>
                 <th className="px-4 py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap min-w-[120px]">
                   Payment Type
                 </th>
@@ -598,7 +636,7 @@ const Accounts = () => {
             <tbody className="divide-y divide-gray-200 bg-white">
               {loadingTasks ? (
                 <tr>
-                  <td colSpan={18} className="text-center py-12">
+                  <td colSpan={19} className="text-center py-12">
                     <div className="flex flex-col items-center justify-center">
                       <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                       <p className="mt-3 text-sm text-gray-500 font-medium">Loading accounts tasks...</p>
@@ -607,7 +645,7 @@ const Accounts = () => {
                 </tr>
               ) : filteredTasks.length === 0 ? (
                 <tr>
-                  <td colSpan={18} className="text-center py-12 text-gray-500">
+                  <td colSpan={19} className="text-center py-12 text-gray-500">
                     No tasks found in this tab
                   </td>
                 </tr>
@@ -615,9 +653,15 @@ const Accounts = () => {
                 filteredTasks.map((task, idx) => {
                   const step = task.steps[activeStep.key] || {};
                   return (
+                    <React.Fragment key={task.taskNo || idx}>
                     <tr
-                      key={task.taskNo || idx}
-                      className="hover:bg-blue-50/40 transition-colors duration-150"
+                      onClick={(event) => {
+                        if (event.target.closest("button, a, input, select, textarea, label")) return;
+                        toggleCommonTasks(task);
+                      }}
+                      className={`hover:bg-blue-50/40 transition-colors duration-150 ${
+                        task.commonTasksLinked?.length ? "cursor-pointer bg-indigo-50/20" : ""
+                      }`}
                     >
                       <td className="sticky left-0 z-10 bg-white w-[110px] min-w-[110px] max-w-[110px] px-4 py-3 text-sm whitespace-nowrap text-center">
                         {activeTab === "completed" ? (
@@ -635,7 +679,17 @@ const Accounts = () => {
                         )}
                       </td>
                       <td className="sticky left-[110px] z-10 bg-white min-w-[120px] px-4 py-3 text-sm font-semibold text-blue-600 whitespace-nowrap border-r border-gray-200">
-                        {task.taskNo || "-"}
+                        <div>{task.taskNo || "-"}</div>
+                        {task.commonTasksLinked?.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => toggleCommonTasks(task)}
+                            aria-expanded={Boolean(expandedCommon[commonKey(task)])}
+                            className="mt-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800"
+                          >
+                            🔗 {task.commonTasksLinked.length} Common
+                          </button>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">
                         {task.firmName || "-"}
@@ -658,6 +712,11 @@ const Accounts = () => {
                       <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">
                         {task.vendorName || "-"}
                       </td>
+                      <td className="px-4 py-3 text-sm font-semibold text-amber-700 whitespace-nowrap">
+                        {task.transportationCharges
+                          ? `₹${Number(task.transportationCharges).toLocaleString()}`
+                          : "-"}
+                      </td>
                       <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">
                         {task.paymentType || "-"}
                       </td>
@@ -671,8 +730,8 @@ const Accounts = () => {
                         {task.typeOfBill || "-"}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap font-medium">
-                        {task.totalBillAmount
-                          ? `₹${Number(task.totalBillAmount).toLocaleString()}`
+                        {task.totalBillWithTransportation
+                          ? `₹${Number(task.totalBillWithTransportation).toLocaleString()}`
                           : "-"}
                       </td>
                       <td className="px-4 py-3 text-sm font-bold text-gray-900 whitespace-nowrap">
@@ -695,6 +754,14 @@ const Accounts = () => {
                       </td>
                       <PlannedActualCells raw planned={step.planned} actual={step.actual} />
                     </tr>
+                    {expandedCommon[commonKey(task)] && task.commonTasksLinked?.length > 0 && (
+                      <CommonTasksRow
+                        colSpan={19}
+                        parent={task}
+                        items={buildCommonItems(task, findCommonTask)}
+                      />
+                    )}
+                    </React.Fragment>
                   );
                 })
               )}
@@ -708,7 +775,7 @@ const Accounts = () => {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         title={`${activeStep?.label} — Update`}
-        size="md"
+        size="lg"
       >
         <form onSubmit={handleSubmit} className="space-y-5">
           {/* Task Details */}
@@ -726,6 +793,20 @@ const Accounts = () => {
               <p className="text-gray-800 mt-0.5">{selectedTask?.machineName || "-"}</p>
             </div>
             <div>
+              <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Serial No</p>
+              <p className="text-gray-800 mt-0.5">{selectedTask?.serialNo || "-"}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Machine Part</p>
+              <p className="text-gray-800 mt-0.5">{selectedTask?.machinePartName || "-"}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Department / Location</p>
+              <p className="text-gray-800 mt-0.5">
+                {[selectedTask?.department, selectedTask?.location].filter(Boolean).join(" / ") || "-"}
+              </p>
+            </div>
+            <div>
               <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Store In Date</p>
               <p className="text-emerald-700 font-semibold mt-0.5">{selectedTask?.actualStoreIn || "-"}</p>
             </div>
@@ -737,6 +818,50 @@ const Accounts = () => {
               <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Bill No</p>
               <p className="text-gray-800 mt-0.5">{selectedTask?.billNo || "-"}</p>
             </div>
+            <div>
+              <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Payment / Bill Type</p>
+              <p className="text-gray-800 mt-0.5">
+                {[selectedTask?.paymentType, selectedTask?.typeOfBill].filter(Boolean).join(" / ") || "-"}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Transportation Charges</p>
+              <p className="text-amber-700 font-semibold mt-0.5">
+                {selectedTask?.transportationCharges
+                  ? `₹${Number(selectedTask.transportationCharges).toLocaleString()}`
+                  : "-"}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Total Bill Amount</p>
+              <p className="text-gray-900 font-semibold mt-0.5">
+                {selectedTask?.totalBillWithTransportation
+                  ? `₹${Number(selectedTask.totalBillWithTransportation).toLocaleString()}`
+                  : "-"}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">To Be Paid</p>
+              <p className="text-gray-900 font-semibold mt-0.5">
+                {selectedTask?.toBePaidAmount
+                  ? `₹${Number(selectedTask.toBePaidAmount).toLocaleString()}`
+                  : "-"}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Bill Image</p>
+              {selectedTask?.billImage ? (
+                <button
+                  type="button"
+                  onClick={() => openDrivePreview(selectedTask.billImage)}
+                  className="text-blue-600 underline font-medium mt-0.5"
+                >
+                  View Bill
+                </button>
+              ) : (
+                <p className="text-gray-400 mt-0.5">No Bill</p>
+              )}
+            </div>
             <div className="col-span-2">
               <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Planned Date</p>
               <p className="text-blue-600 font-semibold mt-0.5">
@@ -746,6 +871,27 @@ const Accounts = () => {
               </p>
             </div>
           </div>
+
+          {selectedTask?.commonTasksLinked?.length > 0 && (
+            <div className="rounded-lg border border-indigo-200 bg-indigo-50/50 p-4">
+              <p className="text-sm font-semibold text-indigo-800 mb-3">
+                Combined Entry — {selectedTask.commonTasksLinked.length + 1} Tasks
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                {buildCommonItems(selectedTask, findCommonTask).map((item) => (
+                  <div key={item.taskNo} className="rounded-md border border-indigo-100 bg-white p-3 text-sm">
+                    <p className="font-semibold text-indigo-700">{item.taskNo}</p>
+                    <p className="text-gray-700">{item.machineName}</p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Transportation: {item.transportationCharges
+                        ? `₹${Number(item.transportationCharges).toLocaleString()}`
+                        : "-"}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Status Dropdown */}
           <div>
