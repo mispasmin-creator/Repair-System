@@ -18,6 +18,8 @@ import { fetchRepairTasks as fetchRepairTasksSvc } from "../../services/repairSe
 import { fetchAdvancePayments, updateAdvancePayment, getTodayIST, getNowIST, isAdvanceRow } from "../../services/advancePaymentService";
 import { uploadFileToSupabase } from "../../services/storageService";
 import { openDrivePreview } from "../../utils/driveUtils";
+import { usesDirectStoreInFlow } from "../../utils/firmFlow";
+import { notifyPendingCountsChanged } from "../../utils/pendingCountEvents";
 import { PlannedActualHeads, PlannedActualCells } from "../ui/PlannedActualCells";
 
 const Posting = () => {
@@ -32,6 +34,8 @@ const Posting = () => {
   const [loadingTasks, setLoadingTasks] = useState(false);
   const [submitLoading, setSubmitLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [selectedCommonTasks, setSelectedCommonTasks] = useState([]);
+  const [commonSearchTerm, setCommonSearchTerm] = useState("");
 
   const [formData, setFormData] = useState({
     remark: "",
@@ -64,8 +68,14 @@ const Posting = () => {
   });
   const findCommonTask = (tNo) => tasks.find((t) => t.taskNo === tNo);
 
-  const uniqueFirms = ["All", ...new Set(tasks.map((t) => t.firmName).filter(Boolean))];
-  const uniqueDepartments = ["All", ...new Set(tasks.map((t) => t.department).filter(Boolean))];
+  const uniqueFirms = [
+    "All",
+    ...new Set(tasks.map((t) => t.firmName).filter((firm) => firm && firm !== "All")),
+  ];
+  const uniqueDepartments = [
+    "All",
+    ...new Set(tasks.map((t) => t.department).filter((department) => department && department !== "All")),
+  ];
 
   const filterList = (list) => {
     return list
@@ -281,7 +291,11 @@ const Posting = () => {
 
       // Normal pending: Check Machine done (Actual 2) + Posting not done - hide child tasks
       const normalPending = tasksWithParentFlag.filter(
-        (t) => t.actual2 && !t.actualPosting && !t.isChildTask
+        (t) =>
+          !usesDirectStoreInFlow(t.firmName) &&
+          t.actual2 &&
+          !t.actualPosting &&
+          !t.isChildTask
       );
       // Normal history: Posting done - hide child tasks
       const normalHistory = tasksWithParentFlag.filter(
@@ -322,7 +336,11 @@ const Posting = () => {
         });
 
         advPending = advWithParentFlag.filter(
-          (t) => t.managementApprovalDate && !t.actualPosting && !t.isChildTask
+          (t) =>
+            !usesDirectStoreInFlow(t.firmName) &&
+            t.managementApprovalDate &&
+            !t.actualPosting &&
+            !t.isChildTask
         );
         advHistory = advWithParentFlag.filter(
           (t) => t.managementApprovalDate && t.actualPosting && !t.isChildTask
@@ -424,6 +442,7 @@ const Posting = () => {
           } else {
             toast.success("✅ Advance posting processed successfully");
           }
+          notifyPendingCountsChanged();
           setIsModalOpen(false);
           await fetchAllTasks(true);
         } else {
@@ -455,6 +474,7 @@ const Posting = () => {
         } else {
           toast.success("✅ Processed for payment successfully");
         }
+        notifyPendingCountsChanged();
         setIsModalOpen(false);
         await fetchAllTasks(true);
       }

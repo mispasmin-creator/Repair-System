@@ -17,9 +17,11 @@ import {
   PanelLeftOpen
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { usePendingCounts } from '../../hooks/usePendingCounts';
 
 const Sidebar = ({ activeTab, setActiveTab, collapsed = false, onToggle }) => {
   const { user, logout } = useAuth();
+  const pendingCounts = usePendingCounts(user?.firmName, activeTab);
 
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -84,19 +86,33 @@ const Sidebar = ({ activeTab, setActiveTab, collapsed = false, onToggle }) => {
         <ul className="space-y-1">
           {visibleMenuItems.map((item) => {
             const Icon = item.icon;
+            const pendingCount = pendingCounts[item.id];
+            const hasPendingCount = Number.isFinite(pendingCount);
             return (
               <li key={item.id}>
                 <button
                   onClick={() => setActiveTab(item.id)}
-                  title={item.label}
-                  className={`w-full flex items-center space-x-3 ${collapsed ? 'md:justify-center md:space-x-0' : ''} px-3 py-2 rounded-lg transition-colors duration-100 text-left ${
+                  title={hasPendingCount ? `${item.label} — ${pendingCount} pending` : item.label}
+                  className={`relative w-full flex items-center gap-3 ${collapsed ? 'md:justify-center md:gap-0' : ''} px-3 py-2 rounded-lg transition-colors duration-100 text-left ${
                     activeTab === item.id
                       ? 'bg-blue-50 text-blue-600 border-r-4 border-blue-600 font-semibold'
                       : 'text-gray-600 hover:bg-gray-50 hover:text-gray-800'
                   }`}
                 >
                   <Icon className="w-4 h-4 flex-shrink-0" />
-                  <span className={`text-sm font-medium truncate leading-tight ${collapsed ? 'md:hidden' : ''}`}>{item.label}</span>
+                  <span className={`flex-1 text-sm font-medium truncate leading-tight ${collapsed ? 'md:hidden' : ''}`}>{item.label}</span>
+                  {hasPendingCount && (
+                    <span
+                      aria-label={`${pendingCount} pending`}
+                      className={`min-w-5 h-5 px-1.5 inline-flex items-center justify-center rounded-full text-[11px] font-bold leading-none ${
+                        pendingCount > 0
+                          ? 'bg-red-100 text-red-700'
+                          : 'bg-gray-100 text-gray-500'
+                      } ${collapsed ? 'md:absolute md:right-0 md:top-0 md:min-w-4 md:h-4 md:px-1 md:text-[9px]' : ''}`}
+                    >
+                      {pendingCount > 99 ? '99+' : pendingCount}
+                    </span>
+                  )}
                 </button>
               </li>
             );

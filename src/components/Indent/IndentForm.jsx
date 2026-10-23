@@ -3,6 +3,7 @@ import { Plus, X, Upload, Loader2Icon } from "lucide-react";
 import Button from "../ui/Button";
 import SearchableSelect from "../ui/SearchableSelect";
 import toast from "react-hot-toast";
+import { notifyPendingCountsChanged } from "../../utils/pendingCountEvents";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../services/supabaseClient";
 import { uploadFileToSupabase } from "../../services/storageService";
@@ -410,6 +411,7 @@ const IndentForm = ({ onSubmit, onCancel, taskList }) => {
       }
 
       toast.success(`✅ Task ${assignedTaskNo} assigned successfully!`);
+      notifyPendingCountsChanged();
 
       // If user added a NEW machine name, append to dropdown and persist to Supabase Master
       if (isAddingMachine && selectedMachine) {

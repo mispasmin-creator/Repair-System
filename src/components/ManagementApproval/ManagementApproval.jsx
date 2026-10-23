@@ -14,6 +14,7 @@ import {
 import { useAuth } from "../../context/AuthContext";
 import useDataStore from "../../store/dataStore";
 import toast from "react-hot-toast";
+import { notifyPendingCountsChanged } from "../../utils/pendingCountEvents";
 import { fetchRepairTasks as fetchRepairTasksSvc } from "../../services/repairService";
 
 const ManagementApproval = () => {
@@ -323,6 +324,7 @@ const ManagementApproval = () => {
         }
 
         toast.success(`Task ${selectedTask.taskNo} approved successfully!`);
+        notifyPendingCountsChanged();
         setIsModalOpen(false);
         fetchAllTasks();
       } else {

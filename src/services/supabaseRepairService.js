@@ -381,18 +381,30 @@ export const updateRepairTaskInSupabase = async (taskNo, fields = {}) => {
   }
 
   // Store In
-  if (fields["Actual 3"] || fields["Received Quantity"]) {
-    await supabase.from("store_in").upsert(
-      {
-        task_no: cleanTaskNo,
-        planned_date: toISOOrNull(fields["Planned 3"]),
-        actual_date: toISOOrNull(fields["Actual 3"]),
-        received_quantity: toNumOrNull(fields["Received Quantity"]) || 1,
-        bill_match: String(fields["Bill Match"]).toLowerCase() !== "no",
-        store_image_url: fields["Product Image"] || null,
-      },
-      { onConflict: "task_no" }
-    );
+  if (
+    fields["Planned 3"] !== undefined ||
+    fields["Actual 3"] !== undefined ||
+    fields["Received Quantity"] !== undefined
+  ) {
+    const storeInUpdate = { task_no: cleanTaskNo };
+    if (fields["Planned 3"] !== undefined) {
+      storeInUpdate.planned_date = toISOOrNull(fields["Planned 3"]);
+    }
+    if (fields["Actual 3"] !== undefined) {
+      storeInUpdate.actual_date = toISOOrNull(fields["Actual 3"]);
+    }
+    if (fields["Received Quantity"] !== undefined) {
+      storeInUpdate.received_quantity = toNumOrNull(fields["Received Quantity"]) || 1;
+    }
+    if (fields["Bill Match"] !== undefined) {
+      storeInUpdate.bill_match = String(fields["Bill Match"]).toLowerCase() !== "no";
+    }
+    if (fields["Product Image"] !== undefined) {
+      storeInUpdate.store_image_url = fields["Product Image"] || null;
+    }
+    await supabase
+      .from("store_in")
+      .upsert(storeInUpdate, { onConflict: "task_no" });
   }
 
   // Posting

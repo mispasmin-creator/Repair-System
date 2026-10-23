@@ -19,6 +19,8 @@ import { fetchAdvancePayments, updateAdvancePayment, getTodayIST, isAdvanceRow }
 import { updateRepairTaskInSupabase } from "../../services/supabaseRepairService";
 import { openDrivePreview } from "../../utils/driveUtils";
 import { uploadFileToSupabase } from "../../services/storageService";
+import { usesDirectStoreInFlow } from "../../utils/firmFlow";
+import { notifyPendingCountsChanged } from "../../utils/pendingCountEvents";
 
 const StoreIn = () => {
   const { user } = useAuth();
@@ -152,7 +154,9 @@ const StoreIn = () => {
           typeOfBill: row["Type of Bill"] || "",
           totalBillAmount: row["Total Bill Amount"] || "",
           toBePaidAmount: row["To Be Paid Amount"] || "",
-          planned2: row["Planned 3"] || "",
+          planned2:
+            row["Planned 3"] ||
+            (usesDirectStoreInFlow(row["Firm Name"]) ? row["Actual 2"] || "" : ""),
           actual2: row["Actual 3"] || "",
           actualPayment: row["Actual 4"] || "",
           receivedQuantity: row["Received Quantity"] || "",
@@ -174,10 +178,13 @@ const StoreIn = () => {
         );
       };
 
-      // Normal pending: Payment done (Actual 4) + Store In empty (Actual 3) — child tasks hidden
-      const normalPending = formattedTasks.filter(
-        (t) => t.actualPayment && !t.actual2 && !isChildTask(t.taskNo)
-      );
+      // Direct-flow firms enter after Check Machine; other firms enter after payment.
+      const normalPending = formattedTasks.filter((t) => {
+        const prerequisiteComplete = usesDirectStoreInFlow(t.firmName)
+          ? t.actual1
+          : t.actualPayment;
+        return prerequisiteComplete && !t.actual2 && !isChildTask(t.taskNo);
+      });
       // Normal history: Store In filled (Actual 3) — child tasks hidden
       const normalHistory = formattedTasks.filter(
         (t) => t.actual2 && !isChildTask(t.taskNo)
@@ -189,22 +196,28 @@ const StoreIn = () => {
       let advWithParentFlag = [];
       try {
         const firmFiltered = await advancePromise;
+        const storeReadyTasks = firmFiltered.map((task) => ({
+          ...task,
+          plannedStoreIn:
+            task.plannedStoreIn ||
+            (usesDirectStoreInFlow(task.firmName) ? task.actualCheckMachineDate : ""),
+        }));
 
         // Mark child tasks for advance payments too (Firm Name + Bill No. based grouping as Normal)
-        advWithParentFlag = firmFiltered.map((task) => {
+        advWithParentFlag = storeReadyTasks.map((task) => {
           if (!task.billNo || task.billNo === "-") {
             return { ...task, isChildTask: false, commonTasksLinked: [] };
           }
           const sameGroup = (other) =>
             other.billNo === task.billNo &&
             (other.firmName || "").toLowerCase().trim() === (task.firmName || "").toLowerCase().trim();
-          const siblings = firmFiltered.filter(
+          const siblings = storeReadyTasks.filter(
             (other) => sameGroup(other) && other.taskNo !== task.taskNo
           );
           if (siblings.length === 0) {
             return { ...task, isChildTask: false, commonTasksLinked: [] };
           }
-          const group = firmFiltered.filter(sameGroup);
+          const group = storeReadyTasks.filter(sameGroup);
           const isChildAdv = group[0]?.taskNo !== task.taskNo;
           return {
             ...task,
@@ -282,6 +295,7 @@ const StoreIn = () => {
 
         if (result.success) {
           toast.success("✅ Advance Store In submitted successfully!");
+          notifyPendingCountsChanged();
           setIsModalOpen(false);
           fetchAllTasks(true);
         } else {
@@ -332,6 +346,7 @@ const StoreIn = () => {
         await fetchAllTasks();
         
         toast.success("✅ Store In submitted successfully");
+        notifyPendingCountsChanged();
         setIsModalOpen(false);
       } else {
         toast.error("❌ Failed to update task: " + result.message);

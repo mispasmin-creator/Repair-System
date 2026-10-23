@@ -14,6 +14,7 @@ import {
 import { useAuth } from "../../context/AuthContext";
 import useDataStore from "../../store/dataStore";
 import toast from "react-hot-toast";
+import { notifyPendingCountsChanged } from "../../utils/pendingCountEvents";
 import { fetchRepairTasks as fetchRepairTasksSvc } from "../../services/repairService";
 import { uploadFileToSupabase } from "../../services/storageService";
 
@@ -385,6 +386,7 @@ const SentMachine = () => {
       const result = await response.json();
       if (result.success) {
         toast.success(`Task ${selectedTask.taskNo} submitted successfully`);
+        notifyPendingCountsChanged();
         setIsModalOpen(false);
         fetchAllTasks();
       } else {

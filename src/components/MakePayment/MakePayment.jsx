@@ -19,6 +19,8 @@ import toast from "react-hot-toast";
 import { fetchRepairTasks as fetchRepairTasksSvc } from "../../services/repairService";
 import { fetchAdvancePayments, updateAdvancePayment, getTodayIST, getNowIST, isAdvanceRow } from "../../services/advancePaymentService";
 import { openDrivePreview } from "../../utils/driveUtils";
+import { usesDirectStoreInFlow } from "../../utils/firmFlow";
+import { notifyPendingCountsChanged } from "../../utils/pendingCountEvents";
 import { getNextPaymentNo } from "../../services/supabaseRepairService";
 
 // Google Form URLs mapped by firm name
@@ -468,7 +470,13 @@ const MakePayment = () => {
 
       // Pending: Actual Posting filled + Actual 4 empty - hide child tasks (both NORMAL and ADVANCE)
       const normalPending = tasksWithParentFlag
-        .filter((task) => task.actualPosting && !task.actual4 && !task.isChildTask)
+        .filter(
+          (task) =>
+            !usesDirectStoreInFlow(task.firmName) &&
+            task.actualPosting &&
+            !task.actual4 &&
+            !task.isChildTask
+        )
         .map((t) => ({ ...t, isAdvance: false }));
       const normalHistory = tasksWithParentFlag
         .filter((task) => task.actual4 && !task.isChildTask)
@@ -513,7 +521,13 @@ const MakePayment = () => {
         // Same logic as NORMAL: Actual Posting filled + Actual Payment Date empty
         // Add isAdvance flag to mark these as advance payment tasks
         advPending = advWithParentFlag
-          .filter((t) => t.actualPosting && !t.actualPaymentDate && !t.isChildTask)
+          .filter(
+            (t) =>
+              !usesDirectStoreInFlow(t.firmName) &&
+              t.actualPosting &&
+              !t.actualPaymentDate &&
+              !t.isChildTask
+          )
           .map((t) => ({ ...t, isAdvance: true }));
         advHistory = advWithParentFlag
           .filter((t) => t.actualPosting && t.actualPaymentDate && !t.isChildTask)
@@ -649,6 +663,7 @@ const MakePayment = () => {
           } else {
             toast.success("✅ Advance payment released successfully!");
           }
+          notifyPendingCountsChanged();
           setIsModalOpen(false);
           await fetchAllTasks(true);
           await fetchPayments(true);
@@ -692,6 +707,7 @@ const MakePayment = () => {
         } else {
           toast.success("✅ Payment submitted successfully!");
         }
+        notifyPendingCountsChanged();
         setIsModalOpen(false);
         await fetchAllTasks(true);
         await fetchPayments(true);

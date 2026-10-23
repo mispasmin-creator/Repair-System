@@ -21,6 +21,9 @@ import { fetchRepairTasks as fetchRepairTasksSvc } from "../../services/repairSe
 import { fetchAdvancePayments, updateAdvancePayment, getTodayIST, isAdvanceRow } from "../../services/advancePaymentService";
 import { openDrivePreview } from "../../utils/driveUtils";
 import { uploadFileToSupabase } from "../../services/storageService";
+import { updateRepairTaskInSupabase } from "../../services/supabaseRepairService";
+import { usesDirectStoreInFlow } from "../../utils/firmFlow";
+import { notifyPendingCountsChanged } from "../../utils/pendingCountEvents";
 
 const CheckMachine = () => {
   const { user } = useAuth();
@@ -233,22 +236,28 @@ const CheckMachine = () => {
       let advWithParentFlag = [];
       try {
         const firmFiltered = await advancePromise;
+        const checkReadyTasks = firmFiltered.map((task) => ({
+          ...task,
+          plannedCheckMachine:
+            task.plannedCheckMachine ||
+            (usesDirectStoreInFlow(task.firmName) ? task.managementApprovalDate : ""),
+        }));
 
         // Mark child tasks for advance payments too (Firm Name + Bill No. based grouping as Normal)
-        advWithParentFlag = firmFiltered.map((task) => {
+        advWithParentFlag = checkReadyTasks.map((task) => {
           if (!task.billNo || task.billNo === "-") {
             return { ...task, isChildTask: false, commonTasksLinked: [] };
           }
           const sameGroup = (other) =>
             other.billNo === task.billNo &&
             (other.firmName || "").toLowerCase().trim() === (task.firmName || "").toLowerCase().trim();
-          const siblings = firmFiltered.filter(
+          const siblings = checkReadyTasks.filter(
             (other) => sameGroup(other) && other.taskNo !== task.taskNo
           );
           if (siblings.length === 0) {
             return { ...task, isChildTask: false, commonTasksLinked: [] };
           }
-          const group = firmFiltered.filter(sameGroup);
+          const group = checkReadyTasks.filter(sameGroup);
           const isChildAdv = group[0]?.taskNo !== task.taskNo;
           return {
             ...task,
@@ -258,7 +267,12 @@ const CheckMachine = () => {
         });
 
         advPending = advWithParentFlag.filter(
-          (t) => t.actualPaymentDate && !t.actualCheckMachineDate && !t.isChildTask
+          (t) => {
+            const prerequisiteComplete = usesDirectStoreInFlow(t.firmName)
+              ? t.managementApprovalDate
+              : t.actualPaymentDate;
+            return prerequisiteComplete && !t.actualCheckMachineDate && !t.isChildTask;
+          }
         );
         advHistory = advWithParentFlag.filter(
           (t) => t.actualPaymentDate && t.actualCheckMachineDate && !t.isChildTask
@@ -368,6 +382,9 @@ const CheckMachine = () => {
           "Actual Check Machine Date": nowFormatted,
           "Checked By": user?.name || "",
         };
+        if (usesDirectStoreInFlow(selectedTask.firmName)) {
+          advanceCheckFields["Planned Store In"] = nowFormatted;
+        }
         if (!billAlreadyCaptured) {
           advanceCheckFields["Bill Date"] = nowFormatted;
           advanceCheckFields["Bill Image Link"] = billImageUrl || "";
@@ -378,6 +395,7 @@ const CheckMachine = () => {
 
         if (result.success) {
           toast.success("✅ Advance machine check submitted successfully!");
+          notifyPendingCountsChanged();
           setIsModalOpen(false);
           fetchAllTasks(true);
         } else {
@@ -403,6 +421,9 @@ const CheckMachine = () => {
         "Common Bill Tasks": commonTasksStr,
         "Remark": commonTasksStr ? `Common Bill with: ${commonTasksStr}` : (selectedTask.remark || ""),
       };
+      if (usesDirectStoreInFlow(selectedTask.firmName)) {
+        payload["Planned 3"] = nowFormatted;
+      }
 
       const response = await fetch(SCRIPT_URL, {
         method: "POST",
@@ -437,6 +458,9 @@ const CheckMachine = () => {
                 "Common Parent Task": selectedTask.taskNo,
                 "Remark": `Common Bill under: ${selectedTask.taskNo}`,
               };
+              if (usesDirectStoreInFlow(childObj?.firmName)) {
+                childPayload["Planned 3"] = nowFormatted;
+              }
 
               await fetch(SCRIPT_URL, {
                 method: "POST",
@@ -445,10 +469,21 @@ const CheckMachine = () => {
                 },
                 body: new URLSearchParams(childPayload).toString(),
               });
+              if (usesDirectStoreInFlow(childObj?.firmName)) {
+                await updateRepairTaskInSupabase(childTaskNo, {
+                  "Planned 3": nowFormatted,
+                });
+              }
             } catch (childErr) {
               console.error(`Error updating common child task ${childTaskNo}:`, childErr);
             }
           }
+        }
+
+        if (usesDirectStoreInFlow(selectedTask.firmName)) {
+          await updateRepairTaskInSupabase(selectedTask.taskNo, {
+            "Planned 3": nowFormatted,
+          });
         }
 
         // Update the Zustand store
@@ -462,6 +497,9 @@ const CheckMachine = () => {
           totalBillAmount: formData.totalBillAmount,
           toBePaidAmount: formData.toBePaidAmount,
           commonTasksLinked: selectedCommonTasks,
+          planned2: usesDirectStoreInFlow(selectedTask.firmName)
+            ? nowFormatted
+            : selectedTask.planned2,
         });
 
         for (const childTaskNo of selectedCommonTasks) {
@@ -483,6 +521,7 @@ const CheckMachine = () => {
             ? `✅ Task ${selectedTask.taskNo} and ${selectedCommonTasks.length} common task(s) updated successfully`
             : "✅ Task updated successfully"
         );
+        notifyPendingCountsChanged();
         setIsModalOpen(false);
         fetchAllTasks(); // refresh the table
       } else {

@@ -19,6 +19,8 @@ import { useAuth } from "../../context/AuthContext";
 import { fetchRepairTasks as fetchRepairTasksSvc } from "../../services/repairService";
 import { fetchAdvancePaymentsFromSupabase } from "../../services/supabaseRepairService";
 import { openDrivePreview } from "../../utils/driveUtils";
+import { usesDirectStoreInFlow } from "../../utils/firmFlow";
+import { notifyPendingCountsChanged } from "../../utils/pendingCountEvents";
 
 // Steps in Accounts workflow
 const STEPS = [
@@ -130,6 +132,9 @@ const Accounts = () => {
     // Advance: Advance payment done (Actual 4), Check Machine empty
     const checkPending = allRawTasks.filter((t) => {
       if (isAdv(t)) {
+        if (usesDirectStoreInFlow(t["Firm Name"] || t.firmName)) {
+          return Boolean(t["Management Approval Date"]) && !t["Actual 2"];
+        }
         return Boolean(t["Actual 4"]) && !t["Actual 2"];
       }
       return Boolean(t["Management Approval Date"]) && !t["Actual 2"];
@@ -140,8 +145,10 @@ const Accounts = () => {
     // Advance: Mgmt approval done, Posting empty
     const postingPending = allRawTasks.filter((t) => {
       if (isAdv(t)) {
+        if (usesDirectStoreInFlow(t["Firm Name"] || t.firmName)) return false;
         return Boolean(t["Management Approval Date"]) && !t["Actual Posting"];
       }
+      if (usesDirectStoreInFlow(t["Firm Name"] || t.firmName)) return false;
       return Boolean(t["Actual 2"]) && !t["Actual Posting"];
     }).length;
 
@@ -149,9 +156,14 @@ const Accounts = () => {
     // Normal: Posting done (Actual Posting), Payment empty (Actual 4)
     // Advance: Pending advance records in repair_advance
     const normalPaymentPending = allRawTasks.filter(
-      (t) => !isAdv(t) && Boolean(t["Actual Posting"]) && !t["Actual 4"]
+      (t) =>
+        !isAdv(t) &&
+        !usesDirectStoreInFlow(t["Firm Name"] || t.firmName) &&
+        Boolean(t["Actual Posting"]) &&
+        !t["Actual 4"]
     ).length;
     const advPaymentPending = (advList || []).filter((a) => {
+      if (usesDirectStoreInFlow(a.firmName)) return false;
       const isPaid = Boolean(
         a.utr_no || a.payment_utr_no || (a.status && a.status.toLowerCase() === "approved")
       );
@@ -160,10 +172,13 @@ const Accounts = () => {
     const paymentPending = normalPaymentPending + advPaymentPending;
 
     // 6. Store In:
-    // Normal: Payment done (Actual 4), Store In empty (Actual 3)
+    // Normal: direct-flow firms need Check Machine; other firms need payment
     // Advance: Check Machine done (Actual 2), Store In empty (Actual 3)
     const storeInPending = allRawTasks.filter((t) => {
       if (isAdv(t)) {
+        return Boolean(t["Actual 2"]) && !t["Actual 3"];
+      }
+      if (usesDirectStoreInFlow(t["Firm Name"] || t.firmName)) {
         return Boolean(t["Actual 2"]) && !t["Actual 3"];
       }
       return Boolean(t["Actual 4"]) && !t["Actual 3"];
@@ -352,6 +367,7 @@ const Accounts = () => {
       const result = await response.json();
 
       if (result.success) {
+        notifyPendingCountsChanged();
         setIsModalOpen(false);
         fetchAllTasks();
       } else {
