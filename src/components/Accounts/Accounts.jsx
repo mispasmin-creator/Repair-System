@@ -154,10 +154,9 @@ const Accounts = () => {
       const stats = computePipelineStats(rawTasks, advList);
       setPipelineStats(stats);
 
-      // Rule: In Accounts page, ONLY entries that have completed Store In are shown!
-      const storeInDoneTasks = rawTasks.filter((t) => Boolean(t["Actual 3"]));
-
-      const formatted = storeInDoneTasks.map((t) => {
+      // Format every task so combined-bill children (which may not have
+      // completed Store In yet) can still be looked up for their details.
+      const formatted = rawTasks.map((t) => {
         const steps = {
           audit: {
             planned: t["Accounts Planned 1"] || t["Actual 3"],
@@ -223,7 +222,8 @@ const Accounts = () => {
       });
 
       setAllTasks(formatted);
-      setTasks(formatted.filter((task) => !task.commonParentTask));
+      // Rule: In Accounts page, ONLY entries that have completed Store In are listed!
+      setTasks(formatted.filter((task) => task.actualStoreIn && !task.commonParentTask));
     } catch (err) {
       console.error("Error fetching Accounts data:", err);
     } finally {
@@ -298,8 +298,8 @@ const Accounts = () => {
   const findCommonTask = (taskNo) => allTasks.find((task) => task.taskNo === taskNo);
 
   const handleSubmit = async (e) => {
-    if (!canWrite) return;
     e.preventDefault();
+    if (!canWrite) return;
     try {
       setLoaderSubmit(true);
 
