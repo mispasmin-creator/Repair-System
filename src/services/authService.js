@@ -31,6 +31,18 @@ export const authenticateUser = async (username, password) => {
           username: supaUser.username,
           role: supaUser.role || "user",
           access: accessList.length > 0 ? accessList : ["Dashboard"],
+          // Keep none/view/full levels; "access" above only has page names.
+          permissions:
+            supaUser.page_access && typeof supaUser.page_access === "object"
+              ? supaUser.page_access
+              : Object.fromEntries(
+                  accessList.map((a) => [
+                    a.replace(/\s*\(view only\)\s*$/i, ""),
+                    /\(view only\)/i.test(a) ? "view" : "full",
+                  ])
+                ),
+          // Needed to authenticate write RPCs (see supabase_users_rbac.sql).
+          credential: cleanPassword,
           firmName: supaUser.firm_name || "All",
           manual: supaUser.manual || "",
         };

@@ -14,6 +14,7 @@ import {
   TableCell,
 } from "../ui/Table";
 import { useAuth } from "../../context/AuthContext";
+import { usePermission } from "../../hooks/usePermission";
 import toast from "react-hot-toast";
 import { fetchRepairTasks as fetchRepairTasksSvc } from "../../services/repairService";
 import { fetchAdvancePayments, updateAdvancePayment, getTodayIST, getNowIST, isAdvanceRow } from "../../services/advancePaymentService";
@@ -25,6 +26,7 @@ import { PlannedActualHeads, PlannedActualCells } from "../ui/PlannedActualCells
 
 const Posting = () => {
   const { user } = useAuth();
+  const { canWrite } = usePermission("Posting");
 
   const [tasks, setTasks] = useState([]);
   const [pendingTasks, setPendingTasks] = useState([]);
@@ -97,6 +99,7 @@ const Posting = () => {
   const filteredHistoryTasks = filterList(historyTasks);
 
   const handlePostingClick = (task) => {
+    if (!canWrite) return;
     setSelectedTask(task);
     setFormData({
       remark: "",
@@ -387,6 +390,7 @@ const Posting = () => {
   }, []);
 
   const handleSubmit = async (e) => {
+    if (!canWrite) return;
     e.preventDefault();
 
     if (!selectedTask) return;
@@ -648,7 +652,8 @@ const Posting = () => {
                     <React.Fragment key={task.id || task.taskNo}>
                       <TableRow {...rowProps(task)} className={`hover:bg-gray-50 transition-colors ${task.isAdvance ? "bg-orange-50/40" : ""}`}>
                         <TableCell className="text-center whitespace-nowrap">
-                          <Button
+                          {canWrite ? (
+<Button
                             size="sm"
                             onClick={() => handlePostingClick(task)}
                             className="flex items-center mx-auto"
@@ -656,6 +661,9 @@ const Posting = () => {
                             <ClipboardCheck className="w-3.5 h-3.5 mr-1" />
                             Process
                           </Button>
+) : (
+<span className="text-gray-300 text-xs" title="View only">—</span>
+)}
                         </TableCell>
                         <TableCell className="font-medium text-blue-600 whitespace-nowrap">
                           <div className="flex flex-col gap-1">

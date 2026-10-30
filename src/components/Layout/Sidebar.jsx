@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { usePendingCounts } from '../../hooks/usePendingCounts';
+import { hasPermission } from '../../utils/permissions';
 
 const Sidebar = ({ activeTab, setActiveTab, collapsed = false, onToggle }) => {
   const { user, logout } = useAuth();
@@ -35,7 +36,7 @@ const Sidebar = ({ activeTab, setActiveTab, collapsed = false, onToggle }) => {
     { id: 'accounts', label: 'Accounts', icon: Calculator },
   ];
 
-  if (user?.role === 'admin') {
+  if (hasPermission(user, 'user_management', 'read')) {
     menuItems.push({ id: 'users', label: 'Users', icon: Users });
   }
 
@@ -44,8 +45,8 @@ const Sidebar = ({ activeTab, setActiveTab, collapsed = false, onToggle }) => {
     : [];
 
   const visibleMenuItems = menuItems.filter((item) => {
+    if (item.id === 'users') return true; // only pushed when user has read access
     if (user?.role === 'admin') return true;
-    if (item.id === 'users') return false;
     if (userAccess.length === 0) return true;
     const labelLower = item.label.toLowerCase().trim();
     const idLower = item.id.toLowerCase().trim();

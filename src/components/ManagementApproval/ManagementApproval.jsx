@@ -12,6 +12,7 @@ import {
   TableCell,
 } from "../ui/Table";
 import { useAuth } from "../../context/AuthContext";
+import { usePermission } from "../../hooks/usePermission";
 import useDataStore from "../../store/dataStore";
 import toast from "react-hot-toast";
 import { notifyPendingCountsChanged } from "../../utils/pendingCountEvents";
@@ -24,6 +25,7 @@ import { hasCompletedManagementApproval } from "../../utils/firmFlow";
 
 const ManagementApproval = () => {
   const { user } = useAuth();
+  const { canWrite } = usePermission("Management Approval");
   const { repairTasks, setRepairTasks } = useDataStore();
 
   const [activeTab, setActiveTab] = useState("pending");
@@ -229,6 +231,7 @@ const ManagementApproval = () => {
   }, []);
 
   const handleApproveClick = (task) => {
+    if (!canWrite) return;
     setSelectedTask(task);
     setRemark("");
     const vendors = getVendorsForTask(task);
@@ -241,6 +244,7 @@ const ManagementApproval = () => {
   };
 
   const handleSubmit = async (e) => {
+    if (!canWrite) return;
     e.preventDefault();
     if (!selectedTask) return;
 
@@ -510,7 +514,8 @@ const ManagementApproval = () => {
                   displayedPendingTasks.map((task) => (
                     <TableRow key={task.taskNo || Math.random()}>
                       <TableCell className="text-center">
-                        <Button
+                        {canWrite ? (
+<Button
                           size="sm"
                           onClick={() => handleApproveClick(task)}
                           className="flex items-center mx-auto bg-green-600 hover:bg-green-700"
@@ -518,6 +523,9 @@ const ManagementApproval = () => {
                           <ShieldCheck className="w-3 h-3 mr-1" />
                           Approve
                         </Button>
+) : (
+<span className="text-gray-300 text-xs" title="View only">—</span>
+)}
                       </TableCell>
                       <TableCell className="font-medium text-blue-600">{task.taskNo}</TableCell>
                       <TableCell>{task.firmName || "-"}</TableCell>

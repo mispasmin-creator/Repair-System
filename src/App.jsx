@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from "./context/AuthContext";
 import Sidebar from "./components/Layout/Sidebar";
 import Login from "./components/Login/Login";
 import { MenuOutlined, CloseOutlined } from "@ant-design/icons";
+import { hasPermission } from "./utils/permissions";
 
 const Dashboard = lazy(() => import("./components/Dashboard/Dashboard"));
 const Indent = lazy(() => import("./components/Indent/Indent"));
@@ -142,7 +143,12 @@ function AppContent() {
       case "make-payment":
         return <MakePayment />;
       case "users":
-        return <Users />;
+        // Route guard: sidebar hiding alone is not enough.
+        return hasPermission(user, "user_management", "read") ? (
+          <Users />
+        ) : (
+          <Dashboard setActiveTab={setActiveTab} />
+        );
       case "accounts":
         return <Accounts />;
       default:

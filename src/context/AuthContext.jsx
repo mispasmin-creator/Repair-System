@@ -69,6 +69,7 @@
 
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { authenticateUser } from '../services/authService';
 
 const AuthContext = createContext(undefined);
 
@@ -88,7 +89,24 @@ export const AuthProvider = ({ children }) => {
     const storedUser = localStorage.getItem('repairSystemUser');
     if (storedUser) {
       try {
-        setUser(JSON.parse(storedUser));
+        const parsed = JSON.parse(storedUser);
+        setUser(parsed);
+        // Re-sync role/permissions from the DB so a stale or tampered
+        // localStorage session cannot keep old (or elevated) access.
+        authenticateUser(parsed.name, parsed.credential)
+          .then((fresh) => {
+            const merged = { ...parsed, ...fresh };
+            localStorage.setItem('repairSystemUser', JSON.stringify(merged));
+            setUser(merged);
+          })
+          .catch((err) => {
+            // Only drop the session when credentials are really rejected,
+            // not on network errors.
+            if (err?.message === 'Invalid credentials') {
+              setUser(null);
+              localStorage.removeItem('repairSystemUser');
+            }
+          });
       } catch (error) {
         localStorage.removeItem('repairSystemUser');
       }

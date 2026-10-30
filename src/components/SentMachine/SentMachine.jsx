@@ -12,6 +12,7 @@ import {
   TableCell,
 } from "../ui/Table";
 import { useAuth } from "../../context/AuthContext";
+import { usePermission } from "../../hooks/usePermission";
 import useDataStore from "../../store/dataStore";
 import toast from "react-hot-toast";
 import { notifyPendingCountsChanged } from "../../utils/pendingCountEvents";
@@ -38,6 +39,7 @@ const createEmptyVendorForm = (defaultName = "") => ({
 
 const SentMachine = () => {
   const { user } = useAuth();
+  const { canWrite } = usePermission("Sent to Vendor");
   const {
     vendors,
     transporters,
@@ -67,6 +69,7 @@ const SentMachine = () => {
   );
 
   const handleSentClick = (task) => {
+    if (!canWrite) return;
     setSelectedTask(task);
     setVendorForms([
       createEmptyVendorForm(task.vendorName || ""),
@@ -277,6 +280,7 @@ const SentMachine = () => {
   };
 
   const handleSubmit = async (e) => {
+    if (!canWrite) return;
     if (e && e.preventDefault) e.preventDefault();
     if (!selectedTask) return;
 
@@ -574,7 +578,8 @@ const SentMachine = () => {
                   displayedPendingTasks.map((task) => (
                     <TableRow key={task.taskNo || Math.random()}>
                       <TableCell className="text-center">
-                        <Button
+                        {canWrite ? (
+<Button
                           size="sm"
                           onClick={() => handleSentClick(task)}
                           className="flex items-center mx-auto"
@@ -582,6 +587,9 @@ const SentMachine = () => {
                           <Send className="w-3 h-3 mr-1" />
                           Sent
                         </Button>
+) : (
+<span className="text-gray-300 text-xs" title="View only">—</span>
+)}
                       </TableCell>
                       <TableCell className="font-medium text-blue-600">
                         {task.taskNo}

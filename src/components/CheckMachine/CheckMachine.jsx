@@ -16,6 +16,7 @@ import {
 } from "../ui/Table";
 import { mockRepairTasks } from "../../data/mockData";
 import { useAuth } from "../../context/AuthContext";
+import { usePermission } from "../../hooks/usePermission";
 import useDataStore from "../../store/dataStore";
 import toast from "react-hot-toast";
 import { fetchRepairTasks as fetchRepairTasksSvc } from "../../services/repairService";
@@ -28,6 +29,7 @@ import { notifyPendingCountsChanged } from "../../utils/pendingCountEvents";
 
 const CheckMachine = () => {
   const { user } = useAuth();
+  const { canWrite } = usePermission("check_machine");
   const {
     repairTasks,
     pendingRepairTasks,
@@ -103,6 +105,7 @@ const CheckMachine = () => {
   );
 
   const handleMaterialClick = (task) => {
+    if (!canWrite) return;
     setSelectedTask(task);
     setSelectedCommonTasks([]);
     setCommonSearchTerm("");
@@ -365,6 +368,7 @@ const CheckMachine = () => {
   };
 
   const handleSubmit = async (e) => {
+    if (!canWrite) return;
     e.preventDefault();
 
     try {
@@ -718,7 +722,8 @@ const CheckMachine = () => {
                   displayedPendingTasks.map((task) => (
                     <TableRow key={task.taskNo || Math.random()}>
                       <TableCell className="text-center">
-                        <Button
+                        {canWrite ? (
+<Button
                           size="sm"
                           onClick={() => handleMaterialClick(task)}
                           className="flex items-center mx-auto"
@@ -726,6 +731,9 @@ const CheckMachine = () => {
                           <CheckCircle className="w-3.5 h-3.5 mr-1" />
                           Material
                         </Button>
+) : (
+<span className="text-gray-300 text-xs" title="View only">—</span>
+)}
                       </TableCell>
                       <TableCell className="font-medium text-blue-600">
                         <div className="flex flex-col gap-1">

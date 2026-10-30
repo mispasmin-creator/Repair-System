@@ -36,6 +36,8 @@ const handleSubmit = async (e) => {
       name: userData.name,
       role: userData.role,
       access: userData.access,
+      permissions: userData.permissions,
+      credential: userData.credential,
       department: userData.department,
       firmName: userData.firmName
     });

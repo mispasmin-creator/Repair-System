@@ -15,9 +15,11 @@ import {
 import IndentForm from "./IndentForm";
 import { mockRepairTasks } from "../../data/mockData";
 import { useAuth } from "../../context/AuthContext";
+import { usePermission } from "../../hooks/usePermission";
 
 const Indent = () => {
   const { user } = useAuth();
+  const { canWrite } = usePermission("Indent");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [tasks, setTasks] = useState([]);
   const [loadingTasks, setLoadingTasks] = useState(false);
@@ -152,6 +154,7 @@ const Indent = () => {
   };
 
   const handleAddIndent = () => {
+    if (!canWrite) return;
     // Trigger refresh by incrementing the trigger
     setRefreshTrigger(prev => prev + 1);
     setIsModalOpen(false);
@@ -194,10 +197,12 @@ const Indent = () => {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold text-gray-900">Indent Management</h1>
-        <Button onClick={() => setIsModalOpen(true)}>
-          <Plus className="w-4 h-4 mr-2" />
-          Add Indent
-        </Button>
+        {canWrite && (
+          <Button onClick={() => setIsModalOpen(true)}>
+            <Plus className="w-4 h-4 mr-2" />
+            Add Indent
+          </Button>
+        )}
       </div>
 
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
@@ -423,7 +428,7 @@ const Indent = () => {
         </div>
       </div>
 
-      <Modal
+      {canWrite && <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         title="Add New Indent"
@@ -434,7 +439,7 @@ const Indent = () => {
           onCancel={() => setIsModalOpen(false)}
           taskList={tasks}
         />
-      </Modal>
+      </Modal>}
     </div>
   );
 };

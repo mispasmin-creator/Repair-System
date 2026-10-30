@@ -16,6 +16,7 @@ import Button from "../ui/Button";
 import { PlannedActualHeads, PlannedActualCells } from "../ui/PlannedActualCells";
 import Modal from "../ui/Modal";
 import { useAuth } from "../../context/AuthContext";
+import { usePermission } from "../../hooks/usePermission";
 import {
   fetchRepairTasks as fetchRepairTasksSvc,
   invalidateRepairTasksCache,
@@ -97,6 +98,7 @@ const STEPS = [
 
 const Accounts = () => {
   const { user } = useAuth();
+  const { canWrite } = usePermission("Accounts");
   const [activeTab, setActiveTab] = useState(STEPS[0].key);
   const [tasks, setTasks] = useState([]);
   const [allTasks, setAllTasks] = useState([]);
@@ -278,6 +280,7 @@ const Accounts = () => {
   });
 
   const handleUpdateClick = (task) => {
+    if (!canWrite) return;
     setSelectedTask(task);
     setFormData({
       status: task.steps[activeStep.key]?.status || (activeTab === "audit" ? "Done" : "Done"),
@@ -295,6 +298,7 @@ const Accounts = () => {
   const findCommonTask = (taskNo) => allTasks.find((task) => task.taskNo === taskNo);
 
   const handleSubmit = async (e) => {
+    if (!canWrite) return;
     e.preventDefault();
     try {
       setLoaderSubmit(true);
@@ -593,7 +597,7 @@ const Accounts = () => {
                           <span className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-700 text-xs font-semibold rounded-lg">
                             ✓ Done
                           </span>
-                        ) : (
+                        ) : canWrite ? (
                           <button
                             onClick={() => handleUpdateClick(task)}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors"
@@ -601,6 +605,8 @@ const Accounts = () => {
                             <CheckSquare className="w-3.5 h-3.5" />
                             Update
                           </button>
+                        ) : (
+                          <span className="text-gray-300 text-xs" title="View only">—</span>
                         )}
                       </td>
                       <td className="sticky left-[110px] z-10 bg-white min-w-[120px] px-4 py-3 text-sm font-semibold text-blue-600 whitespace-nowrap border-r border-gray-200">

@@ -12,6 +12,7 @@ import {
   TableCell,
 } from "../ui/Table";
 import { useAuth } from "../../context/AuthContext";
+import { usePermission } from "../../hooks/usePermission";
 import useDataStore from "../../store/dataStore";
 import toast from "react-hot-toast";
 import { fetchRepairTasks as fetchRepairTasksSvc, invalidateRepairTasksCache } from "../../services/repairService";
@@ -26,6 +27,7 @@ import { buildCommonItems } from "../../utils/commonTasks";
 
 const StoreIn = () => {
   const { user } = useAuth();
+  const { canWrite } = usePermission("Store In");
   const {
     repairTasks,
     pendingRepairTasks,
@@ -84,6 +86,7 @@ const StoreIn = () => {
   const filteredHistoryTasks = filterList(historyRepairTasks);
 
   const handleMaterialClick = (task) => {
+    if (!canWrite) return;
     setSelectedTask(task);
     setFormData({
       receivedQuantity: task.receivedQuantity || "",
@@ -277,6 +280,7 @@ const StoreIn = () => {
   };
 
   const handleSubmit = async (e) => {
+    if (!canWrite) return;
     e.preventDefault();
 
     try {
@@ -364,12 +368,14 @@ const StoreIn = () => {
   };
 
   const handleOpenBillUpdate = (task) => {
+    if (!canWrite) return;
     setTaskForBillUpdate(task);
     setNewBillFile(null);
     setIsBillModalOpen(true);
   };
 
   const handleSaveBillUpdate = async (e) => {
+    if (!canWrite) return;
     e.preventDefault();
     if (!newBillFile || !taskForBillUpdate) {
       toast.error("Please select a bill image to upload");
@@ -638,7 +644,8 @@ const StoreIn = () => {
                     <React.Fragment key={task.id || task.taskNo}>
                     <TableRow {...rowProps(task)}>
                       <TableCell className="text-center">
-                        <Button
+                        {canWrite ? (
+<Button
                           size="sm"
                           onClick={() => handleMaterialClick(task)}
                           className="flex items-center mx-auto"
@@ -646,6 +653,9 @@ const StoreIn = () => {
                           <Package className="w-3.5 h-3.5 mr-1" />
                           Material
                         </Button>
+) : (
+<span className="text-gray-300 text-xs" title="View only">—</span>
+)}
                       </TableCell>
                       <TableCell className="font-medium text-blue-600">
                         <div>{task.taskNo || "-"}</div>
@@ -777,6 +787,7 @@ const StoreIn = () => {
                               <span className="text-gray-400 text-xs">No Bill</span>
                             );
                           })()}
+                          {canWrite && (
                           <button
                             type="button"
                             title="Update / Re-upload Bill Image"
@@ -785,6 +796,7 @@ const StoreIn = () => {
                           >
                             <Upload className="w-3.5 h-3.5" />
                           </button>
+                          )}
                         </div>
                       </TableCell>
                       <TableCell>

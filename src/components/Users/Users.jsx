@@ -14,9 +14,11 @@ import {
 import toast from "react-hot-toast";
 import { useAuth } from "../../context/AuthContext";
 import { matchesFirm } from "../../services/supabaseRepairService";
+import { usePermission } from "../../hooks/usePermission";
 
 const Users = () => {
   const { user: loggedInUser, updateUser } = useAuth();
+  const { canWrite } = usePermission("user_management");
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -43,6 +45,7 @@ const Users = () => {
     Posting: "none",
     "Make Payment": "none",
     Accounts: "none",
+    Users: "none",
   });
 
   const SCRIPT_URL = import.meta.env.VITE_SCRIPT_URL;
@@ -58,6 +61,7 @@ const Users = () => {
     { key: "Posting", label: "Process for payment" },
     { key: "Make Payment", label: "Make Payment" },
     { key: "Accounts", label: "Accounts" },
+    { key: "Users", label: "User Management" },
   ];
 
   const firmOptions = ["All", "Pmmpl", "Purab", "Rkl", "Refrasynth", "Refratech"];
@@ -132,6 +136,7 @@ const Users = () => {
   }, [loggedInUser?.firmName]);
 
   const handleAddClick = () => {
+    if (!canWrite) return;
     setIsEditMode(false);
     setUsername("");
     setPassword("");
@@ -147,11 +152,13 @@ const Users = () => {
       Posting: "none",
       "Make Payment": "none",
       Accounts: "none",
+      Users: "none",
     });
     setIsModalOpen(true);
   };
 
   const handleEditClick = (userRow) => {
+    if (!canWrite) return;
     setIsEditMode(true);
     setUsername(userRow.username);
     setPassword(userRow.password);
@@ -181,6 +188,11 @@ const Users = () => {
       Posting: parseAccessLevel(["posting"]),
       "Make Payment": parseAccessLevel(["payment"]),
       Accounts: parseAccessLevel(["account"]),
+      // Admin role has implicit full User Management access when unset.
+      Users:
+        accessArray.some((a) => a.toLowerCase().startsWith("users"))
+          ? parseAccessLevel(["users"])
+          : userRow.role === "admin" ? "full" : "none",
     };
     setSelectedPages(initialPages);
     setIsModalOpen(true);
@@ -188,6 +200,11 @@ const Users = () => {
 
   const handleFormSubmit = async (e) => {
     e.preventDefault();
+
+    if (!canWrite) {
+      toast.error("❌ You have view-only access to User Management");
+      return;
+    }
 
     if (!username.trim() || !password.trim()) {
       toast.error("❌ Username and Password are required");
@@ -203,21 +220,25 @@ const Users = () => {
       setLoaderSubmit(true);
 
       const firmStr = Array.isArray(firmName) ? firmName.join(", ") : firmName;
-      const { error: supaErr } = await supabase
-        .from("users")
-        .upsert(
-          {
-            username: username.trim(),
-            password: password.trim(),
-            role: role,
-            firm_name: firmStr,
-            page_access: selectedPages,
-          },
-          { onConflict: "username" }
-        );
+      // Write goes through a SECURITY DEFINER RPC that re-checks the
+      // caller's permission server-side (403 if view-only).
+      const { error: supaErr } = await supabase.rpc("save_user", {
+        p_auth_username: loggedInUser?.name,
+        p_auth_password: loggedInUser?.credential,
+        p_username: username.trim(),
+        p_password: password.trim(),
+        p_role: role,
+        p_firm_name: firmStr,
+        p_page_access: selectedPages,
+      });
 
       if (supaErr) {
-        toast.error("❌ Failed to save user: " + supaErr.message);
+        const forbidden = supaErr.code === "42501" || supaErr.code === "403";
+        toast.error(
+          forbidden
+            ? "❌ Permission denied: " + supaErr.message
+            : "❌ Failed to save user: " + supaErr.message
+        );
         return;
       }
 
@@ -229,6 +250,7 @@ const Users = () => {
           updateUser({
             role: role,
             access: newAccessList,
+            permissions: selectedPages,
             firmName: Array.isArray(firmName) ? firmName.join(", ") : firmName,
           });
         }
@@ -247,6 +269,7 @@ const Users = () => {
           Posting: "none",
           "Make Payment": "none",
           Accounts: "none",
+          Users: "none",
         });
 
         setIsModalOpen(false);
@@ -287,10 +310,16 @@ const Users = () => {
             Manage users, roles, firm access and page permissions
           </p>
         </div>
-        <Button onClick={handleAddClick} className="flex items-center gap-2">
-          <Plus className="w-4 h-4" />
-          Add User
-        </Button>
+        {canWrite ? (
+          <Button onClick={handleAddClick} className="flex items-center gap-2">
+            <Plus className="w-4 h-4" />
+            Add User
+          </Button>
+        ) : (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+            👁 View Only
+          </span>
+        )}
       </div>
 
       {/* Stats row */}
@@ -477,13 +506,17 @@ const Users = () => {
                     </td>
                     {/* Actions */}
                     <td className="px-5 py-3.5 text-center">
-                      <button
-                        onClick={() => handleEditClick(u)}
-                        className="p-1.5 text-blue-600 hover:text-white hover:bg-blue-600 rounded-lg transition-all duration-150 inline-flex items-center gap-1 border border-blue-200 hover:border-blue-600"
-                        title="Edit User"
-                      >
-                        <Edit className="w-3.5 h-3.5" />
-                      </button>
+                      {canWrite ? (
+                        <button
+                          onClick={() => handleEditClick(u)}
+                          className="p-1.5 text-blue-600 hover:text-white hover:bg-blue-600 rounded-lg transition-all duration-150 inline-flex items-center gap-1 border border-blue-200 hover:border-blue-600"
+                          title="Edit User"
+                        >
+                          <Edit className="w-3.5 h-3.5" />
+                        </button>
+                      ) : (
+                        <span className="text-gray-300" title="View only">—</span>
+                      )}
                     </td>
                   </tr>
                 ))
@@ -501,7 +534,7 @@ const Users = () => {
       </div>
 
       {/* Add/Edit User Modal */}
-      <Modal
+      {canWrite && <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         title={isEditMode ? "Edit User Details" : "Add New User"}
@@ -649,7 +682,7 @@ const Users = () => {
             </Button>
           </div>
         </form>
-      </Modal>
+      </Modal>}
     </div>
   );
 };

@@ -15,6 +15,7 @@ import {
   TableCell,
 } from "../ui/Table";
 import { useAuth } from "../../context/AuthContext";
+import { usePermission } from "../../hooks/usePermission";
 import useDataStore from "../../store/dataStore";
 import toast from "react-hot-toast";
 import { fetchRepairTasks as fetchRepairTasksSvc } from "../../services/repairService";
@@ -37,6 +38,7 @@ const FIRM_FORM_URLS = {
 
 const MakePayment = () => {
   const { user } = useAuth();
+  const { canWrite } = usePermission("Make Payment");
   const {
     repairTasks,
     setRepairTasks,
@@ -61,6 +63,7 @@ const MakePayment = () => {
   const [selectedFirm, setSelectedFirm] = useState("All");
 
   const handleOpenForm = (task) => {
+    if (!canWrite) return;
     const firmKey = (task.firmName || "").toLowerCase().trim();
     const baseUrl = FIRM_FORM_URLS[firmKey] || FIRM_FORM_URLS.refrasynth;
     const taskNumber = [task.taskNo || task.repairTaskNo || "", ...(task.commonTasksLinked || [])]
@@ -372,6 +375,7 @@ const MakePayment = () => {
   // );
 
   const handleMaterialClick = (task) => {
+    if (!canWrite) return;
     setSelectedTask(task);
     const displayTotal = getDisplayTotalAmount(task);
     const displayToBePaid = getDisplayToBePaidAmount(task);
@@ -631,6 +635,7 @@ const MakePayment = () => {
   }, []);
 
  const handleSubmit = async (e) => {
+    if (!canWrite) return;
     e.preventDefault();
 
     if (!selectedTask) return;
@@ -932,7 +937,8 @@ const MakePayment = () => {
               {pendingTasks.map((task) => (
                 <TableRow key={task.taskNo}>
                   <TableCell>
-                    <Button
+                    {canWrite ? (
+<Button
                       size="sm"
                       onClick={() => handleMaterialClick(task)}
                       className="flex items-center"
@@ -940,6 +946,7 @@ const MakePayment = () => {
                       <CreditCard className="w-3 h-3 mr-1" />
                       Material
                     </Button>
+) : null}
                   </TableCell>
                   <TableCell className="font-medium text-blue-600">
                     {task.taskNo}
@@ -1041,11 +1048,14 @@ const MakePayment = () => {
                         <tr {...rowProps(task)} className={`hover:bg-blue-50/40 transition-colors duration-150 ${task.commonTasksLinked?.length > 0 ? 'bg-blue-50/20' : ''}`}>
                           <td className="px-4 py-3 text-sm whitespace-nowrap text-center">
                             <div className="flex items-center justify-center gap-2">
-                              <Button size="sm" onClick={() => handleMaterialClick(task)} className="flex items-center">
+                              {canWrite ? (
+<Button size="sm" onClick={() => handleMaterialClick(task)} className="flex items-center">
                                 <Package className="w-3.5 h-3.5 mr-1" />
                                 Material
                               </Button>
-                              <Button
+) : null}
+                              {canWrite ? (
+<Button
                                 size="sm"
                                 variant="secondary"
                                 onClick={() => handleOpenForm(task)}
@@ -1055,6 +1065,7 @@ const MakePayment = () => {
                                 <ExternalLink className="w-3.5 h-3.5 mr-1" />
                                 Form
                               </Button>
+) : null}
                             </div>
                           </td>
                           <td className="px-4 py-3 text-sm font-medium text-blue-600 whitespace-nowrap">
