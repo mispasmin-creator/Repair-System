@@ -491,7 +491,7 @@ export const fetchAdvancePaymentsFromSupabase = async (userFirmName = "") => {
     .map((r) => r.repair_task_no)
     .filter(Boolean);
 
-  const [{ data: indents }, { data: approvals }] = await Promise.all([
+  const [{ data: indents }, { data: approvals }, { data: checks }] = await Promise.all([
     taskNos.length > 0
       ? supabase
           .from("indent")
@@ -504,12 +504,17 @@ export const fetchAdvancePaymentsFromSupabase = async (userFirmName = "") => {
           .select("task_no, actual_date, management_remark, approved_vendor_name, advance_amount")
           .in("task_no", taskNos)
       : Promise.resolve({ data: [] }),
+    // The bill is often uploaded at Check Machine without being copied to repair_advance.
+    taskNos.length > 0
+      ? supabase.from("check_machine").select("task_no, bill_image_url").in("task_no", taskNos)
+      : Promise.resolve({ data: [] }),
   ]);
 
+  const checkMap = new Map((checks || []).map((c) => [c.task_no, c]));
   const indentMap = new Map((indents || []).map((i) => [i.task_no, i]));
   const approvalMap = new Map((approvals || []).map((a) => [a.task_no, a]));
 
-  return advanceRows.map((row) => {
+  const allRows = advanceRows.map((row) => {
     const indent = indentMap.get(row.repair_task_no) || {};
     const approval = approvalMap.get(row.repair_task_no) || {};
 
@@ -568,7 +573,8 @@ export const fetchAdvancePaymentsFromSupabase = async (userFirmName = "") => {
       actualCheckMachineDate: formatDateIST(row.actual_check_machine_date),
       billNo: row.bill_no || "",
       billDate: formatDateIST(row.bill_date),
-      billImageLink: row.bill_image_link || "",
+      billImageLink:
+        row.bill_image_link || checkMap.get(row.repair_task_no)?.bill_image_url || "",
       checkedBy: row.checked_by || "",
 
       // Step 5: Store In
