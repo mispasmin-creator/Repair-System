@@ -196,7 +196,20 @@ const Indent = () => {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-gray-900">Indent Management</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-3xl font-bold text-gray-900">Indent Management</h1>
+          {!loadingTasks && (
+            <span
+              className="px-3 py-1 rounded-full text-sm font-semibold bg-blue-50 text-blue-700 border border-blue-100"
+              title="Aapki firm ke kul indents"
+            >
+              Total Indents: {accessibleTasks.length}
+              {filteredTasks.length !== accessibleTasks.length && (
+                <span className="font-normal text-blue-500"> · Showing {filteredTasks.length}</span>
+              )}
+            </span>
+          )}
+        </div>
         {canWrite && (
           <Button onClick={() => setIsModalOpen(true)}>
             <Plus className="w-4 h-4 mr-2" />
